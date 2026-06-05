@@ -3,6 +3,8 @@ package dev.eolmae.marketmonitor.domain.stock;
 import dev.eolmae.marketmonitor.domain.user.AppUser;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -31,7 +33,11 @@ public class WatchStock {
 	private StockMaster stock;
 
 	@Column(nullable = false)
-	private int displayOrder;
+	private boolean isPrimary;
+
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 20)
+	private RegisterBy registerBy;
 
 	@Column(nullable = false)
 	private LocalDateTime createdAt;
@@ -39,11 +45,12 @@ public class WatchStock {
 	protected WatchStock() {
 	}
 
-	public static WatchStock create(AppUser user, StockMaster stock, int displayOrder) {
+	public static WatchStock create(AppUser user, StockMaster stock, RegisterBy registerBy) {
 		var entity = new WatchStock();
 		entity.user = user;
 		entity.stock = stock;
-		entity.displayOrder = displayOrder;
+		entity.isPrimary = false;
+		entity.registerBy = registerBy;
 		entity.createdAt = LocalDateTime.now();
 		return entity;
 	}

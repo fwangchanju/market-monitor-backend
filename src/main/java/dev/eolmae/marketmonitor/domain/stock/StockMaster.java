@@ -1,6 +1,7 @@
 package dev.eolmae.marketmonitor.domain.stock;
 
-import dev.eolmae.marketmonitor.common.enums.MarketType;
+import dev.eolmae.marketmonitor.common.enums.Exchange;
+import java.math.BigDecimal;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -24,7 +25,16 @@ public class StockMaster {
 
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
-	private MarketType marketType;
+	private Exchange marketType;
+
+	@Column(length = 5)
+	private String marketCode;
+
+	@Column
+	private Long listCount;
+
+	@Column(precision = 19, scale = 2)
+	private BigDecimal lastPrice;
 
 	@Column(nullable = false)
 	private boolean active;
@@ -38,20 +48,28 @@ public class StockMaster {
 	protected StockMaster() {
 	}
 
-	public static StockMaster create(String stockCode, String stockName, MarketType marketType) {
+	public static StockMaster create(String stockCode, String stockName, Exchange marketType,
+		String marketCode, Long listCount, BigDecimal lastPrice) {
 		var entity = new StockMaster();
 		entity.stockCode = stockCode;
 		entity.stockName = stockName;
 		entity.marketType = marketType;
+		entity.marketCode = marketCode;
+		entity.listCount = listCount;
+		entity.lastPrice = lastPrice;
 		entity.active = true;
 		entity.createdAt = LocalDateTime.now();
 		entity.updatedAt = LocalDateTime.now();
 		return entity;
 	}
 
-	public void update(String stockName, MarketType marketType) {
+	public void update(String stockName, Exchange marketType, String marketCode,
+		Long listCount, BigDecimal lastPrice) {
 		this.stockName = stockName;
 		this.marketType = marketType;
+		this.marketCode = marketCode;
+		this.listCount = listCount;
+		this.lastPrice = lastPrice;
 		this.active = true;
 		this.updatedAt = LocalDateTime.now();
 	}

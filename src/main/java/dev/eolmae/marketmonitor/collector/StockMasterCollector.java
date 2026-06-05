@@ -1,12 +1,16 @@
 package dev.eolmae.marketmonitor.collector;
 
-import dev.eolmae.marketmonitor.common.enums.MarketType;
+import dev.eolmae.marketmonitor.common.enums.Board;
+import dev.eolmae.marketmonitor.common.enums.Exchange;
 import dev.eolmae.marketmonitor.domain.stock.StockMaster;
+import dev.eolmae.marketmonitor.domain.stock.StockMasterCacheService;
 import dev.eolmae.marketmonitor.domain.stock.repository.StockMasterRepository;
 import dev.eolmae.marketmonitor.exception.EscalateException;
 import dev.eolmae.marketmonitor.external.kiwoom.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10099Request;
 import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10099Response;
+import dev.eolmae.marketmonitor.common.util.NumberParser;
+import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -24,14 +28,15 @@ public class StockMasterCollector {
 
 	private final KiwoomApiClient kiwoomApiClient;
 	private final StockMasterRepository stockMasterRepository;
+	private final StockMasterCacheService stockMasterCacheService;
 
 	@Transactional
 	public void sync() {
 		Set<String> fetchedCodes = new HashSet<>();
 
 		try {
-			for (MarketType marketType : MarketType.storableValues()) {
-				fetchedCodes.addAll(syncForMarket(marketType));
+			for (Board board : Board.values()) {
+				fetchedCodes.addAll(syncForMarket(board));
 			}
 		} catch (EscalateException e) {
 			throw e;
@@ -48,34 +53,43 @@ public class StockMasterCollector {
 			}
 		}
 
+		stockMasterCacheService.evict();
 		log.info("종목 마스터 동기화 완료: 조회 종목 수={}", fetchedCodes.size());
 	}
 
-	private Set<String> syncForMarket(MarketType marketType) {
-		Set<String> fetchedCodes = new HashSet<>();
+	private Set<String> syncForMarket(Board board) {
+		Exchange marketType = Exchange.valueOf(board.name());
+		String mrktTp = switch (board) {
+			case KOSPI -> MrktTp.KOSPI.value;
+			case KOSDAQ -> MrktTp.KOSDAQ.value;
+		};
+		Set<String> fetchedCodes = new HashSet<>(); // TODO 이거 꼭 Set 이어야됨?
 
-		var request = new Ka10099Request(Market.valueOf(marketType.name()).mrktTp);
+		var request = new Ka10099Request(mrktTp);
 		Ka10099Response response = kiwoomApiClient.post(request, Ka10099Response.class);
 
-		if (response.list() == null) {
+		if (response.list() == null) { // TODO Set.of() 로 리턴하고 여기 이후에서 객체 생성해야 이득아님?
 			return fetchedCodes;
 		}
 
 		for (Ka10099Response.StockItem item : response.list()) {
-			String stockCode = item.code() != null ? item.code().trim() : "";
-			if (stockCode.isEmpty()) {
+			String stockCode = item.code() != null ? item.code().trim() : ""; // TODO 옵셔널처리
+			if (stockCode.isEmpty()) { // TODO 위에서 3항연산자로 null 인거 없도록 만들어놓고 이건 뭐하는짓임?
 				continue;
 			}
 
 			// 키움 API가 종목명에 공백을 포함해 반환하는 경우가 있어 제거
-			String stockName = item.name() != null ? item.name().replace(" ", "") : "";
+			String stockName = item.name() != null ? item.name().replace(" ", "") : ""; // TODO 옵셔널
+			String marketCode = item.marketCode();
+			Long listCount = NumberParser.parseLong(item.listCount());
+			BigDecimal lastPrice = NumberParser.parseBigDecimal(item.lastPrice());
 			fetchedCodes.add(stockCode);
 
 			StockMaster existing = stockMasterRepository.findById(stockCode).orElse(null);
 			if (existing == null) {
-				stockMasterRepository.save(StockMaster.create(stockCode, stockName, marketType));
+				stockMasterRepository.save(StockMaster.create(stockCode, stockName, marketType, marketCode, listCount, lastPrice));
 			} else if (!existing.getStockName().equals(stockName) || !existing.isActive()) {
-				existing.update(stockName, marketType);
+				existing.update(stockName, marketType, marketCode, listCount, lastPrice);
 			}
 		}
 
@@ -83,10 +97,9 @@ public class StockMasterCollector {
 		return fetchedCodes;
 	}
 
-	private enum Market {
-		KOSPI("0"),
-		KOSDAQ("10");
-		final String mrktTp;  // ka10099 mrkt_tp (ka20001과 코드 체계 다름)
-		Market(String mrktTp) { this.mrktTp = mrktTp; }
+	private enum MrktTp {
+		KOSPI("0"), KOSDAQ("10");  // ka10099 mrkt_tp (ka20001과 코드 체계 다름)
+		final String value;
+		MrktTp(String value) { this.value = value; }
 	}
 }

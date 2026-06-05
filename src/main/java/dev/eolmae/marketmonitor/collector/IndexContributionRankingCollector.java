@@ -1,19 +1,23 @@
 package dev.eolmae.marketmonitor.collector;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import dev.eolmae.marketmonitor.common.enums.MarketType;
+import dev.eolmae.marketmonitor.common.enums.Board;
+import dev.eolmae.marketmonitor.common.enums.Exchange;
+import dev.eolmae.marketmonitor.common.enums.StockMarketCode;
 import dev.eolmae.marketmonitor.common.util.NumberParser;
 import dev.eolmae.marketmonitor.domain.dashboard.IndexContributionRankingSnapshot;
-import dev.eolmae.marketmonitor.domain.dashboard.repository.IndexContributionRankingSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.dashboard.MarketOverviewSnapshot;
+import dev.eolmae.marketmonitor.domain.dashboard.repository.IndexContributionRankingSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.dashboard.repository.MarketOverviewSnapshotRepository;
+import dev.eolmae.marketmonitor.domain.stock.StockMaster;
+import dev.eolmae.marketmonitor.domain.stock.StockMasterCacheService;
 import dev.eolmae.marketmonitor.exception.EscalateException;
-import dev.eolmae.marketmonitor.external.krx.crawler.KrxCrawler;
+import dev.eolmae.marketmonitor.external.kiwoom.client.KiwoomApiClient;
+import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka20002Request;
+import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka20002Response;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -24,136 +28,116 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
-/**
- * KRX 전종목 시가총액 데이터 기반 지수기여도 상위 종목 수집기.
- *
- * 기여도 연산 공식:
- *   전일종가 = 현재가 - 전일대비등락액
- *   종목기여도 = (현재가 - 전일종가) × 상장주식수 / 전일_전체_시가총액 × 전일_지수값
- *
- * 전일 지수값: MarketOverviewSnapshot(최신) indexValue - changeValue 로 역산.
- */
 @Slf4j
 @Component
 @ConditionalOnProperty(name = "stock.collection.enabled", havingValue = "true")
 @RequiredArgsConstructor
 public class IndexContributionRankingCollector {
 
-    private static final String BLD = "dbms/MDC/STAT/standard/MDCSTAT01501";
-    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyyMMdd");
     private static final int TOP_N = 50;
 
-    private final KrxCrawler krxCrawler;
+    private final KiwoomApiClient kiwoomApiClient;
+    private final StockMasterCacheService stockMasterCacheService;
     private final IndexContributionRankingSnapshotRepository snapshotRepository;
     private final MarketOverviewSnapshotRepository marketOverviewSnapshotRepository;
 
     @Transactional
     public void collect(LocalDateTime snapshotTime) {
-        for (MarketType marketType : MarketType.storableValues()) {
-            collectForMarket(marketType, snapshotTime);
+        Map<String, StockMaster> masterMap = stockMasterCacheService.findAllAsMap();
+
+        for (Board board : Board.values()) {
+            try {
+                collectForMarket(board, masterMap, snapshotTime);
+            } catch (Exception e) {
+                log.error("지수기여도랭킹 수집 실패: board={}", board, e);
+            }
         }
     }
 
-    private void collectForMarket(MarketType marketType, LocalDateTime snapshotTime) {
+    private void collectForMarket(Board board, Map<String, StockMaster> masterMap, LocalDateTime snapshotTime) {
+        Exchange marketType = Exchange.valueOf(board.name());
+        StockMarketCode marketCode = StockMarketCode.valueOf(board.name());
+        String mrktTp = switch (board) {
+            case KOSPI -> MrktTp.KOSPI.value;
+            case KOSDAQ -> MrktTp.KOSDAQ.value;
+        };
+        String indsCd = switch (board) {
+            case KOSPI -> IndsCd.KOSPI.value;
+            case KOSDAQ -> IndsCd.KOSDAQ.value;
+        };
+
         List<IndexContributionRankingSnapshot> existing =
             snapshotRepository.findBySnapshotTimeAndMarketTypeOrderByRankAsc(snapshotTime, marketType);
         if (!existing.isEmpty()) {
-            log.debug("지수기여도랭킹 이미 존재, 스킵: market={}, snapshotTime={}", marketType, snapshotTime);
+            log.debug("지수기여도랭킹 이미 존재, 스킵: board={}, snapshotTime={}", board, snapshotTime);
             return;
         }
 
-        String mktId = Market.valueOf(marketType.name()).mktId;
-        String trdDd = snapshotTime.toLocalDate().format(DATE_FMT);
-
-        List<JsonNode> rows = fetchKrxRows(mktId, trdDd, marketType);
-
-        BigDecimal prevTotalMarketCap = sumMarketCap(rows);
-        if (prevTotalMarketCap.compareTo(BigDecimal.ZERO) == 0) {
-            throw new EscalateException(
-                "전일 전체 시가총액 합산 결과가 0: market=" + marketType + ", trdDd=" + trdDd
-            );
-        }
+        var request = new Ka20002Request(mrktTp, indsCd, "3");
+        Ka20002Response response = kiwoomApiClient.post(request, Ka20002Response.class);
+        List<Ka20002Response.StockItem> items = response.items() != null ? response.items() : List.of();
 
         BigDecimal prevIndexValue = resolvePrevIndexValue(marketType);
 
-        List<ScoredStock> scored = new ArrayList<>();
-        for (JsonNode row : rows) {
-            String stockCode = row.path("ISU_SRT_CD").asText().trim();
-            String stockName = row.path("ISU_ABBRV").asText().trim();
-            if (stockCode.isBlank()) continue;
-
-            BigDecimal curPrice = NumberParser.parseBigDecimal(row.path("TDD_CLSPRC").asText());
-            BigDecimal priceChange = NumberParser.parseBigDecimal(row.path("CMPPREVDD_PRC").asText());
-            BigDecimal listedShares = NumberParser.parseBigDecimal(row.path("LIST_SHRS").asText());
-
-            BigDecimal prevPrice = curPrice.subtract(priceChange);
-            BigDecimal contribution = calculateContribution(
-                curPrice, prevPrice, listedShares, prevTotalMarketCap, prevIndexValue
+        BigDecimal prevTotalMarketCap = BigDecimal.ZERO;
+        for (Ka20002Response.StockItem item : items) {
+            StockMaster master = masterMap.get(stripSuffix(item.stkCd()));
+            if (!isValidForMarket(master, marketCode)) continue;
+            prevTotalMarketCap = prevTotalMarketCap.add(
+                master.getLastPrice().multiply(BigDecimal.valueOf(master.getListCount()))
             );
-
-            // 등락률: priceChange / prevPrice * 100 (전일종가 기준)
-            BigDecimal changeRate = BigDecimal.ZERO;
-            if (prevPrice.compareTo(BigDecimal.ZERO) != 0) {
-                changeRate = priceChange.divide(prevPrice, 6, RoundingMode.HALF_UP)
-                    .multiply(BigDecimal.valueOf(100));
-            }
-
-            scored.add(new ScoredStock(stockCode, stockName, contribution, changeRate));
         }
 
-        // 기여도 절댓값 기준 상위 N건 (기여도 높은 순 = 상승 기여 → 하락 기여 순)
+        if (prevTotalMarketCap.compareTo(BigDecimal.ZERO) == 0) {
+            throw new EscalateException("전일 전체 시가총액 합산 결과가 0: board=" + board);
+        }
+
+        List<ScoredStock> scored = new ArrayList<>();
+        for (Ka20002Response.StockItem item : items) {
+            String stockCode = stripSuffix(item.stkCd());
+            StockMaster master = masterMap.get(stockCode);
+            if (!isValidForMarket(master, marketCode)) continue;
+
+            BigDecimal curPrice = NumberParser.parseBigDecimal(item.curPrc()).abs();
+            BigDecimal prevPrice = master.getLastPrice();
+            BigDecimal listCount = BigDecimal.valueOf(master.getListCount());
+
+            BigDecimal contribution = curPrice.subtract(prevPrice)
+                .multiply(listCount)
+                .divide(prevTotalMarketCap, MathContext.DECIMAL128)
+                .multiply(prevIndexValue);
+
+            BigDecimal changeRate = prevPrice.compareTo(BigDecimal.ZERO) != 0
+                ? curPrice.subtract(prevPrice).divide(prevPrice, 6, RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100))
+                : BigDecimal.ZERO;
+
+            scored.add(new ScoredStock(stockCode, item.stkNm(), master.getMarketCode(), contribution, changeRate));
+        }
+
         scored.sort(Comparator.comparing(ScoredStock::contribution).reversed());
 
         int rank = 1;
         for (ScoredStock stock : scored.subList(0, Math.min(TOP_N, scored.size()))) {
             snapshotRepository.save(IndexContributionRankingSnapshot.create(
                 marketType, rank++,
-                stock.stockCode(), stock.stockName(),
+                stock.stockCode(), stock.stockName(), stock.marketCode(),
                 stock.contribution().setScale(4, RoundingMode.HALF_UP),
                 stock.changeRate().setScale(4, RoundingMode.HALF_UP),
                 snapshotTime
             ));
         }
 
-        log.info("지수기여도랭킹 수집 완료: market={}, 저장건수={}", marketType, rank - 1);
+        log.info("지수기여도랭킹 수집 완료: board={}, 저장건수={}", board, rank - 1);
     }
 
-    private List<JsonNode> fetchKrxRows(String mktId, String trdDd, MarketType marketType) {
-        Map<String, String> params = Map.of(
-            "bld", BLD,
-            "locale", "ko_KR",
-            "mktId", mktId,
-            "trdDd", trdDd,
-            "share", "1",
-            "money", "1",
-            "csvxls_isNo", "false"
-        );
-
-        try {
-            return krxCrawler.fetch(params);
-        } catch (EscalateException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new EscalateException(
-                "KRX 시가총액 데이터 수신 실패: market=" + marketType + ", trdDd=" + trdDd, e
-            );
-        }
+    private boolean isValidForMarket(StockMaster master, StockMarketCode marketCode) {
+        return master != null
+            && master.getLastPrice() != null
+            && master.getListCount() != null
+            && marketCode.matches(master.getMarketCode());
     }
 
-    /**
-     * 응답 전종목의 시가총액(MKTCAP) 합산 → 전일 전체 시가총액으로 사용.
-     */
-    private BigDecimal sumMarketCap(List<JsonNode> rows) {
-        return rows.stream()
-            .map(node -> NumberParser.parseBigDecimal(node.path("MKTCAP").asText()))
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
-    }
-
-    /**
-     * MarketOverviewSnapshot 최신 스냅샷에서 전일 지수값을 역산.
-     * 전일 지수값 = 현재 지수(indexValue) - 등락액(changeValue)
-     */
-    private BigDecimal resolvePrevIndexValue(MarketType marketType) {
+    private BigDecimal resolvePrevIndexValue(Exchange marketType) {
         MarketOverviewSnapshot snapshot = marketOverviewSnapshotRepository
             .findTopByMarketTypeOrderBySnapshotTimeDesc(marketType)
             .orElseThrow(() -> new EscalateException(
@@ -162,32 +146,28 @@ public class IndexContributionRankingCollector {
         return snapshot.getIndexValue().subtract(snapshot.getChangeValue());
     }
 
-    /**
-     * 종목 기여도 = (현재가 - 전일종가) × 상장주식수 / 전일_전체_시가총액 × 전일_지수값
-     */
-    private BigDecimal calculateContribution(
-        BigDecimal curPrice, BigDecimal prevPrice,
-        BigDecimal listedShares,
-        BigDecimal prevTotalMarketCap,
-        BigDecimal prevIndexValue
-    ) {
-        if (prevTotalMarketCap.compareTo(BigDecimal.ZERO) == 0) return BigDecimal.ZERO;
-        return curPrice.subtract(prevPrice)
-            .multiply(listedShares)
-            .divide(prevTotalMarketCap, MathContext.DECIMAL128)
-            .multiply(prevIndexValue);
+    private static String stripSuffix(String stkCd) {
+        if (stkCd == null) return "";
+        int idx = stkCd.indexOf('_');
+        return idx >= 0 ? stkCd.substring(0, idx) : stkCd.trim();
     }
 
-	private enum Market {
-		KOSPI("STK"),
-		KOSDAQ("KSQ");
-		final String mktId;  // KRX mktId
-		Market(String mktId) { this.mktId = mktId; }
-	}
+    private enum MrktTp {
+        KOSPI("0"), KOSDAQ("1");
+        final String value;
+        MrktTp(String value) { this.value = value; }
+    }
+
+    private enum IndsCd {
+        KOSPI("001"), KOSDAQ("101");
+        final String value;
+        IndsCd(String value) { this.value = value; }
+    }
 
     private record ScoredStock(
         String stockCode,
         String stockName,
+        String marketCode,
         BigDecimal contribution,
         BigDecimal changeRate
     ) {}

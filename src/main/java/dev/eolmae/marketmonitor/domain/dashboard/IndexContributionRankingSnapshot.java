@@ -1,6 +1,6 @@
 package dev.eolmae.marketmonitor.domain.dashboard;
 
-import dev.eolmae.marketmonitor.common.enums.MarketType;
+import dev.eolmae.marketmonitor.common.enums.Exchange;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -31,7 +31,7 @@ public class IndexContributionRankingSnapshot {
 
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
-	private MarketType marketType;
+	private Exchange marketType;
 
 	@Column(name = "rank_no", nullable = false)
 	private int rank;
@@ -41,6 +41,9 @@ public class IndexContributionRankingSnapshot {
 
 	@Column(nullable = false, length = 100)
 	private String stockName;
+
+	@Column(length = 5)
+	private String marketCode;
 
 	@Column(nullable = false, precision = 19, scale = 4)
 	private BigDecimal contributionScore;
@@ -57,8 +60,8 @@ public class IndexContributionRankingSnapshot {
 	protected IndexContributionRankingSnapshot() {
 	}
 
-	public static IndexContributionRankingSnapshot create(MarketType marketType, int rank,
-		String stockCode, String stockName,
+	public static IndexContributionRankingSnapshot create(Exchange marketType, int rank,
+		String stockCode, String stockName, String marketCode,
 		BigDecimal contributionScore, BigDecimal priceChangeRate,
 		LocalDateTime snapshotTime) {
 		var entity = new IndexContributionRankingSnapshot();
@@ -66,6 +69,7 @@ public class IndexContributionRankingSnapshot {
 		entity.rank = rank;
 		entity.stockCode = stockCode;
 		entity.stockName = stockName;
+		entity.marketCode = marketCode;
 		entity.contributionScore = contributionScore;
 		entity.priceChangeRate = priceChangeRate;
 		entity.snapshotTime = snapshotTime;

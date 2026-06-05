@@ -1,7 +1,3 @@
--- ⚠️ 임시: 구버전 최종형상 테이블 제거 (V1 재실행 전 DB 초기화 시 이미 없으므로 무해, 확인 후 제거 가능)
-DROP TABLE IF EXISTS investor_trading_summary CASCADE;
-DROP TABLE IF EXISTS market_overview CASCADE;
-
 CREATE TABLE app_user (
     id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
     user_key VARCHAR(64) NOT NULL,
@@ -31,6 +27,9 @@ CREATE TABLE stock_master (
     stock_code VARCHAR(20) NOT NULL,
     stock_name VARCHAR(100) NOT NULL,
     market_type VARCHAR(20) NOT NULL,
+    market_code VARCHAR(5),
+    list_count BIGINT,
+    last_price DECIMAL(19,2),
     active BOOLEAN NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -41,7 +40,8 @@ CREATE TABLE watch_stock (
     id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
     user_id BIGINT NOT NULL,
     stock_code VARCHAR(20) NOT NULL,
-    display_order INT NOT NULL,
+    is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+    register_by VARCHAR(20) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_watch_stock PRIMARY KEY (id),
     CONSTRAINT uk_watch_stock_user_stock UNIQUE (user_id, stock_code),
@@ -166,32 +166,13 @@ CREATE TABLE short_selling_daily (
     CONSTRAINT fk_short_selling_daily_stock FOREIGN KEY (stock_code) REFERENCES stock_master (stock_code)
 );
 
-CREATE TABLE short_selling_snapshot (
-    id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
-    stock_code VARCHAR(20) NOT NULL,
-    trade_date DATE NOT NULL,
-    snapshot_time TIMESTAMP NOT NULL,
-    close_price DECIMAL(19,2) NOT NULL,
-    price_change DECIMAL(19,2) NOT NULL,
-    change_rate DECIMAL(9,4) NOT NULL,
-    trading_volume BIGINT NOT NULL,
-    short_volume BIGINT NOT NULL,
-    cumulative_short_volume BIGINT NOT NULL,
-    short_ratio DECIMAL(9,4) NOT NULL,
-    short_amount DECIMAL(19,2) NOT NULL,
-    short_avg_price DECIMAL(19,2) NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_short_selling_snapshot PRIMARY KEY (id),
-    CONSTRAINT uk_short_selling_snapshot UNIQUE (stock_code, snapshot_time),
-    CONSTRAINT fk_short_selling_snapshot_stock FOREIGN KEY (stock_code) REFERENCES stock_master (stock_code)
-);
-
 CREATE TABLE index_contribution_ranking_snapshot (
     id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
     market_type VARCHAR(20) NOT NULL,
     rank_no INT NOT NULL,
     stock_code VARCHAR(20) NOT NULL,
     stock_name VARCHAR(100) NOT NULL,
+    market_code VARCHAR(5),
     contribution_score DECIMAL(19,4) NOT NULL,
     price_change_rate DECIMAL(9,4) NOT NULL,
     snapshot_time TIMESTAMP NOT NULL,
@@ -208,5 +189,4 @@ CREATE INDEX idx_program_trading_ranking_snapshot_time ON program_trading_rankin
 CREATE INDEX idx_program_trading_history_stock_time ON program_trading_history (stock_code, snapshot_time DESC);
 CREATE INDEX idx_program_trading_daily_stock_date ON program_trading_daily (stock_code, trade_date DESC);
 CREATE INDEX idx_short_selling_daily_stock_date ON short_selling_daily (stock_code, trade_date DESC);
-CREATE INDEX idx_short_selling_snapshot_stock_time ON short_selling_snapshot (stock_code, snapshot_time DESC);
 CREATE INDEX idx_index_contribution_ranking_snapshot_time ON index_contribution_ranking_snapshot (snapshot_time);

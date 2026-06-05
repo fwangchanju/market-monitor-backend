@@ -9,7 +9,6 @@ import dev.eolmae.marketmonitor.domain.dashboard.repository.MarketOverviewSnapsh
 import dev.eolmae.marketmonitor.domain.dashboard.repository.ProgramTradingRankingSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.history.repository.ProgramTradingHistoryRepository;
 import dev.eolmae.marketmonitor.domain.history.repository.ShortSellingDailyHistoryRepository;
-import dev.eolmae.marketmonitor.domain.history.repository.ShortSellingSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.StockMasterRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.WatchStockRepository;
 import java.time.DayOfWeek;
@@ -101,7 +100,6 @@ class CollectorIntegrationTest {
 	@Autowired ProgramTradingRankingSnapshotRepository programTradingRankingSnapshotRepository;
 	@Autowired ProgramTradingHistoryRepository programTradingHistoryRepository;
 	@Autowired ShortSellingDailyHistoryRepository shortSellingDailyHistoryRepository;
-	@Autowired ShortSellingSnapshotRepository shortSellingSnapshotRepository;
 	@Autowired IndexContributionRankingSnapshotRepository indexContributionRankingSnapshotRepository;
 	@Autowired WatchStockRepository watchStockRepository;
 	@Autowired AlertService alertService;
@@ -226,9 +224,8 @@ class CollectorIntegrationTest {
 		shortSellingCollector.collect(snapshotTime);
 
 		long dailyCount = shortSellingDailyHistoryRepository.count();
-		long snapshotCount = shortSellingSnapshotRepository.count();
-		log.info("[7] ShortSelling 수집 완료 — snapshotTime={}, 관심종목={}개, 일별={}건, 스냅샷={}건",
-			snapshotTime, watchStockCount, dailyCount, snapshotCount);
+		log.info("[7] ShortSelling 수집 완료 — snapshotTime={}, 관심종목={}개, 일별={}건",
+			snapshotTime, watchStockCount, dailyCount);
 	}
 
 	@Test

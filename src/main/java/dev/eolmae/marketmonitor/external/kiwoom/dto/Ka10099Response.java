@@ -12,6 +12,9 @@ public record Ka10099Response(
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record StockItem(
 		@JsonProperty("code") String code,
-		@JsonProperty("name") String name
+		@JsonProperty("name") String name,
+		@JsonProperty("marketCode") String marketCode,
+		@JsonProperty("listCount") String listCount,
+		@JsonProperty("lastPrice") String lastPrice
 	) {}
 }

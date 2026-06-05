@@ -3,7 +3,7 @@ import dev.eolmae.marketmonitor.domain.dashboard.*;
 
 import dev.eolmae.marketmonitor.common.enums.AmtQtyType;
 import dev.eolmae.marketmonitor.common.enums.InvestorType;
-import dev.eolmae.marketmonitor.common.enums.MarketType;
+import dev.eolmae.marketmonitor.common.enums.Exchange;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -13,7 +13,7 @@ import org.springframework.data.jpa.repository.Query;
 public interface InvestorTradingSummarySnapshotRepository extends JpaRepository<InvestorTradingSummarySnapshot, Long> {
 
 	Optional<InvestorTradingSummarySnapshot> findByMarketTypeAndInvestorTypeAndAmtQtyTypeAndSnapshotTime(
-		MarketType marketType, InvestorType investorType, AmtQtyType amtQtyType, LocalDateTime snapshotTime);
+		Exchange marketType, InvestorType investorType, AmtQtyType amtQtyType, LocalDateTime snapshotTime);
 
 	List<InvestorTradingSummarySnapshot> findBySnapshotTimeOrderByMarketTypeAscInvestorTypeAsc(LocalDateTime snapshotTime);
 

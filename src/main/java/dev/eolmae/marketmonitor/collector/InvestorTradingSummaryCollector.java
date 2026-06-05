@@ -2,7 +2,8 @@ package dev.eolmae.marketmonitor.collector;
 
 import dev.eolmae.marketmonitor.common.enums.AmtQtyType;
 import dev.eolmae.marketmonitor.common.enums.InvestorType;
-import dev.eolmae.marketmonitor.common.enums.MarketType;
+import dev.eolmae.marketmonitor.common.enums.Board;
+import dev.eolmae.marketmonitor.common.enums.Exchange;
 import dev.eolmae.marketmonitor.common.enums.StexType;
 import dev.eolmae.marketmonitor.common.util.NumberParser;
 import dev.eolmae.marketmonitor.domain.dashboard.InvestorTradingSummarySnapshot;
@@ -34,18 +35,26 @@ public class InvestorTradingSummaryCollector {
 
 	@Transactional
 	public void collect(LocalDateTime snapshotTime) {
-		for (MarketType marketType : MarketType.storableValues()) {
+		for (Board board : Board.values()) {
 			try {
-				collectForMarket(marketType, snapshotTime);
+				collectForMarket(board, snapshotTime);
 			} catch (Exception e) {
-				log.error("투자자별매매종합 수집 실패: market={}", marketType, e);
+				log.error("투자자별매매종합 수집 실패: board={}", board, e);
 			}
 		}
 	}
 
-	private void collectForMarket(MarketType marketType, LocalDateTime snapshotTime) {
-		Market m = Market.valueOf(marketType.name());
-		var request = new Ka10051Request(m.mrktTp, AMT_QTY_TP_AMOUNT, snapshotTime.format(DATE_FMT), StexType.KRX_NXT.code());
+	private void collectForMarket(Board board, LocalDateTime snapshotTime) {
+		Exchange marketType = Exchange.valueOf(board.name());
+		String mrktTp = switch (board) {
+			case KOSPI -> MrktTp.KOSPI.value;
+			case KOSDAQ -> MrktTp.KOSDAQ.value;
+		};
+		String indsCd = switch (board) {
+			case KOSPI -> IndsCd.KOSPI.value;
+			case KOSDAQ -> IndsCd.KOSDAQ.value;
+		};
+		var request = new Ka10051Request(mrktTp, AMT_QTY_TP_AMOUNT, snapshotTime.format(DATE_FMT), StexType.KRX_NXT.code());
 		var response = kiwoomApiClient.post(request, Ka10051Response.class);
 
 		if (response.indsNetprps() == null || response.indsNetprps().isEmpty()) {
@@ -53,7 +62,6 @@ public class InvestorTradingSummaryCollector {
 			return;
 		}
 
-		String indsCd = Market.valueOf(marketType.name()).indsCd;
 		Ka10051Response.IndsNetprps compositeItem = response.indsNetprps().stream()
 			.filter(item -> item.indsCd() != null && item.indsCd().startsWith(indsCd))
 			.findFirst()
@@ -62,7 +70,7 @@ public class InvestorTradingSummaryCollector {
 
 		LocalDateTime now = LocalDateTime.now();
 
-		// ka10051은 순매수만 제공하므로 매수/매도는 ZERO로 저장
+		// ka10051은 순매수만 제공하므로 매수/매도는 ZERO로 저장 // TODO 순매수만 제공하는데 매수/매도는 왜 저장함?
 		saveSnapshot(marketType, InvestorType.PERSONAL, NumberParser.parseBigDecimal(compositeItem.indNetprps()), snapshotTime, now);
 		saveSnapshot(marketType, InvestorType.FOREIGNER, NumberParser.parseBigDecimal(compositeItem.frgnrNetprps()), snapshotTime, now);
 		saveSnapshot(marketType, InvestorType.INSTITUTION, NumberParser.parseBigDecimal(compositeItem.orgnNetprps()), snapshotTime, now);
@@ -80,15 +88,19 @@ public class InvestorTradingSummaryCollector {
 		log.debug("투자자별매매종합 수집 완료: market={}", marketType);
 	}
 
-	private enum Market {
-		KOSPI("0", "001"),
-		KOSDAQ("1", "101");
-		final String mrktTp;  // ka10051 mrkt_tp
-		final String indsCd;  // ka10051 inds_cd (응답 필터용)
-		Market(String mrktTp, String indsCd) { this.mrktTp = mrktTp; this.indsCd = indsCd; }
+	private enum MrktTp {
+		KOSPI("0"), KOSDAQ("1");  // ka10051 mrkt_tp
+		final String value;
+		MrktTp(String value) { this.value = value; }
 	}
 
-	private void saveSnapshot(MarketType marketType, InvestorType investorType,
+	private enum IndsCd {
+		KOSPI("001"), KOSDAQ("101");  // ka10051 inds_cd (응답 필터용)
+		final String value;
+		IndsCd(String value) { this.value = value; }
+	}
+
+	private void saveSnapshot(Exchange marketType, InvestorType investorType,
 		BigDecimal netBuyAmount, LocalDateTime snapshotTime, LocalDateTime now) {
 
 		if (investorTradingSummarySnapshotRepository

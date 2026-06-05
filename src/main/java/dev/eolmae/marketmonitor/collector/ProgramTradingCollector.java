@@ -6,7 +6,7 @@ import dev.eolmae.marketmonitor.domain.history.ProgramTradingDailyHistory;
 import dev.eolmae.marketmonitor.domain.history.repository.ProgramTradingDailyHistoryRepository;
 import dev.eolmae.marketmonitor.domain.history.ProgramTradingHistory;
 import dev.eolmae.marketmonitor.domain.history.repository.ProgramTradingHistoryRepository;
-import dev.eolmae.marketmonitor.domain.stock.repository.WatchStockRepository;
+import dev.eolmae.marketmonitor.domain.stock.WatchStockCacheService;
 import dev.eolmae.marketmonitor.external.kiwoom.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka90008Request;
 import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka90008Response;
@@ -16,10 +16,13 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.LocalTime;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -46,12 +49,12 @@ public class ProgramTradingCollector {
 	private final KiwoomApiClient kiwoomApiClient;
 	private final ProgramTradingHistoryRepository historyRepository;
 	private final ProgramTradingDailyHistoryRepository dailyHistoryRepository;
-	private final WatchStockRepository watchStockRepository;
+	private final WatchStockCacheService watchStockCacheService;
 
 	/** 스케줄러 호출 — 당일 장중 스냅샷 적재 */
 	@Transactional
 	public void collect(LocalDateTime snapshotTime) {
-		List<String> stockCodes = watchStockRepository.findDistinctStockCodes();
+		List<String> stockCodes = watchStockCacheService.findDistinctStockCodes();
 		for (String stockCode : stockCodes) {
 			try {
 				collectIntradayForStock(stockCode, snapshotTime);
@@ -64,7 +67,7 @@ public class ProgramTradingCollector {
 	/** 스케줄러 호출 — 당일 일별 데이터만 적재 */
 	@Transactional
 	public void collectDaily(LocalDate tradeDate) {
-		List<String> stockCodes = watchStockRepository.findDistinctStockCodes();
+		List<String> stockCodes = watchStockCacheService.findDistinctStockCodes();
 		for (String stockCode : stockCodes) {
 			try {
 				collectDailyForStock(stockCode, tradeDate, true);
@@ -78,8 +81,13 @@ public class ProgramTradingCollector {
 	@Transactional
 	public void backfill(String stockCode, LocalDateTime snapshotTime) {
 		backfillIntraday(stockCode, snapshotTime);
-		collectDailyForStock(stockCode, snapshotTime.toLocalDate(), false);
+		backfillDaily(stockCode, snapshotTime);
 		log.info("프로그램매매 백필 완료: stockCode={}", stockCode);
+	}
+
+	@Transactional
+	public void backfillDaily(String stockCode, LocalDateTime snapshotTime) {
+		collectDailyForStock(stockCode, snapshotTime.toLocalDate(), false);
 	}
 
 	private void collectIntradayForStock(String stockCode, LocalDateTime snapshotTime) {
@@ -107,11 +115,12 @@ public class ProgramTradingCollector {
 	}
 
 	/**
-	 * 백필용 — ka90008 tm 필드로 당일 과거 정각 스냅샷 역산 적재.
+	 * 백필용 — ka90008 tm 필드로 당일 과거 정각 스냅샷 역산 적재. WatchStockBackfillService에서 가드 통과 후 호출.
 	 * 09:00 스냅샷 = tm < 090000 인 KRX+NXT 최신 틱 합산.
 	 * 범위: 08:00 ~ snapshotTime(현재 정각).
 	 */
-	private void backfillIntraday(String stockCode, LocalDateTime snapshotTime) {
+	@Transactional
+	public void backfillIntraday(String stockCode, LocalDateTime snapshotTime) {
 		String dateStr = snapshotTime.format(DATE_FMT);
 
 		var krxResponse = kiwoomApiClient.post(
@@ -123,21 +132,24 @@ public class ProgramTradingCollector {
 		List<Ka90008Response.TradeTick> nxtTicks = nxtResponse.ticks() != null ? nxtResponse.ticks() : List.of();
 
 		LocalDate today = snapshotTime.toLocalDate();
-		LocalDateTime hour = today.atTime(8, 0);
 		LocalDateTime currentHour = snapshotTime.withMinute(0).withSecond(0).withNano(0);
 
-		while (!hour.isAfter(currentHour)) {
-			if (!historyRepository.existsByStockCodeAndSnapshotTime(stockCode, hour)) {
-				String cutoff = hour.format(TIME_FMT);
+		Set<String> existingSnapshots = historyRepository.findSnapshotTimesByStockCodeAndDate(stockCode, today)
+			.stream().map(t -> t.format(TIME_FMT)).collect(Collectors.toSet());
+
+		LocalDateTime scheduleStart = LocalDateTime.of(today, LocalTime.of(8, 0));
+		while (!scheduleStart.isAfter(currentHour)) {
+			LocalTime boundary = scheduleStart.toLocalTime();
+			if (!existingSnapshots.contains(scheduleStart.format(TIME_FMT))) {
 
 				Ka90008Response.TradeTick krxLatest = krxTicks.stream()
-					.filter(t -> t.tm() != null && t.tm().trim().compareTo(cutoff) < 0)
-					.max(Comparator.comparing(t -> t.tm().trim()))
+					.filter(t -> t.tm() != null && LocalTime.parse(t.tm(), TIME_FMT).isBefore(boundary))
+					.max(Comparator.comparing(t -> LocalTime.parse(t.tm(), TIME_FMT)))
 					.orElse(null);
 
 				Ka90008Response.TradeTick nxtLatest = nxtTicks.stream()
-					.filter(t -> t.tm() != null && t.tm().trim().compareTo(cutoff) < 0)
-					.max(Comparator.comparing(t -> t.tm().trim()))
+					.filter(t -> t.tm() != null && LocalTime.parse(t.tm(), TIME_FMT).isBefore(boundary))
+					.max(Comparator.comparing(t -> LocalTime.parse(t.tm(), TIME_FMT)))
 					.orElse(null);
 
 				if (krxLatest != null || nxtLatest != null) {
@@ -146,10 +158,10 @@ public class ProgramTradingCollector {
 						nxtLatest != null ? List.of(nxtLatest) : List.of()
 					);
 					historyRepository.save(ProgramTradingHistory.create(
-						stockCode, hour, amounts.buy(), amounts.sell(), amounts.net()));
+						stockCode, scheduleStart, amounts.buy(), amounts.sell(), amounts.net()));
 				}
 			}
-			hour = hour.plusHours(1);
+			scheduleStart = scheduleStart.plusHours(1);
 		}
 	}
 

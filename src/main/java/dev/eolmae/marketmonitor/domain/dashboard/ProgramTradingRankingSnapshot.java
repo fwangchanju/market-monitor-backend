@@ -1,7 +1,7 @@
 package dev.eolmae.marketmonitor.domain.dashboard;
 
 import dev.eolmae.marketmonitor.common.enums.AmtQtyType;
-import dev.eolmae.marketmonitor.common.enums.MarketType;
+import dev.eolmae.marketmonitor.common.enums.Exchange;
 import dev.eolmae.marketmonitor.common.enums.ProgramRankingType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -33,7 +33,7 @@ public class ProgramTradingRankingSnapshot {
 
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
-	private MarketType marketType;
+	private Exchange marketType;
 
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
@@ -71,7 +71,7 @@ public class ProgramTradingRankingSnapshot {
 	}
 
 	public static ProgramTradingRankingSnapshot create(
-		MarketType marketType, AmtQtyType amtQtyType, ProgramRankingType rankingType, int rank,
+		Exchange marketType, AmtQtyType amtQtyType, ProgramRankingType rankingType, int rank,
 		String stockCode, String stockName,
 		BigDecimal programBuyAmount, BigDecimal programSellAmount, BigDecimal programNetBuyAmount,
 		LocalDateTime snapshotTime) {

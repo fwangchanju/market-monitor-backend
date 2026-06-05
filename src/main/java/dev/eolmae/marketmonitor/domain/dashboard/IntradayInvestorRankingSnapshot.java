@@ -3,7 +3,7 @@ package dev.eolmae.marketmonitor.domain.dashboard;
 import dev.eolmae.marketmonitor.common.enums.AmtQtyType;
 import dev.eolmae.marketmonitor.common.enums.IntradayInvestorType;
 import dev.eolmae.marketmonitor.common.enums.IntradayRankingType;
-import dev.eolmae.marketmonitor.common.enums.MarketType;
+import dev.eolmae.marketmonitor.common.enums.Exchange;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -34,7 +34,7 @@ public class IntradayInvestorRankingSnapshot {
 
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
-	private MarketType marketType;
+	private Exchange marketType;
 
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
@@ -76,7 +76,7 @@ public class IntradayInvestorRankingSnapshot {
 	}
 
 	public static IntradayInvestorRankingSnapshot create(
-		MarketType marketType, IntradayInvestorType investorType,
+		Exchange marketType, IntradayInvestorType investorType,
 		IntradayRankingType rankingType, AmtQtyType amtQtyType,
 		int rank, String stockCode, String stockName,
 		BigDecimal netBuyAmount, long sellVolume, long tradedVolume,

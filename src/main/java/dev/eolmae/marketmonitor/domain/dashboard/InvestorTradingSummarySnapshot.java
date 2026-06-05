@@ -2,7 +2,7 @@ package dev.eolmae.marketmonitor.domain.dashboard;
 
 import dev.eolmae.marketmonitor.common.enums.AmtQtyType;
 import dev.eolmae.marketmonitor.common.enums.InvestorType;
-import dev.eolmae.marketmonitor.common.enums.MarketType;
+import dev.eolmae.marketmonitor.common.enums.Exchange;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -33,7 +33,7 @@ public class InvestorTradingSummarySnapshot {
 
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
-	private MarketType marketType;
+	private Exchange marketType;
 
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
@@ -65,7 +65,7 @@ public class InvestorTradingSummarySnapshot {
 	}
 
 	public static InvestorTradingSummarySnapshot create(
-		MarketType marketType, InvestorType investorType, AmtQtyType amtQtyType,
+		Exchange marketType, InvestorType investorType, AmtQtyType amtQtyType,
 		LocalDateTime snapshotTime, LocalDateTime lastCollectedAt,
 		BigDecimal buyAmount, BigDecimal sellAmount, BigDecimal netBuyAmount) {
 		var entity = new InvestorTradingSummarySnapshot();

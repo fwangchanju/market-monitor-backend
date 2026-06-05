@@ -1,6 +1,7 @@
 package dev.eolmae.marketmonitor.collector;
 
-import dev.eolmae.marketmonitor.common.enums.MarketType;
+import dev.eolmae.marketmonitor.common.enums.Board;
+import dev.eolmae.marketmonitor.common.enums.Exchange;
 import dev.eolmae.marketmonitor.common.util.NumberParser;
 import dev.eolmae.marketmonitor.domain.dashboard.MarketOverviewSnapshot;
 import dev.eolmae.marketmonitor.domain.dashboard.repository.MarketOverviewSnapshotRepository;
@@ -24,18 +25,26 @@ public class MarketOverviewCollector {
 
 	@Transactional
 	public void collect(LocalDateTime snapshotTime) {
-		for (MarketType marketType : MarketType.storableValues()) {
+		for (Board board : Board.values()) {
 			try {
-				collectForMarket(marketType, snapshotTime);
+				collectForMarket(board, snapshotTime);
 			} catch (Exception e) {
-				log.error("시장종합 수집 실패: market={}", marketType, e);
+				log.error("시장종합 수집 실패: board={}", board, e);
 			}
 		}
 	}
 
-	private void collectForMarket(MarketType marketType, LocalDateTime snapshotTime) {
-		Market m = Market.valueOf(marketType.name());
-		var request = new Ka20001Request(m.mrktTp, m.indsCd);
+	private void collectForMarket(Board board, LocalDateTime snapshotTime) {
+		Exchange marketType = Exchange.valueOf(board.name());
+		String mrktTp = switch (board) {
+			case KOSPI -> MrktTp.KOSPI.value;
+			case KOSDAQ -> MrktTp.KOSDAQ.value;
+		};
+		String indsCd = switch (board) {
+			case KOSPI -> IndsCd.KOSPI.value;
+			case KOSDAQ -> IndsCd.KOSDAQ.value;
+		};
+		var request = new Ka20001Request(mrktTp, indsCd);
 		var response = kiwoomApiClient.post(request, Ka20001Response.class);
 
 		LocalDateTime now = LocalDateTime.now();
@@ -60,11 +69,15 @@ public class MarketOverviewCollector {
 		log.debug("시장종합 수집 완료: market={}, index={}", marketType, indexValue);
 	}
 
-	private enum Market {
-		KOSPI("0", "001"),
-		KOSDAQ("1", "101");
-		final String mrktTp;  // ka20001 mrkt_tp
-		final String indsCd;  // ka20001 inds_cd
-		Market(String mrktTp, String indsCd) { this.mrktTp = mrktTp; this.indsCd = indsCd; }
+	private enum MrktTp {
+		KOSPI("0"), KOSDAQ("1");  // ka20001 mrkt_tp
+		final String value;
+		MrktTp(String value) { this.value = value; }
+	}
+
+	private enum IndsCd {
+		KOSPI("001"), KOSDAQ("101");  // ka20001 inds_cd
+		final String value;
+		IndsCd(String value) { this.value = value; }
 	}
 }

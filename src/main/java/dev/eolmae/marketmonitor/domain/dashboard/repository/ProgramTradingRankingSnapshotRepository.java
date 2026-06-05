@@ -2,7 +2,7 @@ package dev.eolmae.marketmonitor.domain.dashboard.repository;
 import dev.eolmae.marketmonitor.domain.dashboard.*;
 
 import dev.eolmae.marketmonitor.common.enums.AmtQtyType;
-import dev.eolmae.marketmonitor.common.enums.MarketType;
+import dev.eolmae.marketmonitor.common.enums.Exchange;
 import dev.eolmae.marketmonitor.common.enums.ProgramRankingType;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -19,14 +19,14 @@ public interface ProgramTradingRankingSnapshotRepository extends JpaRepository<P
 
 	boolean existsBySnapshotTimeAndMarketTypeAndRankingTypeAndAmtQtyType(
 		LocalDateTime snapshotTime,
-		MarketType marketType,
+		Exchange marketType,
 		ProgramRankingType rankingType,
 		AmtQtyType amtQtyType
 	);
 
 	List<ProgramTradingRankingSnapshot> findBySnapshotTimeAndMarketTypeAndRankingTypeAndAmtQtyTypeOrderByRankAsc(
 		LocalDateTime snapshotTime,
-		MarketType marketType,
+		Exchange marketType,
 		ProgramRankingType rankingType,
 		AmtQtyType amtQtyType
 	);

@@ -3,7 +3,7 @@ import dev.eolmae.marketmonitor.domain.dashboard.*;
 
 import dev.eolmae.marketmonitor.common.enums.IntradayInvestorType;
 import dev.eolmae.marketmonitor.common.enums.IntradayRankingType;
-import dev.eolmae.marketmonitor.common.enums.MarketType;
+import dev.eolmae.marketmonitor.common.enums.Exchange;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -14,7 +14,7 @@ public interface IntradayInvestorRankingSnapshotRepository extends JpaRepository
 
 	List<IntradayInvestorRankingSnapshot> findBySnapshotTimeAndMarketTypeAndInvestorTypeAndRankingTypeOrderByRankAsc(
 		LocalDateTime snapshotTime,
-		MarketType marketType,
+		Exchange marketType,
 		IntradayInvestorType investorType,
 		IntradayRankingType rankingType
 	);

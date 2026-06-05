@@ -1,10 +1,10 @@
 package dev.eolmae.marketmonitor.api.dto;
 
-import dev.eolmae.marketmonitor.common.enums.MarketType;
+import dev.eolmae.marketmonitor.common.enums.Exchange;
 import java.math.BigDecimal;
 
 public record MarketOverviewItem(
-	MarketType marketType,
+	Exchange marketType,
 	String marketStatus,
 	BigDecimal indexValue,
 	BigDecimal changeValue,

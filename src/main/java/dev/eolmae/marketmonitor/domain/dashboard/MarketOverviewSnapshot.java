@@ -1,6 +1,6 @@
 package dev.eolmae.marketmonitor.domain.dashboard;
 
-import dev.eolmae.marketmonitor.common.enums.MarketType;
+import dev.eolmae.marketmonitor.common.enums.Exchange;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -31,7 +31,7 @@ public class MarketOverviewSnapshot {
 
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
-	private MarketType marketType;
+	private Exchange marketType;
 
 	@Column(nullable = false)
 	private LocalDateTime snapshotTime;
@@ -76,7 +76,7 @@ public class MarketOverviewSnapshot {
 	}
 
 	public static MarketOverviewSnapshot create(
-		MarketType marketType, LocalDateTime snapshotTime, LocalDateTime lastCollectedAt,
+		Exchange marketType, LocalDateTime snapshotTime, LocalDateTime lastCollectedAt,
 		String marketStatus, BigDecimal indexValue, BigDecimal changeValue, BigDecimal changeRate,
 		BigDecimal tradingValue, int upperLimitCount, int lowerLimitCount,
 		int advancers, int decliners, int unchangedCount) {

@@ -29,7 +29,7 @@ public class NumberParser {
 	}
 
 	public static int parseInt(String value) {
-		if (value == null || value.isBlank() || "-".equals(value.trim())) return 0;
+		if (value == null || value.isBlank() || "-".equals(value.trim())) return 0; // TODO StringUtils.isBlank 만 조건으로 사용하고 "-".equals 조건은 그냥 빼버려도 저 아래 NumberFormatException 에서 걸러져서 처리 될거같은데
 		try {
 			return Integer.parseInt(value.replace(",", "").trim());
 		} catch (NumberFormatException e) {

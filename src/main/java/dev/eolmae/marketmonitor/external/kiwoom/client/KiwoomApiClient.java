@@ -2,6 +2,7 @@ package dev.eolmae.marketmonitor.external.kiwoom.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.util.concurrent.RateLimiter;
 import dev.eolmae.marketmonitor.exception.KiwoomApiException;
 import dev.eolmae.marketmonitor.exception.KiwoomRateLimitException;
 import dev.eolmae.marketmonitor.external.kiwoom.KiwoomApiConstants;
@@ -28,6 +29,7 @@ public class KiwoomApiClient {
 	private final KiwoomTokenManager tokenManager;
 	private final ObjectMapper objectMapper = new ObjectMapper();
 	private final RestClient restClient = RestClient.create();
+	private final RateLimiter rateLimiter = RateLimiter.create(5.0);
 
 	/**
 	 * 타입 안전 API 호출. request DTO가 직렬화되어 요청 바디로 전송된다.
@@ -36,11 +38,11 @@ public class KiwoomApiClient {
 	 *
 	 * 429 응답 시 최대 3회 재시도(2초 간격), 초과 시 해당 사이클 스킵.
 	 */
-	@Retryable(retryFor = KiwoomRateLimitException.class, maxAttempts = 3, backoff = @Backoff(delay = 2000))
+	@Retryable(retryFor = KiwoomRateLimitException.class, maxAttempts = 2, backoff = @Backoff(delay = 1000))
 	public <T> T post(KiwoomRequest request, Class<T> dataClass) {
 		log.debug("Kiwoom API 호출: apiId={}, path={}", request.apiId(), request.path());
 
-		sleep(properties.callIntervalMs());
+		rateLimiter.acquire();
 
 		JsonNode response = callApi(request.path(), request.apiId(), request);
 		return objectMapper.convertValue(response, dataClass);
@@ -89,14 +91,4 @@ public class KiwoomApiClient {
 		return response;
 	}
 
-	private void sleep(long millis) {
-		if (millis <= 0) {
-			return;
-		}
-		try {
-			Thread.sleep(millis);
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-		}
-	}
 }

@@ -1,10 +1,11 @@
 package dev.eolmae.marketmonitor.collector;
 
-import dev.eolmae.marketmonitor.common.enums.MarketType;
+import dev.eolmae.marketmonitor.common.enums.Exchange;
 import dev.eolmae.marketmonitor.common.util.NumberParser;
 import dev.eolmae.marketmonitor.domain.dashboard.IndexContributionRankingSnapshot;
 import dev.eolmae.marketmonitor.domain.dashboard.repository.IndexContributionRankingSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.dashboard.repository.MarketOverviewSnapshotRepository;
+import com.fasterxml.jackson.databind.JsonNode;
 import dev.eolmae.marketmonitor.external.kiwoom.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10051Request;
 import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10051Response;
@@ -16,6 +17,12 @@ import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka90003Request;
 import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka90003Response;
 import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka90008Request;
 import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka90008Response;
+import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10099Request;
+import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10099Response;
+import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka20002Request;
+import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka20002Response;
+import dev.eolmae.marketmonitor.external.kiwoom.dto.Kt00018Request;
+import dev.eolmae.marketmonitor.external.kiwoom.dto.Kt00018Response;
 import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka90013Request;
 import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka90013Response;
 import java.math.BigDecimal;
@@ -306,6 +313,7 @@ class KiwoomApiVerificationTest {
      *     → 달라지면: 매시간 수집(08:00~20:00) 확정
      *     → 안 달라지면: 다른 실시간 데이터소스 탐색 필요
      */
+
 //    @Test
     void ka10014_공매도추이() {
         String today = LocalDate.now(KST).format(DATE_FMT);
@@ -357,7 +365,7 @@ class KiwoomApiVerificationTest {
      *     → 일치하면 연산 공식 정합성 OK
      *     → 편차 크면 유동시총 vs 전체시총 혼용 등 점검 필요
      */
-    @Test
+//    @Test
     void indexContributionRanking_수집_및_공식검증() {
         assumeTrue(!krxLoginId.isBlank(), "KRX 로그인 정보 미설정 — KRX_ID/KRX_PW 환경변수 확인 후 재실행");
 
@@ -372,7 +380,7 @@ class KiwoomApiVerificationTest {
 
         indexContributionRankingCollector.collect(snapshotTime);
 
-        for (MarketType market : MarketType.storableValues()) {
+        for (Exchange market : List.of(Exchange.KOSPI, Exchange.KOSDAQ)) {
             List<IndexContributionRankingSnapshot> snapshots =
                 indexContributionRankingSnapshotRepository
                     .findBySnapshotTimeAndMarketTypeOrderByRankAsc(snapshotTime, market);
@@ -521,6 +529,41 @@ class KiwoomApiVerificationTest {
                 });
         } catch (Exception e) {
             log.warn("[ka90013] 예외 발생: {}", e.getMessage());
+        }
+    }
+
+//    @Test
+    void kt00018_보유종목현황() {
+        try {
+            var response = kiwoomApiClient.post(Kt00018Request.defaults(), Kt00018Response.class);
+            log.info("[kt00018] raw: {}", response);
+        } catch (Exception e) {
+            log.warn("[kt00018] 예외: {}", e.getMessage());
+        }
+    }
+
+//    @Test
+    void ka20002_업종별주가() {
+        for (var market : List.of(new String[]{"KOSPI", "0", "001"}, new String[]{"KOSDAQ", "1", "101"})) {
+            try {
+                var response = kiwoomApiClient.post(
+                    new Ka20002Request(market[1], market[2], "3"), Ka20002Response.class);
+                log.info("[ka20002][{}] raw: {}", market[0], response);
+            } catch (Exception e) {
+                log.warn("[ka20002][{}] 예외: {}", market[0], e.getMessage());
+            }
+        }
+    }
+
+    @Test
+    void ka10099_종목정보리스트() {
+        for (String mrktTp : List.of("0", "10")) {
+            try {
+                var response = kiwoomApiClient.post(new Ka10099Request(mrktTp), Ka10099Response.class);
+                log.info("[ka10099][mrkt_tp={}] raw: {}", mrktTp, response);
+            } catch (Exception e) {
+                log.warn("[ka10099][mrkt_tp={}] 예외: {}", mrktTp, e.getMessage());
+            }
         }
     }
 }

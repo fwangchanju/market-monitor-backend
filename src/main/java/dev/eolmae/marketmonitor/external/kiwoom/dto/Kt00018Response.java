@@ -13,6 +13,8 @@ public record Kt00018Response(
 	public record HoldingItem(
 		@JsonProperty("stk_cd") String stkCd,
 		@JsonProperty("stk_nm") String stkNm,
+		@JsonProperty("pur_amt") String purAmt,
+		@JsonProperty("evlt_amt") String evltAmt,
 		@JsonProperty("poss_rt") String possRt
 	) {
 		public String stockCode() {

@@ -1,5 +1,6 @@
 package dev.eolmae.marketmonitor.collector;
 
+import dev.eolmae.marketmonitor.common.util.NumberParser;
 import dev.eolmae.marketmonitor.domain.stock.HoldingsCache;
 import dev.eolmae.marketmonitor.domain.stock.RegisterBy;
 import dev.eolmae.marketmonitor.domain.stock.WatchStock;
@@ -82,7 +83,8 @@ public class HoldingsSyncService {
 		watchStockCacheService.evict();
 		log.info("보유종목 동기화 완료: 보유종목={}", currentHoldingCodes);
 
-		// 비중 기준 정렬된 보유종목 목록 → holdingsCache 갱신 및 반환
+		// 평가금액(현재 가치) 기준 정렬된 보유종목 목록 → holdingsCache 갱신 및 반환
+		// 비중(poss_rt)은 계좌 내 상대값이라 여러 계좌(app key)를 동시에 쓰게 되면 비교 기준이 될 수 없음
 		List<Kt00018Response.HoldingItem> sorted = response.holdings().stream()
 			.collect(Collectors.toMap(
 				Kt00018Response.HoldingItem::stockCode,
@@ -90,7 +92,7 @@ public class HoldingsSyncService {
 				(a, b) -> a  // dedup — 첫 번째 항목 유지
 			))
 			.values().stream()
-			.sorted((a, b) -> Double.compare(parseDouble(b.possRt()), parseDouble(a.possRt())))
+			.sorted((a, b) -> NumberParser.parseBigDecimal(b.evltAmt()).compareTo(NumberParser.parseBigDecimal(a.evltAmt())))
 			.toList();
 		holdingsCache.update(sorted);
 		return sorted;

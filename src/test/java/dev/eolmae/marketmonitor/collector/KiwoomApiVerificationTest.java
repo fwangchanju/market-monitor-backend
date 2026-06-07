@@ -532,7 +532,7 @@ class KiwoomApiVerificationTest {
         }
     }
 
-//    @Test
+    @Test
     void kt00018_보유종목현황() {
         try {
             var response = kiwoomApiClient.post(Kt00018Request.defaults(), Kt00018Response.class);
@@ -555,7 +555,7 @@ class KiwoomApiVerificationTest {
         }
     }
 
-    @Test
+//    @Test
     void ka10099_종목정보리스트() {
         for (String mrktTp : List.of("0", "10")) {
             try {

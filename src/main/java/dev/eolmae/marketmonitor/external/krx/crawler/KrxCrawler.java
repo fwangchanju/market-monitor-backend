@@ -25,7 +25,8 @@ public class KrxCrawler {
 
     private static final String KRX_DATA_URL = "https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd";
     private static final String KRX_REFERER = "https://data.krx.co.kr/contents/MDC/MDI/outerLoader/index.cmd";
-    private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0";
+    private static final String USER_AGENT =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0";
 
     private final KrxAuthClient krxAuthClient;
     private final RestClient restClient = RestClient.create();
@@ -50,16 +51,17 @@ public class KrxCrawler {
 
     private String doFetch(Map<String, String> params, String cookie) {
         MultiValueMap<String, String> formData = toMultiValueMap(params);
-        return restClient.post()
-            .uri(KRX_DATA_URL)
-            .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-            .header("User-Agent", USER_AGENT)
-            .header("Referer", KRX_REFERER)
-            .header("X-Requested-With", "XMLHttpRequest")
-            .header("Cookie", cookie)
-            .body(formData)
-            .retrieve()
-            .body(String.class);
+        return restClient
+                .post()
+                .uri(KRX_DATA_URL)
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .header("User-Agent", USER_AGENT)
+                .header("Referer", KRX_REFERER)
+                .header("X-Requested-With", "XMLHttpRequest")
+                .header("Cookie", cookie)
+                .body(formData)
+                .retrieve()
+                .body(String.class);
     }
 
     private List<JsonNode> parseOutBlock(String responseBody, String bld) {
@@ -72,9 +74,7 @@ public class KrxCrawler {
 
         JsonNode outBlock = root.get("OutBlock_1");
         if (outBlock == null || outBlock.isNull()) {
-            throw new EscalateException(
-                "KRX 응답에 OutBlock_1이 없음 — 인터페이스 구조 변경 의심: bld=" + bld
-            );
+            throw new EscalateException("KRX 응답에 OutBlock_1이 없음 — 인터페이스 구조 변경 의심: bld=" + bld);
         }
 
         List<JsonNode> result = new ArrayList<>();

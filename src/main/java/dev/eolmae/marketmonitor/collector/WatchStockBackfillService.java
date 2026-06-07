@@ -26,7 +26,8 @@ public class WatchStockBackfillService {
 
     @Async
     public void backfill(String stockCode) {
-        LocalDateTime snapshotTime = LocalDateTime.now(KST).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime snapshotTime =
+                LocalDateTime.now(KST).withMinute(0).withSecond(0).withNano(0);
         LocalDate yesterday = snapshotTime.toLocalDate().minusDays(1);
         log.info("관심종목 백필 시작: stockCode={}, snapshotTime={}", stockCode, snapshotTime);
 

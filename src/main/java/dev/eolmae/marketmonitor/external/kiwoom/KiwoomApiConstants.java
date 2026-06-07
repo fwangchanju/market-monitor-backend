@@ -2,8 +2,7 @@ package dev.eolmae.marketmonitor.external.kiwoom;
 
 public class KiwoomApiConstants {
 
-	private KiwoomApiConstants() {
-	}
+    private KiwoomApiConstants() {}
 
-	public static final String SUCCESS_CODE = "0";
+    public static final String SUCCESS_CODE = "0";
 }

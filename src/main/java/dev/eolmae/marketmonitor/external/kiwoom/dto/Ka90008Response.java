@@ -6,25 +6,23 @@ import java.util.List;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record Ka90008Response(
-	@JsonProperty("stk_tm_prm_trde_trnsn") List<TradeTick> ticks
-) {
+        @JsonProperty("stk_tm_prm_trde_trnsn") List<TradeTick> ticks) {
 
-	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record TradeTick(
-		@JsonProperty("tm") String tm,
-		@JsonProperty("cur_prc") String curPrc,
-		@JsonProperty("pre_sig") String preSig,
-		@JsonProperty("pred_pre") String predPre,
-		@JsonProperty("flu_rt") String fluRt,
-		@JsonProperty("trde_qty") String trdeQty,
-		@JsonProperty("prm_sell_amt") String prmSellAmt,
-		@JsonProperty("prm_buy_amt") String prmBuyAmt,
-		@JsonProperty("prm_netprps_amt") String prmNetprpsAmt,
-		@JsonProperty("prm_netprps_amt_irds") String prmNetprpsAmtIrds,
-		@JsonProperty("prm_sell_qty") String prmSellQty,
-		@JsonProperty("prm_buy_qty") String prmBuyQty,
-		@JsonProperty("prm_netprps_qty") String prmNetprpsQty,
-		@JsonProperty("prm_netprps_qty_irds") String prmNetprpsQtyIrds,
-		@JsonProperty("stex_tp") String stexTp
-	) {}
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record TradeTick(
+            @JsonProperty("tm") String tm,
+            @JsonProperty("cur_prc") String curPrc,
+            @JsonProperty("pre_sig") String preSig,
+            @JsonProperty("pred_pre") String predPre,
+            @JsonProperty("flu_rt") String fluRt,
+            @JsonProperty("trde_qty") String trdeQty,
+            @JsonProperty("prm_sell_amt") String prmSellAmt,
+            @JsonProperty("prm_buy_amt") String prmBuyAmt,
+            @JsonProperty("prm_netprps_amt") String prmNetprpsAmt,
+            @JsonProperty("prm_netprps_amt_irds") String prmNetprpsAmtIrds,
+            @JsonProperty("prm_sell_qty") String prmSellQty,
+            @JsonProperty("prm_buy_qty") String prmBuyQty,
+            @JsonProperty("prm_netprps_qty") String prmNetprpsQty,
+            @JsonProperty("prm_netprps_qty_irds") String prmNetprpsQtyIrds,
+            @JsonProperty("stex_tp") String stexTp) {}
 }

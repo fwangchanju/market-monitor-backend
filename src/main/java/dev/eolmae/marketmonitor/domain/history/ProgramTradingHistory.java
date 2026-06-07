@@ -14,48 +14,50 @@ import lombok.Getter;
 @Getter
 @Entity
 @Table(
-	name = "program_trading_history",
-	uniqueConstraints = @UniqueConstraint(
-		name = "uk_program_trading_history",
-		columnNames = {"stock_code", "snapshot_time"}
-	)
-)
+        name = "program_trading_history",
+        uniqueConstraints =
+                @UniqueConstraint(
+                        name = "uk_program_trading_history",
+                        columnNames = {"stock_code", "snapshot_time"}))
 public class ProgramTradingHistory {
 
-	@Id
-	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-	@Column(nullable = false, length = 20)
-	private String stockCode;
+    @Column(nullable = false, length = 20)
+    private String stockCode;
 
-	@Column(nullable = false)
-	private LocalDateTime snapshotTime;
+    @Column(nullable = false)
+    private LocalDateTime snapshotTime;
 
-	@Column(nullable = false, precision = 19, scale = 2)
-	private BigDecimal programBuyAmount;
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal programBuyAmount;
 
-	@Column(nullable = false, precision = 19, scale = 2)
-	private BigDecimal programSellAmount;
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal programSellAmount;
 
-	@Column(nullable = false, precision = 19, scale = 2)
-	private BigDecimal programNetBuyAmount;
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal programNetBuyAmount;
 
-	@Column(nullable = false)
-	private LocalDateTime createdAt;
+    @Column(nullable = false)
+    private LocalDateTime createdAt;
 
-	protected ProgramTradingHistory() {
-	}
+    protected ProgramTradingHistory() {}
 
-	public static ProgramTradingHistory create(String stockCode, LocalDateTime snapshotTime,
-		BigDecimal programBuyAmount, BigDecimal programSellAmount, BigDecimal programNetBuyAmount) {
-		var entity = new ProgramTradingHistory();
-		entity.stockCode = stockCode;
-		entity.snapshotTime = snapshotTime;
-		entity.programBuyAmount = programBuyAmount;
-		entity.programSellAmount = programSellAmount;
-		entity.programNetBuyAmount = programNetBuyAmount;
-		entity.createdAt = LocalDateTime.now();
-		return entity;
-	}
+    public static ProgramTradingHistory create(
+            String stockCode,
+            LocalDateTime snapshotTime,
+            BigDecimal programBuyAmount,
+            BigDecimal programSellAmount,
+            BigDecimal programNetBuyAmount) {
+        var entity = new ProgramTradingHistory();
+        entity.stockCode = stockCode;
+        entity.snapshotTime = snapshotTime;
+        entity.programBuyAmount = programBuyAmount;
+        entity.programSellAmount = programSellAmount;
+        entity.programNetBuyAmount = programNetBuyAmount;
+        entity.createdAt = LocalDateTime.now();
+        return entity;
+    }
 }

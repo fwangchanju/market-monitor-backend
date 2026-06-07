@@ -23,24 +23,42 @@ import org.springframework.test.context.TestPropertySource;
 @Slf4j
 @SpringBootTest
 @ActiveProfiles("prod")
-@TestPropertySource(properties = {
-    "spring.test.database.replace=none",
-    "spring.datasource.url=jdbc:postgresql://localhost:5433/market_monitor_db",
-    "spring.flyway.enabled=false"
-})
+@TestPropertySource(
+        properties = {
+            "spring.test.database.replace=none",
+            "spring.datasource.url=jdbc:postgresql://localhost:5433/market_monitor_db",
+            "spring.flyway.enabled=false"
+        })
 class FullDataCollectionTest {
 
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
-    @Autowired StockMasterCollector stockMasterCollector;
-    @Autowired MarketOverviewCollector marketOverviewCollector;
-    @Autowired InvestorTradingSummaryCollector investorTradingSummaryCollector;
-    @Autowired IntradayInvestorRankingCollector intradayInvestorRankingCollector;
-    @Autowired ProgramTradingRankingCollector programTradingRankingCollector;
-    @Autowired ProgramTradingCollector programTradingCollector;
-    @Autowired ShortSellingCollector shortSellingCollector;
-    @Autowired IndexContributionRankingCollector indexContributionRankingCollector;
-    @Autowired JdbcTemplate jdbcTemplate;
+    @Autowired
+    StockMasterCollector stockMasterCollector;
+
+    @Autowired
+    MarketOverviewCollector marketOverviewCollector;
+
+    @Autowired
+    InvestorTradingSummaryCollector investorTradingSummaryCollector;
+
+    @Autowired
+    IntradayInvestorRankingCollector intradayInvestorRankingCollector;
+
+    @Autowired
+    ProgramTradingRankingCollector programTradingRankingCollector;
+
+    @Autowired
+    ProgramTradingCollector programTradingCollector;
+
+    @Autowired
+    ShortSellingCollector shortSellingCollector;
+
+    @Autowired
+    IndexContributionRankingCollector indexContributionRankingCollector;
+
+    @Autowired
+    JdbcTemplate jdbcTemplate;
 
     @Test
     void 전체수집_한사이클() {
@@ -51,16 +69,16 @@ class FullDataCollectionTest {
 
         log.info("=== 전체 수집 시작 | tradeDate={} | snapshotTime={} ===", tradeDate, snapshotTime);
 
-//        run("종목마스터",          () -> stockMasterCollector.sync());
-//        setupSamsungWatchStock();
-//        run("시장개요",            () -> marketOverviewCollector.collect(snapshotTime));
-//        run("투자자매매종합",       () -> investorTradingSummaryCollector.collect(snapshotTime));
-//        run("장중투자자랭킹",       () -> intradayInvestorRankingCollector.collect(snapshotTime));
-//        run("프로그램매매랭킹",     () -> programTradingRankingCollector.collect(snapshotTime));
-//        run("지수기여도랭킹",       () -> indexContributionRankingCollector.collect(snapshotTime));
-//        run("프로그램매매일별",     () -> programTradingCollector.collectDaily(tradeDate));
-//        run("프로그램매매장중",     () -> programTradingCollector.collect(snapshotTime));
-        run("공매도",              () -> shortSellingCollector.collect(snapshotTime));
+        //        run("종목마스터",          () -> stockMasterCollector.sync());
+        //        setupSamsungWatchStock();
+        //        run("시장개요",            () -> marketOverviewCollector.collect(snapshotTime));
+        //        run("투자자매매종합",       () -> investorTradingSummaryCollector.collect(snapshotTime));
+        //        run("장중투자자랭킹",       () -> intradayInvestorRankingCollector.collect(snapshotTime));
+        //        run("프로그램매매랭킹",     () -> programTradingRankingCollector.collect(snapshotTime));
+        //        run("지수기여도랭킹",       () -> indexContributionRankingCollector.collect(snapshotTime));
+        //        run("프로그램매매일별",     () -> programTradingCollector.collectDaily(tradeDate));
+        //        run("프로그램매매장중",     () -> programTradingCollector.collect(snapshotTime));
+        run("공매도", () -> shortSellingCollector.collect(snapshotTime));
 
         log.info("=== 전체 수집 완료 ===");
     }
@@ -86,8 +104,8 @@ class FullDataCollectionTest {
         LocalDate today = LocalDate.now(KST);
         return switch (today.getDayOfWeek()) {
             case SATURDAY -> today.minusDays(1);
-            case SUNDAY   -> today.minusDays(2);
-            default       -> today;
+            case SUNDAY -> today.minusDays(2);
+            default -> today;
         };
     }
 

@@ -57,17 +57,19 @@ public class IndexContributionRankingCollector {
     private void collectForMarket(Board board, Map<String, StockMaster> masterMap, LocalDateTime snapshotTime) {
         Exchange marketType = Exchange.valueOf(board.name());
         StockMarketCode marketCode = StockMarketCode.valueOf(board.name());
-        String mrktTp = switch (board) {
-            case KOSPI -> MrktTp.KOSPI.value;
-            case KOSDAQ -> MrktTp.KOSDAQ.value;
-        };
-        String indsCd = switch (board) {
-            case KOSPI -> IndsCd.KOSPI.value;
-            case KOSDAQ -> IndsCd.KOSDAQ.value;
-        };
+        String mrktTp =
+                switch (board) {
+                    case KOSPI -> MrktTp.KOSPI.value;
+                    case KOSDAQ -> MrktTp.KOSDAQ.value;
+                };
+        String indsCd =
+                switch (board) {
+                    case KOSPI -> IndsCd.KOSPI.value;
+                    case KOSDAQ -> IndsCd.KOSDAQ.value;
+                };
 
         List<IndexContributionRankingSnapshot> existing =
-            snapshotRepository.findBySnapshotTimeAndMarketTypeOrderByRankAsc(snapshotTime, marketType);
+                snapshotRepository.findBySnapshotTimeAndMarketTypeOrderByRankAsc(snapshotTime, marketType);
         if (!existing.isEmpty()) {
             log.debug("지수기여도랭킹 이미 존재, 스킵: board={}, snapshotTime={}", board, snapshotTime);
             return;
@@ -83,9 +85,8 @@ public class IndexContributionRankingCollector {
         for (Ka20002Response.StockItem item : items) {
             StockMaster master = masterMap.get(stripSuffix(item.stkCd()));
             if (!isValidForMarket(master, marketCode)) continue;
-            prevTotalMarketCap = prevTotalMarketCap.add(
-                master.getLastPrice().multiply(BigDecimal.valueOf(master.getListCount()))
-            );
+            prevTotalMarketCap =
+                    prevTotalMarketCap.add(master.getLastPrice().multiply(BigDecimal.valueOf(master.getListCount())));
         }
 
         if (prevTotalMarketCap.compareTo(BigDecimal.ZERO) == 0) {
@@ -103,13 +104,15 @@ public class IndexContributionRankingCollector {
             BigDecimal listCount = BigDecimal.valueOf(master.getListCount());
 
             BigDecimal contribution = curPrice.subtract(prevPrice)
-                .multiply(listCount)
-                .divide(prevTotalMarketCap, MathContext.DECIMAL128)
-                .multiply(prevIndexValue);
+                    .multiply(listCount)
+                    .divide(prevTotalMarketCap, MathContext.DECIMAL128)
+                    .multiply(prevIndexValue);
 
             BigDecimal changeRate = prevPrice.compareTo(BigDecimal.ZERO) != 0
-                ? curPrice.subtract(prevPrice).divide(prevPrice, 6, RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100))
-                : BigDecimal.ZERO;
+                    ? curPrice.subtract(prevPrice)
+                            .divide(prevPrice, 6, RoundingMode.HALF_UP)
+                            .multiply(BigDecimal.valueOf(100))
+                    : BigDecimal.ZERO;
 
             scored.add(new ScoredStock(stockCode, item.stkNm(), master.getMarketCode(), contribution, changeRate));
         }
@@ -119,12 +122,14 @@ public class IndexContributionRankingCollector {
         int rank = 1;
         for (ScoredStock stock : scored.subList(0, Math.min(TOP_N, scored.size()))) {
             snapshotRepository.save(IndexContributionRankingSnapshot.create(
-                marketType, rank++,
-                stock.stockCode(), stock.stockName(), stock.marketCode(),
-                stock.contribution().setScale(4, RoundingMode.HALF_UP),
-                stock.changeRate().setScale(4, RoundingMode.HALF_UP),
-                snapshotTime
-            ));
+                    marketType,
+                    rank++,
+                    stock.stockCode(),
+                    stock.stockName(),
+                    stock.marketCode(),
+                    stock.contribution().setScale(4, RoundingMode.HALF_UP),
+                    stock.changeRate().setScale(4, RoundingMode.HALF_UP),
+                    snapshotTime));
         }
 
         log.info("지수기여도랭킹 수집 완료: board={}, 저장건수={}", board, rank - 1);
@@ -132,17 +137,16 @@ public class IndexContributionRankingCollector {
 
     private boolean isValidForMarket(StockMaster master, StockMarketCode marketCode) {
         return master != null
-            && master.getLastPrice() != null
-            && master.getListCount() != null
-            && marketCode.matches(master.getMarketCode());
+                && master.getLastPrice() != null
+                && master.getListCount() != null
+                && marketCode.matches(master.getMarketCode());
     }
 
     private BigDecimal resolvePrevIndexValue(Exchange marketType) {
         MarketOverviewSnapshot snapshot = marketOverviewSnapshotRepository
-            .findTopByMarketTypeOrderBySnapshotTimeDesc(marketType)
-            .orElseThrow(() -> new EscalateException(
-                "MarketOverviewSnapshot 데이터 없음 — 지수기여도 연산 불가: market=" + marketType
-            ));
+                .findTopByMarketTypeOrderBySnapshotTimeDesc(marketType)
+                .orElseThrow(() ->
+                        new EscalateException("MarketOverviewSnapshot 데이터 없음 — 지수기여도 연산 불가: market=" + marketType));
         return snapshot.getIndexValue().subtract(snapshot.getChangeValue());
     }
 
@@ -153,22 +157,25 @@ public class IndexContributionRankingCollector {
     }
 
     private enum MrktTp {
-        KOSPI("0"), KOSDAQ("1");
+        KOSPI("0"),
+        KOSDAQ("1");
         final String value;
-        MrktTp(String value) { this.value = value; }
+
+        MrktTp(String value) {
+            this.value = value;
+        }
     }
 
     private enum IndsCd {
-        KOSPI("001"), KOSDAQ("101");
+        KOSPI("001"),
+        KOSDAQ("101");
         final String value;
-        IndsCd(String value) { this.value = value; }
+
+        IndsCd(String value) {
+            this.value = value;
+        }
     }
 
     private record ScoredStock(
-        String stockCode,
-        String stockName,
-        String marketCode,
-        BigDecimal contribution,
-        BigDecimal changeRate
-    ) {}
+            String stockCode, String stockName, String marketCode, BigDecimal contribution, BigDecimal changeRate) {}
 }

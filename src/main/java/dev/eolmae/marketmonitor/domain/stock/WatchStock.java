@@ -20,38 +20,37 @@ import lombok.Getter;
 @Table(name = "watch_stock")
 public class WatchStock {
 
-	@Id
-	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-	@ManyToOne(fetch = FetchType.LAZY, optional = false)
-	@JoinColumn(name = "user_id", nullable = false)
-	private AppUser user;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    private AppUser user;
 
-	@ManyToOne(fetch = FetchType.LAZY, optional = false)
-	@JoinColumn(name = "stock_code", nullable = false)
-	private StockMaster stock;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "stock_code", nullable = false)
+    private StockMaster stock;
 
-	@Column(nullable = false)
-	private boolean isPrimary;
+    @Column(nullable = false)
+    private boolean isPrimary;
 
-	@Enumerated(EnumType.STRING)
-	@Column(nullable = false, length = 20)
-	private RegisterBy registerBy;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private RegisterBy registerBy;
 
-	@Column(nullable = false)
-	private LocalDateTime createdAt;
+    @Column(nullable = false)
+    private LocalDateTime createdAt;
 
-	protected WatchStock() {
-	}
+    protected WatchStock() {}
 
-	public static WatchStock create(AppUser user, StockMaster stock, RegisterBy registerBy) {
-		var entity = new WatchStock();
-		entity.user = user;
-		entity.stock = stock;
-		entity.isPrimary = false;
-		entity.registerBy = registerBy;
-		entity.createdAt = LocalDateTime.now();
-		return entity;
-	}
+    public static WatchStock create(AppUser user, StockMaster stock, RegisterBy registerBy) {
+        var entity = new WatchStock();
+        entity.user = user;
+        entity.stock = stock;
+        entity.isPrimary = false;
+        entity.registerBy = registerBy;
+        entity.createdAt = LocalDateTime.now();
+        return entity;
+    }
 }

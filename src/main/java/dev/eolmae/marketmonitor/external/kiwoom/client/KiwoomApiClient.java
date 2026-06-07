@@ -23,72 +23,77 @@ import org.springframework.web.client.RestClient;
 @RequiredArgsConstructor
 public class KiwoomApiClient {
 
-	private static final String BASE_URL = "https://api.kiwoom.com";
+    private static final String BASE_URL = "https://api.kiwoom.com";
 
-	private final KiwoomProperties properties;
-	private final KiwoomTokenManager tokenManager;
-	private final ObjectMapper objectMapper = new ObjectMapper();
-	private final RestClient restClient = RestClient.create();
-	private final RateLimiter rateLimiter = RateLimiter.create(5.0);
+    private final KiwoomProperties properties;
+    private final KiwoomTokenManager tokenManager;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final RestClient restClient = RestClient.create();
+    private final RateLimiter rateLimiter = RateLimiter.create(5.0);
 
-	/**
-	 * 타입 안전 API 호출. request DTO가 직렬화되어 요청 바디로 전송된다.
-	 * 응답 전체(rt_cd, msg1 포함 root object)를 dataClass 타입으로 역직렬화해 반환한다.
-	 * 호출마다 callIntervalMs 딜레이를 적용한다.
-	 *
-	 * 429 응답 시 최대 3회 재시도(2초 간격), 초과 시 해당 사이클 스킵.
-	 */
-	@Retryable(retryFor = KiwoomRateLimitException.class, maxAttempts = 2, backoff = @Backoff(delay = 1000))
-	public <T> T post(KiwoomRequest request, Class<T> dataClass) {
-		log.debug("Kiwoom API 호출: apiId={}, path={}", request.apiId(), request.path());
+    /**
+     * 타입 안전 API 호출. request DTO가 직렬화되어 요청 바디로 전송된다.
+     * 응답 전체(rt_cd, msg1 포함 root object)를 dataClass 타입으로 역직렬화해 반환한다.
+     * 호출마다 callIntervalMs 딜레이를 적용한다.
+     *
+     * 429 응답 시 최대 3회 재시도(2초 간격), 초과 시 해당 사이클 스킵.
+     */
+    @Retryable(retryFor = KiwoomRateLimitException.class, maxAttempts = 2, backoff = @Backoff(delay = 1000))
+    public <T> T post(KiwoomRequest request, Class<T> dataClass) {
+        log.debug("Kiwoom API 호출: apiId={}, path={}", request.apiId(), request.path());
 
-		rateLimiter.acquire();
+        rateLimiter.acquire();
 
-		JsonNode response = callApi(request.path(), request.apiId(), request);
-		return objectMapper.convertValue(response, dataClass);
-	}
+        JsonNode response = callApi(request.path(), request.apiId(), request);
+        return objectMapper.convertValue(response, dataClass);
+    }
 
-	@Recover
-	public <T> T recoverFromRateLimit(KiwoomRateLimitException e, KiwoomRequest request, Class<T> dataClass) {
-		log.warn("Kiwoom API rate limit 재시도 횟수 초과, 사이클 스킵: apiId={}", request.apiId());
-		throw new KiwoomApiException("Kiwoom API rate limit 초과로 사이클 스킵: " + request.apiId());
-	}
+    @Recover
+    public <T> T recoverFromRateLimit(KiwoomRateLimitException e, KiwoomRequest request, Class<T> dataClass) {
+        log.warn("Kiwoom API rate limit 재시도 횟수 초과, 사이클 스킵: apiId={}", request.apiId());
+        throw new KiwoomApiException("Kiwoom API rate limit 초과로 사이클 스킵: " + request.apiId());
+    }
 
-	private JsonNode callApi(String path, String apiId, Object requestBody) {
-		String raw;
-		try {
-			raw = restClient.post()
-				.uri(BASE_URL + path)
-				.contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-				.header("authorization", "Bearer " + tokenManager.getToken())
-				.header("appkey", properties.appKey())
-				.header("secretkey", properties.secret())
-				.header("api-id", apiId)
-				.body(requestBody)
-				.retrieve()
-				.body(String.class);
-		} catch (HttpClientErrorException e) {
-			if (e.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS) {
-				log.warn("Kiwoom API 429 rate limit: apiId={}", apiId);
-				throw new KiwoomRateLimitException("Kiwoom API 429: apiId=" + apiId);
-			}
-			throw new KiwoomApiException("Kiwoom API HTTP 오류: " + e.getMessage(), e);
-		}
+    private JsonNode callApi(String path, String apiId, Object requestBody) {
+        String raw;
+        try {
+            raw = restClient
+                    .post()
+                    .uri(BASE_URL + path)
+                    .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                    .header("authorization", "Bearer " + tokenManager.getToken())
+                    .header("appkey", properties.appKey())
+                    .header("secretkey", properties.secret())
+                    .header("api-id", apiId)
+                    .body(requestBody)
+                    .retrieve()
+                    .body(String.class);
+        } catch (HttpClientErrorException e) {
+            if (e.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS) {
+                log.warn("Kiwoom API 429 rate limit: apiId={}", apiId);
+                throw new KiwoomRateLimitException("Kiwoom API 429: apiId=" + apiId);
+            }
+            throw new KiwoomApiException("Kiwoom API HTTP 오류: " + e.getMessage(), e);
+        }
 
-		JsonNode response;
-		try {
-			response = objectMapper.readTree(raw);
-		} catch (Exception e) {
-			throw new KiwoomApiException("Kiwoom API 응답 파싱 실패: " + raw, e);
-		}
+        JsonNode response;
+        try {
+            response = objectMapper.readTree(raw);
+        } catch (Exception e) {
+            throw new KiwoomApiException("Kiwoom API 응답 파싱 실패: " + raw, e);
+        }
 
-		String returnCode = response.path("return_code").asText();
-		if (!KiwoomApiConstants.SUCCESS_CODE.equals(returnCode)) {
-			log.warn("Kiwoom API 오류 응답: apiId={}, return_code={}, msg={}", apiId, returnCode, response.path("return_msg").asText());
-			throw new KiwoomApiException("Kiwoom API 오류: " + response.path("return_msg").asText());
-		}
+        String returnCode = response.path("return_code").asText();
+        if (!KiwoomApiConstants.SUCCESS_CODE.equals(returnCode)) {
+            log.warn(
+                    "Kiwoom API 오류 응답: apiId={}, return_code={}, msg={}",
+                    apiId,
+                    returnCode,
+                    response.path("return_msg").asText());
+            throw new KiwoomApiException(
+                    "Kiwoom API 오류: " + response.path("return_msg").asText());
+        }
 
-		return response;
-	}
-
+        return response;
+    }
 }

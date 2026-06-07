@@ -16,22 +16,19 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class AlertService {
 
-	private final TelegramClient telegramClient;
-	private final TelegramProperties properties;
+    private final TelegramClient telegramClient;
+    private final TelegramProperties properties;
 
-	public void sendEscalation(EscalateException e) {
-		String chatId = properties.developerChatId();
-		if (chatId == null || chatId.isBlank()) {
-			log.warn("DEVELOPER_CHAT_ID 미설정 — 에스컬레이션 알림 스킵: {}", e.getMessage());
-			return;
-		}
+    public void sendEscalation(EscalateException e) {
+        String chatId = properties.developerChatId();
+        if (chatId == null || chatId.isBlank()) {
+            log.warn("DEVELOPER_CHAT_ID 미설정 — 에스컬레이션 알림 스킵: {}", e.getMessage());
+            return;
+        }
 
-		String message = String.format(
-			"⚠️ <b>에스컬레이션 오류 발생</b>\n\n<code>%s</code>\n\n%s",
-			e.getClass().getSimpleName(),
-			e.getMessage()
-		);
+        String message = String.format(
+                "⚠️ <b>에스컬레이션 오류 발생</b>\n\n<code>%s</code>\n\n%s", e.getClass().getSimpleName(), e.getMessage());
 
-		telegramClient.sendMessage(chatId, message);
-	}
+        telegramClient.sendMessage(chatId, message);
+    }
 }

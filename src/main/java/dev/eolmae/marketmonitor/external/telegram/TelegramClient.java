@@ -15,52 +15,55 @@ import org.springframework.web.client.RestClient;
 @RequiredArgsConstructor
 public class TelegramClient {
 
-	private static final String BASE_URL = "https://api.telegram.org";
+    private static final String BASE_URL = "https://api.telegram.org";
 
-	private final TelegramProperties properties;
-	private final RestClient restClient = RestClient.create();
+    private final TelegramProperties properties;
+    private final RestClient restClient = RestClient.create();
 
-	public void sendMessage(String chatId, String text) {
-		try {
-			restClient.post()
-				.uri(BASE_URL + "/bot" + properties.botToken() + "/sendMessage")
-				.contentType(MediaType.APPLICATION_JSON)
-				.body(Map.of(
-					"chat_id", chatId,
-					"text", text,
-					"parse_mode", "HTML"
-				))
-				.retrieve()
-				.toBodilessEntity();
+    public void sendMessage(String chatId, String text) {
+        try {
+            restClient
+                    .post()
+                    .uri(BASE_URL + "/bot" + properties.botToken() + "/sendMessage")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of(
+                            "chat_id", chatId,
+                            "text", text,
+                            "parse_mode", "HTML"))
+                    .retrieve()
+                    .toBodilessEntity();
 
-			log.debug("텔레그램 메시지 발송 완료: chatId={}", chatId);
-		} catch (Exception e) {
-			log.error("텔레그램 메시지 발송 실패: chatId={}", chatId, e);
-		}
-	}
+            log.debug("텔레그램 메시지 발송 완료: chatId={}", chatId);
+        } catch (Exception e) {
+            log.error("텔레그램 메시지 발송 실패: chatId={}", chatId, e);
+        }
+    }
 
-	public void sendPhoto(String chatId, byte[] imageData, String caption) {
-		try {
-			MultiValueMap<String, Object> form = new LinkedMultiValueMap<>();
-			form.add("chat_id", chatId);
-			form.add("photo", new ByteArrayResource(imageData) {
-				@Override
-				public String getFilename() { return "dashboard.png"; }
-			});
-			if (caption != null && !caption.isBlank()) {
-				form.add("caption", caption);
-			}
+    public void sendPhoto(String chatId, byte[] imageData, String caption) {
+        try {
+            MultiValueMap<String, Object> form = new LinkedMultiValueMap<>();
+            form.add("chat_id", chatId);
+            form.add("photo", new ByteArrayResource(imageData) {
+                @Override
+                public String getFilename() {
+                    return "dashboard.png";
+                }
+            });
+            if (caption != null && !caption.isBlank()) {
+                form.add("caption", caption);
+            }
 
-			restClient.post()
-				.uri(BASE_URL + "/bot" + properties.botToken() + "/sendPhoto")
-				.contentType(MediaType.MULTIPART_FORM_DATA)
-				.body(form)
-				.retrieve()
-				.toBodilessEntity();
+            restClient
+                    .post()
+                    .uri(BASE_URL + "/bot" + properties.botToken() + "/sendPhoto")
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .body(form)
+                    .retrieve()
+                    .toBodilessEntity();
 
-			log.debug("텔레그램 사진 발송 완료: chatId={}", chatId);
-		} catch (Exception e) {
-			log.error("텔레그램 사진 발송 실패: chatId={}", chatId, e);
-		}
-	}
+            log.debug("텔레그램 사진 발송 완료: chatId={}", chatId);
+        } catch (Exception e) {
+            log.error("텔레그램 사진 발송 실패: chatId={}", chatId, e);
+        }
+    }
 }

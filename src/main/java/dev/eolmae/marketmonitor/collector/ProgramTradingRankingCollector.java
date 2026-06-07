@@ -25,76 +25,99 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ProgramTradingRankingCollector {
 
-	private final KiwoomApiClient kiwoomApiClient;
-	private final ProgramTradingRankingSnapshotRepository rankingRepository;
+    private final KiwoomApiClient kiwoomApiClient;
+    private final ProgramTradingRankingSnapshotRepository rankingRepository;
 
-	@Transactional
-	public void collect(LocalDateTime snapshotTime) {
-		for (Board board : Board.values()) {
-			for (ProgramRankingType rankingType : ProgramRankingType.values()) {
-				try {
-					collectForCombination(board, rankingType, AmtQtyType.AMOUNT, snapshotTime);
-				} catch (Exception e) {
-					log.error("프로그램매매 랭킹 수집 실패: board={}, ranking={}", board, rankingType, e);
-				}
-			}
-		}
-	}
+    @Transactional
+    public void collect(LocalDateTime snapshotTime) {
+        for (Board board : Board.values()) {
+            for (ProgramRankingType rankingType : ProgramRankingType.values()) {
+                try {
+                    collectForCombination(board, rankingType, AmtQtyType.AMOUNT, snapshotTime);
+                } catch (Exception e) {
+                    log.error("프로그램매매 랭킹 수집 실패: board={}, ranking={}", board, rankingType, e);
+                }
+            }
+        }
+    }
 
-	private void collectForCombination(Board board, ProgramRankingType rankingType,
-		AmtQtyType amtQtyType, LocalDateTime snapshotTime) {
+    private void collectForCombination(
+            Board board, ProgramRankingType rankingType, AmtQtyType amtQtyType, LocalDateTime snapshotTime) {
 
-		Exchange marketType = Exchange.valueOf(board.name());
-		String mrktTp = switch (board) {
-			case KOSPI -> MrktTp.KOSPI.value;
-			case KOSDAQ -> MrktTp.KOSDAQ.value;
-		};
+        Exchange marketType = Exchange.valueOf(board.name());
+        String mrktTp =
+                switch (board) {
+                    case KOSPI -> MrktTp.KOSPI.value;
+                    case KOSDAQ -> MrktTp.KOSDAQ.value;
+                };
 
-		boolean alreadyExists = rankingRepository.existsBySnapshotTimeAndMarketTypeAndRankingTypeAndAmtQtyType(
-			snapshotTime, marketType, rankingType, amtQtyType); // TODO 매 스케줄에서 한번만 수행해서 데이터 적재하는 구조 아닌가? 이 조회로 유효성 검증하는 것처럼 보이는 행위를 하는 이유는?
-		if (alreadyExists) {
-			log.debug("프로그램매매 랭킹 이미 존재, 스킵: board={}, ranking={}, amtQty={}, snapshotTime={}",
-				board, rankingType, amtQtyType, snapshotTime);
-			return;
-		}
+        boolean alreadyExists = rankingRepository.existsBySnapshotTimeAndMarketTypeAndRankingTypeAndAmtQtyType(
+                snapshotTime,
+                marketType,
+                rankingType,
+                amtQtyType); // TODO 매 스케줄에서 한번만 수행해서 데이터 적재하는 구조 아닌가? 이 조회로 유효성 검증하는 것처럼 보이는 행위를 하는 이유는?
+        if (alreadyExists) {
+            log.debug(
+                    "프로그램매매 랭킹 이미 존재, 스킵: board={}, ranking={}, amtQty={}, snapshotTime={}",
+                    board,
+                    rankingType,
+                    amtQtyType,
+                    snapshotTime);
+            return;
+        }
 
-		var request = new Ka90003Request(rankingType.code(), amtQtyType.code(), mrktTp, StexType.KRX_NXT.code());
-		Ka90003Response response = kiwoomApiClient.post(request, Ka90003Response.class);
+        var request = new Ka90003Request(rankingType.code(), amtQtyType.code(), mrktTp, StexType.KRX_NXT.code());
+        Ka90003Response response = kiwoomApiClient.post(request, Ka90003Response.class);
 
-		List<Ka90003Response.RankingItem> items = response.items() != null ? response.items() : List.of();
+        List<Ka90003Response.RankingItem> items = response.items() != null ? response.items() : List.of();
 
-		int rank = 1; // TODO 왜 있어야됨?
-		for (Ka90003Response.RankingItem item : items) {
-			// stk_cd에 "_AL" 또는 "_NX" suffix가 있으면 제거 (예: 000660_AL → 000660)
-			String stockCode = stripAlSuffix(item.stkCd());
-			if (stockCode.isBlank()) continue;
+        int rank = 1; // TODO 왜 있어야됨?
+        for (Ka90003Response.RankingItem item : items) {
+            // stk_cd에 "_AL" 또는 "_NX" suffix가 있으면 제거 (예: 000660_AL → 000660)
+            String stockCode = stripAlSuffix(item.stkCd());
+            if (stockCode.isBlank()) continue;
 
-			String stockName = item.stkNm() != null ? item.stkNm().trim() : "";
-			BigDecimal buyAmount = NumberParser.parseBigDecimal(item.prmBuyAmt());
-			BigDecimal sellAmount = NumberParser.parseBigDecimal(item.prmSellAmt());
-			BigDecimal netBuyAmount = NumberParser.parseBigDecimal(item.prmNetprpsAmt());
+            String stockName = item.stkNm() != null ? item.stkNm().trim() : "";
+            BigDecimal buyAmount = NumberParser.parseBigDecimal(item.prmBuyAmt());
+            BigDecimal sellAmount = NumberParser.parseBigDecimal(item.prmSellAmt());
+            BigDecimal netBuyAmount = NumberParser.parseBigDecimal(item.prmNetprpsAmt());
 
-			rankingRepository.save(ProgramTradingRankingSnapshot.create(
-				marketType, amtQtyType, rankingType, rank++,
-				stockCode, stockName, buyAmount, sellAmount, netBuyAmount, snapshotTime
-			));
-		}
+            rankingRepository.save(ProgramTradingRankingSnapshot.create(
+                    marketType,
+                    amtQtyType,
+                    rankingType,
+                    rank++,
+                    stockCode,
+                    stockName,
+                    buyAmount,
+                    sellAmount,
+                    netBuyAmount,
+                    snapshotTime));
+        }
 
-		log.debug("프로그램매매 랭킹 수집 완료: market={}, ranking={}, amtQty={}, count={}",
-			marketType, rankingType, amtQtyType, rank - 1);
-	}
+        log.debug(
+                "프로그램매매 랭킹 수집 완료: market={}, ranking={}, amtQty={}, count={}",
+                marketType,
+                rankingType,
+                amtQtyType,
+                rank - 1);
+    }
 
-	private enum MrktTp {
-		KOSPI("P00101"), KOSDAQ("P10102");  // ka90003 mrkt_tp
-		final String value;
-		MrktTp(String value) { this.value = value; }
-	}
+    private enum MrktTp {
+        KOSPI("P00101"),
+        KOSDAQ("P10102"); // ka90003 mrkt_tp
+        final String value;
 
-	private static String stripAlSuffix(String stkCd) {
-		if (stkCd == null) return "";
-		String trimmed = stkCd.trim();
-		// "_AL" 또는 "_NX" suffix 제거
-		int underscoreIdx = trimmed.indexOf('_');
-		return underscoreIdx >= 0 ? trimmed.substring(0, underscoreIdx) : trimmed;
-	}
+        MrktTp(String value) {
+            this.value = value;
+        }
+    }
+
+    private static String stripAlSuffix(String stkCd) {
+        if (stkCd == null) return "";
+        String trimmed = stkCd.trim();
+        // "_AL" 또는 "_NX" suffix 제거
+        int underscoreIdx = trimmed.indexOf('_');
+        return underscoreIdx >= 0 ? trimmed.substring(0, underscoreIdx) : trimmed;
+    }
 }

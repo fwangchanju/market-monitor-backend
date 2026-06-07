@@ -1,30 +1,31 @@
 package dev.eolmae.marketmonitor.collector;
 
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
+
 import dev.eolmae.marketmonitor.common.enums.Exchange;
 import dev.eolmae.marketmonitor.common.util.NumberParser;
 import dev.eolmae.marketmonitor.domain.dashboard.IndexContributionRankingSnapshot;
 import dev.eolmae.marketmonitor.domain.dashboard.repository.IndexContributionRankingSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.dashboard.repository.MarketOverviewSnapshotRepository;
-import com.fasterxml.jackson.databind.JsonNode;
 import dev.eolmae.marketmonitor.external.kiwoom.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10051Request;
 import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10051Response;
 import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10065Request;
 import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10065Response;
+import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10099Request;
+import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10099Response;
 import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka20001Request;
 import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka20001Response;
+import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka20002Request;
+import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka20002Response;
 import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka90003Request;
 import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka90003Response;
 import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka90008Request;
 import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka90008Response;
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10099Request;
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10099Response;
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka20002Request;
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka20002Response;
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Kt00018Request;
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Kt00018Response;
 import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka90013Request;
 import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka90013Response;
+import dev.eolmae.marketmonitor.external.kiwoom.dto.Kt00018Request;
+import dev.eolmae.marketmonitor.external.kiwoom.dto.Kt00018Response;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -42,8 +43,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
-
 /**
  * Kiwoom API 응답 내용 확인용 테스트 — KRX 데이터마켓 대체 가능 여부 검토
  *
@@ -60,10 +59,11 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 @Slf4j
 @SpringBootTest
 @ActiveProfiles("prod")
-@TestPropertySource(properties = {
-    "spring.test.database.replace=none",
-    "spring.datasource.url=jdbc:postgresql://localhost:5433/market_monitor_db"
-})
+@TestPropertySource(
+        properties = {
+            "spring.test.database.replace=none",
+            "spring.datasource.url=jdbc:postgresql://localhost:5433/market_monitor_db"
+        })
 class KiwoomApiVerificationTest {
 
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
@@ -97,28 +97,39 @@ class KiwoomApiVerificationTest {
      *   - 상승/하락/보합/상한/하한 종목수 (API가 직접 집계해서 반환)
      *   - 시간대별 지수 틱(priceTicks) 포함 여부
      */
-//    @Test
+    //    @Test
     void ka20001_시장종합() {
         log.info("=== ka20001 업종현재가 | 현재시각={} ===", LocalDateTime.now(KST));
 
-        for (var market : List.of(new String[]{"KOSPI", "0", "001"}, new String[]{"KOSDAQ", "1", "101"})) {
+        for (var market : List.of(new String[] {"KOSPI", "0", "001"}, new String[] {"KOSDAQ", "1", "101"})) {
             String label = market[0];
             try {
                 var response = kiwoomApiClient.post(new Ka20001Request(market[1], market[2]), Ka20001Response.class);
 
                 log.info("[ka20001][{}] raw: {}", label, response);
-                log.info("[ka20001][{}] 지수={} | 전일대비={} | 등락률={}% | 거래대금={}",
-                    label, response.curPrc(), response.predPre(), response.fluRt(), response.trdePrica());
-                log.info("[ka20001][{}] 시장상태={} | 상승={} 하락={} 보합={} | 상한={} 하한={}",
-                    label, response.mrktStatClsCode(),
-                    response.rising(), response.fall(), response.stdns(),
-                    response.upl(), response.lst());
+                log.info(
+                        "[ka20001][{}] 지수={} | 전일대비={} | 등락률={}% | 거래대금={}",
+                        label, response.curPrc(), response.predPre(), response.fluRt(), response.trdePrica());
+                log.info(
+                        "[ka20001][{}] 시장상태={} | 상승={} 하락={} 보합={} | 상한={} 하한={}",
+                        label,
+                        response.mrktStatClsCode(),
+                        response.rising(),
+                        response.fall(),
+                        response.stdns(),
+                        response.upl(),
+                        response.lst());
 
-                int tickCount = response.priceTicks() != null ? response.priceTicks().size() : 0;
+                int tickCount =
+                        response.priceTicks() != null ? response.priceTicks().size() : 0;
                 if (tickCount > 0) {
                     var latest = response.priceTicks().get(0);
-                    log.info("[ka20001][{}] 시간대별 틱: {}건 | 최근={} 지수={}",
-                        label, tickCount, latest.tmN(), latest.curPrcN());
+                    log.info(
+                            "[ka20001][{}] 시간대별 틱: {}건 | 최근={} 지수={}",
+                            label,
+                            tickCount,
+                            latest.tmN(),
+                            latest.curPrcN());
                 } else {
                     log.info("[ka20001][{}] 시간대별 틱: 없음", label);
                 }
@@ -138,17 +149,17 @@ class KiwoomApiVerificationTest {
      *   - 매수/매도 금액 제공 여부 (현재 미제공으로 알려짐)
      *   - 응답 내 inds_cd 필터링 필요 여부
      */
-//    @Test
+    //    @Test
     void ka10051_투자자별매매종합() {
         String today = LocalDate.now(KST).format(DATE_FMT);
         log.info("=== ka10051 업종별투자자순매수 | 현재시각={} ===", LocalDateTime.now(KST));
 
-        for (var market : List.of(new String[]{"KOSPI", "0", "001"}, new String[]{"KOSDAQ", "1", "101"})) {
+        for (var market : List.of(new String[] {"KOSPI", "0", "001"}, new String[] {"KOSDAQ", "1", "101"})) {
             String label = market[0];
             String indsCd = market[2];
             try {
-                var response = kiwoomApiClient.post(
-                    new Ka10051Request(market[1], "0", today, "1"), Ka10051Response.class);
+                var response =
+                        kiwoomApiClient.post(new Ka10051Request(market[1], "0", today, "1"), Ka10051Response.class);
 
                 log.info("[ka10051][{}] raw: {}", label, response);
 
@@ -157,24 +168,45 @@ class KiwoomApiVerificationTest {
                     continue;
                 }
 
-                log.info("[ka10051][{}] 응답 전체 행 수: {}", label, response.indsNetprps().size());
+                log.info(
+                        "[ka10051][{}] 응답 전체 행 수: {}",
+                        label,
+                        response.indsNetprps().size());
 
                 // 종합지수 행 필터링 후 13개 투자자 유형 전체 출력
                 response.indsNetprps().stream()
-                    .filter(item -> item.indsCd() != null && item.indsCd().startsWith(indsCd))
-                    .findFirst()
-                    .ifPresentOrElse(item -> {
-                        log.info("[ka10051][{}] inds_cd={}", label, item.indsCd());
-                        log.info("[ka10051][{}]   개인={} | 외국인={} | 기관계={}",
-                            label, item.indNetprps(), item.frgnrNetprps(), item.orgnNetprps());
-                        log.info("[ka10051][{}]   금융투자={} | 투신={} | 연기금={}",
-                            label, item.scNetprps(), item.invtrtNetprps(), item.endwNetprps());
-                        log.info("[ka10051][{}]   사모펀드={} | 보험={} | 은행={}",
-                            label, item.samoFundNetprps(), item.insrncNetprps(), item.bankNetprps());
-                        log.info("[ka10051][{}]   기타법인={} | 국가지자체={} | 기타금융={} | 외국계={}",
-                            label, item.etcCorpNetprps(), item.natnNetprps(),
-                            item.jnsinkmNetprps(), item.nativeTrmtFrgnrNetprps());
-                    }, () -> log.warn("[ka10051][{}] inds_cd={} 행 없음", label, indsCd));
+                        .filter(item -> item.indsCd() != null && item.indsCd().startsWith(indsCd))
+                        .findFirst()
+                        .ifPresentOrElse(
+                                item -> {
+                                    log.info("[ka10051][{}] inds_cd={}", label, item.indsCd());
+                                    log.info(
+                                            "[ka10051][{}]   개인={} | 외국인={} | 기관계={}",
+                                            label,
+                                            item.indNetprps(),
+                                            item.frgnrNetprps(),
+                                            item.orgnNetprps());
+                                    log.info(
+                                            "[ka10051][{}]   금융투자={} | 투신={} | 연기금={}",
+                                            label,
+                                            item.scNetprps(),
+                                            item.invtrtNetprps(),
+                                            item.endwNetprps());
+                                    log.info(
+                                            "[ka10051][{}]   사모펀드={} | 보험={} | 은행={}",
+                                            label,
+                                            item.samoFundNetprps(),
+                                            item.insrncNetprps(),
+                                            item.bankNetprps());
+                                    log.info(
+                                            "[ka10051][{}]   기타법인={} | 국가지자체={} | 기타금융={} | 외국계={}",
+                                            label,
+                                            item.etcCorpNetprps(),
+                                            item.natnNetprps(),
+                                            item.jnsinkmNetprps(),
+                                            item.nativeTrmtFrgnrNetprps());
+                                },
+                                () -> log.warn("[ka10051][{}] inds_cd={} 행 없음", label, indsCd));
             } catch (Exception e) {
                 log.warn("[ka10051][{}] 예외 발생: {}", label, e.getMessage());
             }
@@ -190,7 +222,7 @@ class KiwoomApiVerificationTest {
      *   - 외국인 + 외국계 합산 후 순위가 실제 화면 수치와 일치하는지
      *   - mrkt_tp: 001=KOSPI, 101=KOSDAQ (ka10065는 stex_tp 없음, 통합값만 제공)
      */
-//    @Test
+    //    @Test
     void ka10065_장중투자자별매매상위() {
         log.info("=== ka10065 장중투자자별매매상위 (외국합) | 현재시각={} ===", LocalDateTime.now(KST));
 
@@ -214,32 +246,49 @@ class KiwoomApiVerificationTest {
                     try {
                         var request = new Ka10065Request("1", market.mrktTp(), investor.orgnTp(), amtQty.amtQtyTp());
                         var response = kiwoomApiClient.post(request, Ka10065Response.class);
-                        log.info("[ka10065][{}][{}][{}] raw: {}", market.label(), investor.label(), amtQty.label(), response);
+                        log.info(
+                                "[ka10065][{}][{}][{}] raw: {}",
+                                market.label(),
+                                investor.label(),
+                                amtQty.label(),
+                                response);
                         if (response.items() == null) continue;
                         for (var item : response.items()) {
                             long buy = NumberParser.parseLong(item.buyQty());
                             long sel = NumberParser.parseLong(item.selQty());
                             long net = NumberParser.parseLong(item.netslmt());
-                            aggMap.merge(item.stkCd(), new long[]{buy, sel, net},
-                                (a, b) -> new long[]{a[0] + b[0], a[1] + b[1], a[2] + b[2]});
+                            aggMap.merge(item.stkCd(), new long[] {buy, sel, net}, (a, b) ->
+                                    new long[] {a[0] + b[0], a[1] + b[1], a[2] + b[2]});
                             stockNameMap.putIfAbsent(item.stkCd(), item.stkNm());
                         }
                     } catch (Exception e) {
-                        log.warn("[ka10065][{}][외국합][{}] 예외({}): {}", market.label(), amtQty.label(), investor.label(), e.getMessage());
+                        log.warn(
+                                "[ka10065][{}][외국합][{}] 예외({}): {}",
+                                market.label(),
+                                amtQty.label(),
+                                investor.label(),
+                                e.getMessage());
                     }
                 }
 
                 log.info("[ka10065][{}][외국합][{}] ===== 상위 10건 =====", market.label(), amtQty.label());
                 int[] rank = {1};
                 aggMap.entrySet().stream()
-                    .sorted(Map.Entry.<String, long[]>comparingByValue((a, b) -> Long.compare(b[2], a[2])))
-                    .limit(10)
-                    .forEach(e -> {
-                        long[] v = e.getValue();
-                        log.info("[ka10065][{}][외국합][{}] {}위 종목코드={} 종목명={} 매수={} 매도={} 순매수={}",
-                            market.label(), amtQty.label(), rank[0]++,
-                            e.getKey(), stockNameMap.get(e.getKey()), v[0], v[1], v[2]);
-                    });
+                        .sorted(Map.Entry.<String, long[]>comparingByValue((a, b) -> Long.compare(b[2], a[2])))
+                        .limit(10)
+                        .forEach(e -> {
+                            long[] v = e.getValue();
+                            log.info(
+                                    "[ka10065][{}][외국합][{}] {}위 종목코드={} 종목명={} 매수={} 매도={} 순매수={}",
+                                    market.label(),
+                                    amtQty.label(),
+                                    rank[0]++,
+                                    e.getKey(),
+                                    stockNameMap.get(e.getKey()),
+                                    v[0],
+                                    v[1],
+                                    v[2]);
+                        });
             }
         }
     }
@@ -254,7 +303,7 @@ class KiwoomApiVerificationTest {
      *   - 장외 시간대 응답 (null / 빈 배열 / 스탈 데이터)
      *   - stex_tp=3(통합) 응답이 실제 화면 수치와 일치하는지
      */
-//    @Test
+    //    @Test
     void ka90003_프로그램매매순매수상위() {
         log.info("=== ka90003 프로그램매매순매수상위 | 현재시각={} ===", LocalDateTime.now(KST));
 
@@ -279,12 +328,20 @@ class KiwoomApiVerificationTest {
                         continue;
                     }
 
-                    log.info("[ka90003]{} 응답 {}건 | 상위 5건:", label, response.items().size());
-                    response.items().stream().limit(10).forEach(item ->
-                        log.info("[ka90003]{}   종목코드={} 종목명={} 프로그램매수={} 프로그램매도={} 프로그램순매수={}",
-                            label, item.stkCd(), item.stkNm(),
-                            item.prmBuyAmt(), item.prmSellAmt(), item.prmNetprpsAmt())
-                    );
+                    log.info(
+                            "[ka90003]{} 응답 {}건 | 상위 5건:",
+                            label,
+                            response.items().size());
+                    response.items().stream()
+                            .limit(10)
+                            .forEach(item -> log.info(
+                                    "[ka90003]{}   종목코드={} 종목명={} 프로그램매수={} 프로그램매도={} 프로그램순매수={}",
+                                    label,
+                                    item.stkCd(),
+                                    item.stkNm(),
+                                    item.prmBuyAmt(),
+                                    item.prmSellAmt(),
+                                    item.prmNetprpsAmt()));
                 } catch (Exception e) {
                     log.warn("[ka90003]{} 예외 발생: {}", label, e.getMessage());
                 }
@@ -314,7 +371,7 @@ class KiwoomApiVerificationTest {
      *     → 안 달라지면: 다른 실시간 데이터소스 탐색 필요
      */
 
-//    @Test
+    //    @Test
     void ka10014_공매도추이() {
         String today = LocalDate.now(KST).format(DATE_FMT);
         String startDt = LocalDate.now(KST).minusDays(30).format(DATE_FMT);
@@ -324,8 +381,8 @@ class KiwoomApiVerificationTest {
 
         try {
             var response = kiwoomApiClient.post(
-                new dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10014Request(stockCode, "2", startDt, today),
-                dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10014Response.class);
+                    new dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10014Request(stockCode, "2", startDt, today),
+                    dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10014Response.class);
 
             log.info("[ka10014] raw: {}", response);
 
@@ -335,21 +392,27 @@ class KiwoomApiVerificationTest {
             }
 
             log.info("[ka10014] 응답 {}건", response.ticks().size());
-            response.ticks().forEach(tick ->
-                log.info("[ka10014] 일자={} 종가={} 대비={} 등락률={}% 거래량={} | 공매도수량={} 누적공매도량={} 매매비중={}% 거래대금={} 평균가={}",
-                    tick.dt(), tick.closePric(), tick.predPre(), tick.fluRt(), tick.trdeQty(),
-                    tick.shrtsQty(), tick.ovrShrtsQty(), tick.trdeWght(),
-                    tick.shrtsTrdePrica(), tick.shrtsAvgPric())
-            );
+            response.ticks()
+                    .forEach(tick -> log.info(
+                            "[ka10014] 일자={} 종가={} 대비={} 등락률={}% 거래량={} | 공매도수량={} 누적공매도량={} 매매비중={}% 거래대금={} 평균가={}",
+                            tick.dt(),
+                            tick.closePric(),
+                            tick.predPre(),
+                            tick.fluRt(),
+                            tick.trdeQty(),
+                            tick.shrtsQty(),
+                            tick.ovrShrtsQty(),
+                            tick.trdeWght(),
+                            tick.shrtsTrdePrica(),
+                            tick.shrtsAvgPric()));
 
             // 오늘 날짜 데이터 존재 여부 확인
             response.ticks().stream()
-                .filter(t -> today.equals(t.dt() != null ? t.dt().trim() : ""))
-                .findFirst()
-                .ifPresentOrElse(
-                    t -> log.info("[ka10014] 오늘({}) 데이터 존재 → 장중 실시간 갱신 가능성 있음. 다른 시간대 재실행 후 수치 비교 필요", today),
-                    () -> log.info("[ka10014] 오늘({}) 데이터 없음 → 장 종료 후에만 당일 데이터 제공될 수 있음", today)
-                );
+                    .filter(t -> today.equals(t.dt() != null ? t.dt().trim() : ""))
+                    .findFirst()
+                    .ifPresentOrElse(
+                            t -> log.info("[ka10014] 오늘({}) 데이터 존재 → 장중 실시간 갱신 가능성 있음. 다른 시간대 재실행 후 수치 비교 필요", today),
+                            () -> log.info("[ka10014] 오늘({}) 데이터 없음 → 장 종료 후에만 당일 데이터 제공될 수 있음", today));
 
         } catch (Exception e) {
             log.warn("[ka10014] 예외 발생: {}", e.getMessage());
@@ -365,11 +428,12 @@ class KiwoomApiVerificationTest {
      *     → 일치하면 연산 공식 정합성 OK
      *     → 편차 크면 유동시총 vs 전체시총 혼용 등 점검 필요
      */
-//    @Test
+    //    @Test
     void indexContributionRanking_수집_및_공식검증() {
         assumeTrue(!krxLoginId.isBlank(), "KRX 로그인 정보 미설정 — KRX_ID/KRX_PW 환경변수 확인 후 재실행");
 
-        LocalDateTime snapshotTime = LocalDateTime.now(KST).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime snapshotTime =
+                LocalDateTime.now(KST).withMinute(0).withSecond(0).withNano(0);
         log.info("=== 지수기여도 수집 시작 | snapshotTime={} ===", snapshotTime);
 
         // IndexContributionRankingCollector가 전일 지수값 역산에 MarketOverviewSnapshot을 사용하므로 선행 수집 필요
@@ -382,46 +446,56 @@ class KiwoomApiVerificationTest {
 
         for (Exchange market : List.of(Exchange.KOSPI, Exchange.KOSDAQ)) {
             List<IndexContributionRankingSnapshot> snapshots =
-                indexContributionRankingSnapshotRepository
-                    .findBySnapshotTimeAndMarketTypeOrderByRankAsc(snapshotTime, market);
+                    indexContributionRankingSnapshotRepository.findBySnapshotTimeAndMarketTypeOrderByRankAsc(
+                            snapshotTime, market);
 
             log.info("[{}] 저장 건수={}", market, snapshots.size());
 
             BigDecimal sumContribution = snapshots.stream()
-                .map(IndexContributionRankingSnapshot::getContributionScore)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+                    .map(IndexContributionRankingSnapshot::getContributionScore)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
 
             log.info("[{}] 상위 {}종목 기여도 합산={}", market, snapshots.size(), sumContribution);
 
             // 실제 지수 등락폭과 비교 (MarketOverviewSnapshot의 changeValue)
-            marketOverviewSnapshotRepository.findTopByMarketTypeOrderBySnapshotTimeDesc(market)
-                .ifPresent(overview -> log.info(
-                    "[{}] 실제 지수등락={} | 기여도합산={} | 편차={}",
-                    market,
-                    overview.getChangeValue(),
-                    sumContribution,
-                    sumContribution.subtract(overview.getChangeValue()).abs()
-                ));
+            marketOverviewSnapshotRepository
+                    .findTopByMarketTypeOrderBySnapshotTimeDesc(market)
+                    .ifPresent(overview -> log.info(
+                            "[{}] 실제 지수등락={} | 기여도합산={} | 편차={}",
+                            market,
+                            overview.getChangeValue(),
+                            sumContribution,
+                            sumContribution.subtract(overview.getChangeValue()).abs()));
 
             if (!snapshots.isEmpty()) {
                 log.info("[{}] 상위 5종목:", market);
-                snapshots.stream().limit(5).forEach(s ->
-                    log.info("  {}위 {} {} 기여도={} 등락률={}%",
-                        s.getRank(), s.getStockCode(), s.getStockName(),
-                        s.getContributionScore(), s.getPriceChangeRate()));
+                snapshots.stream()
+                        .limit(5)
+                        .forEach(s -> log.info(
+                                "  {}위 {} {} 기여도={} 등락률={}%",
+                                s.getRank(),
+                                s.getStockCode(),
+                                s.getStockName(),
+                                s.getContributionScore(),
+                                s.getPriceChangeRate()));
             }
         }
     }
 
-//    @Test
+    //    @Test
     void ka90008_ka90013_종목별프로그램매매추이() {
         String today = LocalDate.now(KST).format(DATE_FMT);
         log.info("=== ka90008/ka90013 종목별프로그램매매추이 | 현재시각={} ===", LocalDateTime.now(KST));
 
         record Agg(long buyAmt, long sellAmt, long apiNetAmt, long buyQty, long sellQty, long apiNetQty) {
             Agg merge(Agg o) {
-                return new Agg(buyAmt + o.buyAmt, sellAmt + o.sellAmt, apiNetAmt + o.apiNetAmt,
-                    buyQty + o.buyQty, sellQty + o.sellQty, apiNetQty + o.apiNetQty);
+                return new Agg(
+                        buyAmt + o.buyAmt,
+                        sellAmt + o.sellAmt,
+                        apiNetAmt + o.apiNetAmt,
+                        buyQty + o.buyQty,
+                        sellQty + o.sellQty,
+                        apiNetQty + o.apiNetQty);
             }
         }
 
@@ -434,69 +508,131 @@ class KiwoomApiVerificationTest {
             nxt90008 = kiwoomApiClient.post(new Ka90008Request("039490_NX", "1", today), Ka90008Response.class);
 
             // KRX raw 틱 (시간 오름차순)
-            log.info("[ka90008][KRX] 틱 수={}", krx90008.ticks() == null ? 0 : krx90008.ticks().size());
+            log.info(
+                    "[ka90008][KRX] 틱 수={}",
+                    krx90008.ticks() == null ? 0 : krx90008.ticks().size());
             if (krx90008.ticks() != null) {
-                krx90008.ticks().stream().sorted((a, b) -> a.tm().compareTo(b.tm())).forEach(t ->
-                    log.info("[ka90008][KRX][raw] 시간={} 매수금액={} 매도금액={} API순매수={} 계산순매수={} | 매수수량={} 매도수량={} API순매수수량={} 계산순매수수량={}",
-                        t.tm(), t.prmBuyAmt(), t.prmSellAmt(), t.prmNetprpsAmt(),
-                        NumberParser.parseLong(t.prmBuyAmt()) - NumberParser.parseLong(t.prmSellAmt()),
-                        t.prmBuyQty(), t.prmSellQty(), t.prmNetprpsQty(),
-                        NumberParser.parseLong(t.prmBuyQty()) - NumberParser.parseLong(t.prmSellQty()))
-                );
+                krx90008.ticks().stream()
+                        .sorted((a, b) -> a.tm().compareTo(b.tm()))
+                        .forEach(t -> log.info(
+                                "[ka90008][KRX][raw] 시간={} 매수금액={} 매도금액={} API순매수={} 계산순매수={} | 매수수량={} 매도수량={} API순매수수량={} 계산순매수수량={}",
+                                t.tm(),
+                                t.prmBuyAmt(),
+                                t.prmSellAmt(),
+                                t.prmNetprpsAmt(),
+                                NumberParser.parseLong(t.prmBuyAmt()) - NumberParser.parseLong(t.prmSellAmt()),
+                                t.prmBuyQty(),
+                                t.prmSellQty(),
+                                t.prmNetprpsQty(),
+                                NumberParser.parseLong(t.prmBuyQty()) - NumberParser.parseLong(t.prmSellQty())));
             }
 
             // NXT raw 틱 (시간 오름차순)
-            log.info("[ka90008][NXT] 틱 수={}", nxt90008.ticks() == null ? 0 : nxt90008.ticks().size());
+            log.info(
+                    "[ka90008][NXT] 틱 수={}",
+                    nxt90008.ticks() == null ? 0 : nxt90008.ticks().size());
             if (nxt90008.ticks() != null) {
-                nxt90008.ticks().stream().sorted((a, b) -> a.tm().compareTo(b.tm())).forEach(t ->
-                    log.info("[ka90008][NXT][raw] 시간={} 매수금액={} 매도금액={} API순매수={} 계산순매수={} | 매수수량={} 매도수량={} API순매수수량={} 계산순매수수량={}",
-                        t.tm(), t.prmBuyAmt(), t.prmSellAmt(), t.prmNetprpsAmt(),
-                        NumberParser.parseLong(t.prmBuyAmt()) - NumberParser.parseLong(t.prmSellAmt()),
-                        t.prmBuyQty(), t.prmSellQty(), t.prmNetprpsQty(),
-                        NumberParser.parseLong(t.prmBuyQty()) - NumberParser.parseLong(t.prmSellQty()))
-                );
+                nxt90008.ticks().stream()
+                        .sorted((a, b) -> a.tm().compareTo(b.tm()))
+                        .forEach(t -> log.info(
+                                "[ka90008][NXT][raw] 시간={} 매수금액={} 매도금액={} API순매수={} 계산순매수={} | 매수수량={} 매도수량={} API순매수수량={} 계산순매수수량={}",
+                                t.tm(),
+                                t.prmBuyAmt(),
+                                t.prmSellAmt(),
+                                t.prmNetprpsAmt(),
+                                NumberParser.parseLong(t.prmBuyAmt()) - NumberParser.parseLong(t.prmSellAmt()),
+                                t.prmBuyQty(),
+                                t.prmSellQty(),
+                                t.prmNetprpsQty(),
+                                NumberParser.parseLong(t.prmBuyQty()) - NumberParser.parseLong(t.prmSellQty())));
             }
 
             // [가설: 틱이 누적값] KRX 최신 틱 + NXT 최신 틱 합산
             log.info("[ka90008][가설-누적] KRX 최신 틱 + NXT 최신 틱 합산 (누적값 가설 검증)");
-            Ka90008Response.TradeTick krxLatest = (krx90008.ticks() != null && !krx90008.ticks().isEmpty())
-                ? krx90008.ticks().stream().max((a, b) -> a.tm().compareTo(b.tm())).orElse(null) : null;
-            Ka90008Response.TradeTick nxtLatest = (nxt90008.ticks() != null && !nxt90008.ticks().isEmpty())
-                ? nxt90008.ticks().stream().max((a, b) -> a.tm().compareTo(b.tm())).orElse(null) : null;
-            if (krxLatest != null) log.info("[ka90008][가설-누적][KRX최신] 시간={} 매수금액={} 매도금액={}", krxLatest.tm(), krxLatest.prmBuyAmt(), krxLatest.prmSellAmt());
-            if (nxtLatest != null) log.info("[ka90008][가설-누적][NXT최신] 시간={} 매수금액={} 매도금액={}", nxtLatest.tm(), nxtLatest.prmBuyAmt(), nxtLatest.prmSellAmt());
+            Ka90008Response.TradeTick krxLatest =
+                    (krx90008.ticks() != null && !krx90008.ticks().isEmpty())
+                            ? krx90008.ticks().stream()
+                                    .max((a, b) -> a.tm().compareTo(b.tm()))
+                                    .orElse(null)
+                            : null;
+            Ka90008Response.TradeTick nxtLatest =
+                    (nxt90008.ticks() != null && !nxt90008.ticks().isEmpty())
+                            ? nxt90008.ticks().stream()
+                                    .max((a, b) -> a.tm().compareTo(b.tm()))
+                                    .orElse(null)
+                            : null;
+            if (krxLatest != null)
+                log.info(
+                        "[ka90008][가설-누적][KRX최신] 시간={} 매수금액={} 매도금액={}",
+                        krxLatest.tm(),
+                        krxLatest.prmBuyAmt(),
+                        krxLatest.prmSellAmt());
+            if (nxtLatest != null)
+                log.info(
+                        "[ka90008][가설-누적][NXT최신] 시간={} 매수금액={} 매도금액={}",
+                        nxtLatest.tm(),
+                        nxtLatest.prmBuyAmt(),
+                        nxtLatest.prmSellAmt());
             long latestBuyAmt = (krxLatest != null ? NumberParser.parseLong(krxLatest.prmBuyAmt()) : 0)
-                + (nxtLatest != null ? NumberParser.parseLong(nxtLatest.prmBuyAmt()) : 0);
+                    + (nxtLatest != null ? NumberParser.parseLong(nxtLatest.prmBuyAmt()) : 0);
             long latestSellAmt = (krxLatest != null ? NumberParser.parseLong(krxLatest.prmSellAmt()) : 0)
-                + (nxtLatest != null ? NumberParser.parseLong(nxtLatest.prmSellAmt()) : 0);
+                    + (nxtLatest != null ? NumberParser.parseLong(nxtLatest.prmSellAmt()) : 0);
             long latestBuyQty = (krxLatest != null ? NumberParser.parseLong(krxLatest.prmBuyQty()) : 0)
-                + (nxtLatest != null ? NumberParser.parseLong(nxtLatest.prmBuyQty()) : 0);
+                    + (nxtLatest != null ? NumberParser.parseLong(nxtLatest.prmBuyQty()) : 0);
             long latestSellQty = (krxLatest != null ? NumberParser.parseLong(krxLatest.prmSellQty()) : 0)
-                + (nxtLatest != null ? NumberParser.parseLong(nxtLatest.prmSellQty()) : 0);
-            log.info("[ka90008][가설-누적][합산] 매수금액={} 매도금액={} 계산순매수={} | 매수수량={} 매도수량={} 계산순매수수량={}",
-                latestBuyAmt, latestSellAmt, latestBuyAmt - latestSellAmt,
-                latestBuyQty, latestSellQty, latestBuyQty - latestSellQty);
+                    + (nxtLatest != null ? NumberParser.parseLong(nxtLatest.prmSellQty()) : 0);
+            log.info(
+                    "[ka90008][가설-누적][합산] 매수금액={} 매도금액={} 계산순매수={} | 매수수량={} 매도수량={} 계산순매수수량={}",
+                    latestBuyAmt,
+                    latestSellAmt,
+                    latestBuyAmt - latestSellAmt,
+                    latestBuyQty,
+                    latestSellQty,
+                    latestBuyQty - latestSellQty);
 
             // [기존 방식: 전 틱 누적합] 비교용
             log.info("[ka90008][기존-누적합] 모든 틱 합산 (이전 방식)");
             Map<String, Agg> tickMap = new LinkedHashMap<>();
-            if (krx90008.ticks() != null) krx90008.ticks().forEach(t -> tickMap.merge(t.tm(),
-                new Agg(NumberParser.parseLong(t.prmBuyAmt()), NumberParser.parseLong(t.prmSellAmt()),
-                    NumberParser.parseLong(t.prmNetprpsAmt()), NumberParser.parseLong(t.prmBuyQty()),
-                    NumberParser.parseLong(t.prmSellQty()), NumberParser.parseLong(t.prmNetprpsQty())), Agg::merge));
-            if (nxt90008.ticks() != null) nxt90008.ticks().forEach(t -> tickMap.merge(t.tm(),
-                new Agg(NumberParser.parseLong(t.prmBuyAmt()), NumberParser.parseLong(t.prmSellAmt()),
-                    NumberParser.parseLong(t.prmNetprpsAmt()), NumberParser.parseLong(t.prmBuyQty()),
-                    NumberParser.parseLong(t.prmSellQty()), NumberParser.parseLong(t.prmNetprpsQty())), Agg::merge));
+            if (krx90008.ticks() != null)
+                krx90008.ticks()
+                        .forEach(t -> tickMap.merge(
+                                t.tm(),
+                                new Agg(
+                                        NumberParser.parseLong(t.prmBuyAmt()),
+                                        NumberParser.parseLong(t.prmSellAmt()),
+                                        NumberParser.parseLong(t.prmNetprpsAmt()),
+                                        NumberParser.parseLong(t.prmBuyQty()),
+                                        NumberParser.parseLong(t.prmSellQty()),
+                                        NumberParser.parseLong(t.prmNetprpsQty())),
+                                Agg::merge));
+            if (nxt90008.ticks() != null)
+                nxt90008.ticks()
+                        .forEach(t -> tickMap.merge(
+                                t.tm(),
+                                new Agg(
+                                        NumberParser.parseLong(t.prmBuyAmt()),
+                                        NumberParser.parseLong(t.prmSellAmt()),
+                                        NumberParser.parseLong(t.prmNetprpsAmt()),
+                                        NumberParser.parseLong(t.prmBuyQty()),
+                                        NumberParser.parseLong(t.prmSellQty()),
+                                        NumberParser.parseLong(t.prmNetprpsQty())),
+                                Agg::merge));
             long[] cumBuyAmt = {0}, cumSellAmt = {0}, cumBuyQty = {0}, cumSellQty = {0};
             tickMap.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(e -> {
                 var a = e.getValue();
-                cumBuyAmt[0] += a.buyAmt(); cumSellAmt[0] += a.sellAmt();
-                cumBuyQty[0] += a.buyQty(); cumSellQty[0] += a.sellQty();
+                cumBuyAmt[0] += a.buyAmt();
+                cumSellAmt[0] += a.sellAmt();
+                cumBuyQty[0] += a.buyQty();
+                cumSellQty[0] += a.sellQty();
             });
-            log.info("[ka90008][기존-누적합][최종] 매수금액={} 매도금액={} 계산순매수={} | 매수수량={} 매도수량={} 계산순매수수량={}",
-                cumBuyAmt[0], cumSellAmt[0], cumBuyAmt[0] - cumSellAmt[0],
-                cumBuyQty[0], cumSellQty[0], cumBuyQty[0] - cumSellQty[0]);
+            log.info(
+                    "[ka90008][기존-누적합][최종] 매수금액={} 매도금액={} 계산순매수={} | 매수수량={} 매도수량={} 계산순매수수량={}",
+                    cumBuyAmt[0],
+                    cumSellAmt[0],
+                    cumBuyAmt[0] - cumSellAmt[0],
+                    cumBuyQty[0],
+                    cumSellQty[0],
+                    cumBuyQty[0] - cumSellQty[0]);
         } catch (Exception e) {
             log.warn("[ka90008] 예외 발생: {}", e.getMessage());
         }
@@ -510,23 +646,45 @@ class KiwoomApiVerificationTest {
             log.info("[ka90013][NXT] raw: {}", nxt);
 
             Map<String, Agg> aggMap = new LinkedHashMap<>();
-            if (krx.ticks() != null) krx.ticks().forEach(t -> aggMap.merge(t.dt(),
-                new Agg(NumberParser.parseLong(t.prmBuyAmt()), NumberParser.parseLong(t.prmSellAmt()),
-                    NumberParser.parseLong(t.prmNetprpsAmt()), NumberParser.parseLong(t.prmBuyQty()),
-                    NumberParser.parseLong(t.prmSellQty()), NumberParser.parseLong(t.prmNetprpsQty())), Agg::merge));
-            if (nxt.ticks() != null) nxt.ticks().forEach(t -> aggMap.merge(t.dt(),
-                new Agg(NumberParser.parseLong(t.prmBuyAmt()), NumberParser.parseLong(t.prmSellAmt()),
-                    NumberParser.parseLong(t.prmNetprpsAmt()), NumberParser.parseLong(t.prmBuyQty()),
-                    NumberParser.parseLong(t.prmSellQty()), NumberParser.parseLong(t.prmNetprpsQty())), Agg::merge));
+            if (krx.ticks() != null)
+                krx.ticks()
+                        .forEach(t -> aggMap.merge(
+                                t.dt(),
+                                new Agg(
+                                        NumberParser.parseLong(t.prmBuyAmt()),
+                                        NumberParser.parseLong(t.prmSellAmt()),
+                                        NumberParser.parseLong(t.prmNetprpsAmt()),
+                                        NumberParser.parseLong(t.prmBuyQty()),
+                                        NumberParser.parseLong(t.prmSellQty()),
+                                        NumberParser.parseLong(t.prmNetprpsQty())),
+                                Agg::merge));
+            if (nxt.ticks() != null)
+                nxt.ticks()
+                        .forEach(t -> aggMap.merge(
+                                t.dt(),
+                                new Agg(
+                                        NumberParser.parseLong(t.prmBuyAmt()),
+                                        NumberParser.parseLong(t.prmSellAmt()),
+                                        NumberParser.parseLong(t.prmNetprpsAmt()),
+                                        NumberParser.parseLong(t.prmBuyQty()),
+                                        NumberParser.parseLong(t.prmSellQty()),
+                                        NumberParser.parseLong(t.prmNetprpsQty())),
+                                Agg::merge));
 
-            aggMap.entrySet().stream()
-                .sorted(Map.Entry.comparingByKey())
-                .forEach(e -> {
-                    var a = e.getValue();
-                    log.info("[ka90013][합산] 날짜={} 매수금액={} 매도금액={} API순매수={} 계산순매수={} | 매수수량={} 매도수량={} API순매수수량={} 계산순매수수량={}",
-                        e.getKey(), a.buyAmt(), a.sellAmt(), a.apiNetAmt(), a.buyAmt() - a.sellAmt(),
-                        a.buyQty(), a.sellQty(), a.apiNetQty(), a.buyQty() - a.sellQty());
-                });
+            aggMap.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(e -> {
+                var a = e.getValue();
+                log.info(
+                        "[ka90013][합산] 날짜={} 매수금액={} 매도금액={} API순매수={} 계산순매수={} | 매수수량={} 매도수량={} API순매수수량={} 계산순매수수량={}",
+                        e.getKey(),
+                        a.buyAmt(),
+                        a.sellAmt(),
+                        a.apiNetAmt(),
+                        a.buyAmt() - a.sellAmt(),
+                        a.buyQty(),
+                        a.sellQty(),
+                        a.apiNetQty(),
+                        a.buyQty() - a.sellQty());
+            });
         } catch (Exception e) {
             log.warn("[ka90013] 예외 발생: {}", e.getMessage());
         }
@@ -542,12 +700,12 @@ class KiwoomApiVerificationTest {
         }
     }
 
-//    @Test
+    //    @Test
     void ka20002_업종별주가() {
-        for (var market : List.of(new String[]{"KOSPI", "0", "001"}, new String[]{"KOSDAQ", "1", "101"})) {
+        for (var market : List.of(new String[] {"KOSPI", "0", "001"}, new String[] {"KOSDAQ", "1", "101"})) {
             try {
-                var response = kiwoomApiClient.post(
-                    new Ka20002Request(market[1], market[2], "3"), Ka20002Response.class);
+                var response =
+                        kiwoomApiClient.post(new Ka20002Request(market[1], market[2], "3"), Ka20002Response.class);
                 log.info("[ka20002][{}] raw: {}", market[0], response);
             } catch (Exception e) {
                 log.warn("[ka20002][{}] 예외: {}", market[0], e.getMessage());
@@ -555,7 +713,7 @@ class KiwoomApiVerificationTest {
         }
     }
 
-//    @Test
+    //    @Test
     void ka10099_종목정보리스트() {
         for (String mrktTp : List.of("0", "10")) {
             try {

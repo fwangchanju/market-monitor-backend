@@ -19,8 +19,7 @@ public class StockMasterCacheService {
     @Cacheable(CacheConfig.STOCK_MASTER)
     @Transactional(readOnly = true)
     public Map<String, StockMaster> findAllAsMap() {
-        return repository.findAll().stream()
-            .collect(Collectors.toMap(StockMaster::getStockCode, s -> s));
+        return repository.findAll().stream().collect(Collectors.toMap(StockMaster::getStockCode, s -> s));
     }
 
     @CacheEvict(value = CacheConfig.STOCK_MASTER, allEntries = true)

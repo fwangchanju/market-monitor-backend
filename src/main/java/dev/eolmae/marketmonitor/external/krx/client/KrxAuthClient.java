@@ -20,9 +20,10 @@ import org.springframework.stereotype.Component;
 public class KrxAuthClient {
 
     private static final String LOGIN_PAGE = "https://data.krx.co.kr/contents/MDC/COMS/client/MDCCOMS001.cmd";
-    private static final String LOGIN_JSP  = "https://data.krx.co.kr/contents/MDC/COMS/client/view/login.jsp?site=mdc";
-    private static final String LOGIN_URL  = "https://data.krx.co.kr/contents/MDC/COMS/client/MDCCOMS001D1.cmd";
-    private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+    private static final String LOGIN_JSP = "https://data.krx.co.kr/contents/MDC/COMS/client/view/login.jsp?site=mdc";
+    private static final String LOGIN_URL = "https://data.krx.co.kr/contents/MDC/COMS/client/MDCCOMS001D1.cmd";
+    private static final String USER_AGENT =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
     @Value("${krx.login-id}")
     private String loginId;
@@ -48,20 +49,24 @@ public class KrxAuthClient {
     private String login() {
         CookieManager cookieManager = new CookieManager();
         OkHttpClient client = new OkHttpClient.Builder()
-            .cookieJar(new JavaNetCookieJar(cookieManager))
-            .build();
+                .cookieJar(new JavaNetCookieJar(cookieManager))
+                .build();
 
         try {
             client.newCall(new Request.Builder()
-                .url(LOGIN_PAGE)
-                .header("User-Agent", USER_AGENT)
-                .build()).execute().close();
+                            .url(LOGIN_PAGE)
+                            .header("User-Agent", USER_AGENT)
+                            .build())
+                    .execute()
+                    .close();
 
             client.newCall(new Request.Builder()
-                .url(LOGIN_JSP)
-                .header("User-Agent", USER_AGENT)
-                .header("Referer", LOGIN_PAGE)
-                .build()).execute().close();
+                            .url(LOGIN_JSP)
+                            .header("User-Agent", USER_AGENT)
+                            .header("Referer", LOGIN_PAGE)
+                            .build())
+                    .execute()
+                    .close();
 
             String responseBody = doLoginRequest(client, false);
 
@@ -75,8 +80,8 @@ public class KrxAuthClient {
             }
 
             String cookie = cookieManager.getCookieStore().getCookies().stream()
-                .map(c -> c.getName() + "=" + c.getValue())
-                .collect(Collectors.joining("; "));
+                    .map(c -> c.getName() + "=" + c.getValue())
+                    .collect(Collectors.joining("; "));
 
             log.info("KRX 로그인 성공");
             return cookie;
@@ -90,22 +95,23 @@ public class KrxAuthClient {
 
     private String doLoginRequest(OkHttpClient client, boolean skipDup) throws Exception {
         FormBody.Builder form = new FormBody.Builder()
-            .add("mbrNm", "")
-            .add("telNo", "")
-            .add("di", "")
-            .add("certType", "")
-            .add("mbrId", loginId)
-            .add("pw", loginPw);
+                .add("mbrNm", "")
+                .add("telNo", "")
+                .add("di", "")
+                .add("certType", "")
+                .add("mbrId", loginId)
+                .add("pw", loginPw);
         if (skipDup) {
             form.add("skipDup", "Y");
         }
 
         try (Response resp = client.newCall(new Request.Builder()
-            .url(LOGIN_URL)
-            .post(form.build())
-            .header("User-Agent", USER_AGENT)
-            .header("Referer", LOGIN_PAGE)
-            .build()).execute()) {
+                        .url(LOGIN_URL)
+                        .post(form.build())
+                        .header("User-Agent", USER_AGENT)
+                        .header("Referer", LOGIN_PAGE)
+                        .build())
+                .execute()) {
             return resp.body().string();
         }
     }

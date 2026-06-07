@@ -18,29 +18,28 @@ import lombok.Getter;
 @Table(name = "user_notification_setting")
 public class UserNotificationSetting {
 
-	@Id
-	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-	@OneToOne(fetch = FetchType.LAZY, optional = false)
-	@JoinColumn(name = "user_id", nullable = false)
-	private AppUser user;
+    @OneToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    private AppUser user;
 
-	@Column(nullable = false)
-	private boolean reminderEnabled;
+    @Column(nullable = false)
+    private boolean reminderEnabled;
 
-	@Column(nullable = false)
-	private LocalTime reminderTime;
+    @Column(nullable = false)
+    private LocalTime reminderTime;
 
-	@Column(nullable = false, length = 40)
-	private String timezone;
+    @Column(nullable = false, length = 40)
+    private String timezone;
 
-	@Column(nullable = false)
-	private LocalDateTime createdAt;
+    @Column(nullable = false)
+    private LocalDateTime createdAt;
 
-	@Column(nullable = false)
-	private LocalDateTime updatedAt;
+    @Column(nullable = false)
+    private LocalDateTime updatedAt;
 
-	protected UserNotificationSetting() {
-	}
+    protected UserNotificationSetting() {}
 }

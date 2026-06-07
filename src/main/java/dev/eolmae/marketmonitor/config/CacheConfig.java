@@ -18,9 +18,10 @@ public class CacheConfig {
     public CacheManager cacheManager() {
         SimpleCacheManager manager = new SimpleCacheManager();
         manager.setCaches(List.of(
-            new CaffeineCache(STOCK_MASTER, Caffeine.newBuilder().maximumSize(5000).build()),
-            new CaffeineCache(WATCH_CODES, Caffeine.newBuilder().maximumSize(500).build())
-        ));
+                new CaffeineCache(
+                        STOCK_MASTER, Caffeine.newBuilder().maximumSize(5000).build()),
+                new CaffeineCache(
+                        WATCH_CODES, Caffeine.newBuilder().maximumSize(500).build())));
         return manager;
     }
 }

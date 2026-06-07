@@ -6,21 +6,19 @@ import java.util.List;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record Ka90003Response(
-	@JsonProperty("prm_netprps_upper_50") List<RankingItem> items
-) {
+        @JsonProperty("prm_netprps_upper_50") List<RankingItem> items) {
 
-	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record RankingItem(
-		@JsonProperty("rank") String rank,
-		@JsonProperty("stk_cd") String stkCd,
-		@JsonProperty("stk_nm") String stkNm,
-		@JsonProperty("cur_prc") String curPrc,
-		@JsonProperty("flu_sig") String fluSig,
-		@JsonProperty("pred_pre") String predPre,
-		@JsonProperty("flu_rt") String fluRt,
-		@JsonProperty("acc_trde_qty") String accTrdeQty,
-		@JsonProperty("prm_sell_amt") String prmSellAmt,
-		@JsonProperty("prm_buy_amt") String prmBuyAmt,
-		@JsonProperty("prm_netprps_amt") String prmNetprpsAmt
-	) {}
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record RankingItem(
+            @JsonProperty("rank") String rank,
+            @JsonProperty("stk_cd") String stkCd,
+            @JsonProperty("stk_nm") String stkNm,
+            @JsonProperty("cur_prc") String curPrc,
+            @JsonProperty("flu_sig") String fluSig,
+            @JsonProperty("pred_pre") String predPre,
+            @JsonProperty("flu_rt") String fluRt,
+            @JsonProperty("acc_trde_qty") String accTrdeQty,
+            @JsonProperty("prm_sell_amt") String prmSellAmt,
+            @JsonProperty("prm_buy_amt") String prmBuyAmt,
+            @JsonProperty("prm_netprps_amt") String prmNetprpsAmt) {}
 }

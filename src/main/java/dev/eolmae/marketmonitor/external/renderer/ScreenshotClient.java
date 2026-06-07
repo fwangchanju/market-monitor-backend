@@ -22,11 +22,12 @@ public class ScreenshotClient {
 
     public List<byte[]> captureAll() {
         try {
-            CaptureResponse response = restClient.post()
-                .uri(rendererUrl + "/capture")
-                .contentType(MediaType.APPLICATION_JSON)
-                .retrieve()
-                .body(CaptureResponse.class);
+            CaptureResponse response = restClient
+                    .post()
+                    .uri(rendererUrl + "/capture")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .retrieve()
+                    .body(CaptureResponse.class);
 
             if (response == null || response.images() == null) {
                 log.warn("renderer 응답이 비어 있음");
@@ -34,8 +35,8 @@ public class ScreenshotClient {
             }
 
             return response.images().stream()
-                .map(img -> Base64.getDecoder().decode(img.data()))
-                .toList();
+                    .map(img -> Base64.getDecoder().decode(img.data()))
+                    .toList();
         } catch (Exception e) {
             log.error("스크린샷 캡처 실패: {}", e.getMessage());
             return List.of();

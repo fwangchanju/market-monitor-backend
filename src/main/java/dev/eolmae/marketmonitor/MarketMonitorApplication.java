@@ -16,8 +16,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @ConfigurationPropertiesScan
 public class MarketMonitorApplication {
 
-	public static void main(String[] args) {
-		SpringApplication.run(MarketMonitorApplication.class, args);
-	}
-
+    public static void main(String[] args) {
+        SpringApplication.run(MarketMonitorApplication.class, args);
+    }
 }

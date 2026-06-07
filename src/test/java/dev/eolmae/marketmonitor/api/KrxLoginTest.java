@@ -1,16 +1,18 @@
 package dev.eolmae.marketmonitor.api;
 
+import static org.junit.jupiter.api.Assertions.*;
+
+import java.net.CookieManager;
 import okhttp3.*;
 import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.*;
-import java.net.CookieManager;
 
 class KrxLoginTest {
 
     static final String LOGIN_PAGE = "https://data.krx.co.kr/contents/MDC/COMS/client/MDCCOMS001.cmd";
-    static final String LOGIN_JSP  = "https://data.krx.co.kr/contents/MDC/COMS/client/view/login.jsp?site=mdc";
-    static final String LOGIN_URL  = "https://data.krx.co.kr/contents/MDC/COMS/client/MDCCOMS001D1.cmd";
-    static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+    static final String LOGIN_JSP = "https://data.krx.co.kr/contents/MDC/COMS/client/view/login.jsp?site=mdc";
+    static final String LOGIN_URL = "https://data.krx.co.kr/contents/MDC/COMS/client/MDCCOMS001D1.cmd";
+    static final String USER_AGENT =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
     static final String LOGIN_ID = "id";
     static final String LOGIN_PW = "password";
@@ -24,16 +26,20 @@ class KrxLoginTest {
 
         // Step 1: 초기 JSESSIONID 발급
         client.newCall(new Request.Builder()
-                .url(LOGIN_PAGE)
-                .header("User-Agent", USER_AGENT)
-                .build()).execute().close();
+                        .url(LOGIN_PAGE)
+                        .header("User-Agent", USER_AGENT)
+                        .build())
+                .execute()
+                .close();
 
         // Step 2: iframe 세션 초기화
         client.newCall(new Request.Builder()
-                .url(LOGIN_JSP)
-                .header("User-Agent", USER_AGENT)
-                .header("Referer", LOGIN_PAGE)
-                .build()).execute().close();
+                        .url(LOGIN_JSP)
+                        .header("User-Agent", USER_AGENT)
+                        .header("Referer", LOGIN_PAGE)
+                        .build())
+                .execute()
+                .close();
 
         // Step 3: 로그인
         RequestBody body = new FormBody.Builder()
@@ -47,11 +53,12 @@ class KrxLoginTest {
 
         String responseBody;
         try (Response resp = client.newCall(new Request.Builder()
-                .url(LOGIN_URL)
-                .post(body)
-                .header("User-Agent", USER_AGENT)
-                .header("Referer", LOGIN_PAGE)
-                .build()).execute()) {
+                        .url(LOGIN_URL)
+                        .post(body)
+                        .header("User-Agent", USER_AGENT)
+                        .header("Referer", LOGIN_PAGE)
+                        .build())
+                .execute()) {
             responseBody = resp.body().string();
             System.out.println("로그인 응답: " + responseBody);
         }
@@ -60,19 +67,20 @@ class KrxLoginTest {
         if (responseBody.contains("CD011")) {
             System.out.println("중복 로그인 감지, skipDup=Y 재시도...");
             try (Response resp2 = client.newCall(new Request.Builder()
-                    .url(LOGIN_URL)
-                    .post(new FormBody.Builder()
-                            .add("mbrNm", "")
-                            .add("telNo", "")
-                            .add("di", "")
-                            .add("certType", "")
-                            .add("mbrId", LOGIN_ID)
-                            .add("pw", LOGIN_PW)
-                            .add("skipDup", "Y")
+                            .url(LOGIN_URL)
+                            .post(new FormBody.Builder()
+                                    .add("mbrNm", "")
+                                    .add("telNo", "")
+                                    .add("di", "")
+                                    .add("certType", "")
+                                    .add("mbrId", LOGIN_ID)
+                                    .add("pw", LOGIN_PW)
+                                    .add("skipDup", "Y")
+                                    .build())
+                            .header("User-Agent", USER_AGENT)
+                            .header("Referer", LOGIN_PAGE)
                             .build())
-                    .header("User-Agent", USER_AGENT)
-                    .header("Referer", LOGIN_PAGE)
-                    .build()).execute()) {
+                    .execute()) {
                 responseBody = resp2.body().string();
                 System.out.println("재시도 응답: " + responseBody);
             }

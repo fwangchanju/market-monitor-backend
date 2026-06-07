@@ -14,28 +14,27 @@ import lombok.Getter;
 @Table(name = "app_user")
 public class AppUser {
 
-	@Id
-	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-	@Column(nullable = false, unique = true, length = 64)
-	private String userKey;
+    @Column(nullable = false, unique = true, length = 64)
+    private String userKey;
 
-	@Column(nullable = false, length = 100)
-	private String displayName;
+    @Column(nullable = false, length = 100)
+    private String displayName;
 
-	@Column(length = 100)
-	private String telegramChatId;
+    @Column(length = 100)
+    private String telegramChatId;
 
-	@Column(nullable = false, length = 40)
-	private String timezone;
+    @Column(nullable = false, length = 40)
+    private String timezone;
 
-	@Column(nullable = false)
-	private LocalDateTime createdAt;
+    @Column(nullable = false)
+    private LocalDateTime createdAt;
 
-	@Column(nullable = false)
-	private LocalDateTime updatedAt;
+    @Column(nullable = false)
+    private LocalDateTime updatedAt;
 
-	protected AppUser() {
-	}
+    protected AppUser() {}
 }

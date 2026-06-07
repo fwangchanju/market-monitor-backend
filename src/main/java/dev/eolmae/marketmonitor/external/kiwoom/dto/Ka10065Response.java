@@ -6,15 +6,13 @@ import java.util.List;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record Ka10065Response(
-	@JsonProperty("opmr_invsr_trde_upper") List<RankingItem> items
-) {
+        @JsonProperty("opmr_invsr_trde_upper") List<RankingItem> items) {
 
-	@JsonIgnoreProperties(ignoreUnknown = true)
-	public record RankingItem(
-		@JsonProperty("stk_cd") String stkCd,
-		@JsonProperty("stk_nm") String stkNm,
-		@JsonProperty("sel_qty") String selQty,
-		@JsonProperty("buy_qty") String buyQty,
-		@JsonProperty("netslmt") String netslmt
-	) {}
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record RankingItem(
+            @JsonProperty("stk_cd") String stkCd,
+            @JsonProperty("stk_nm") String stkNm,
+            @JsonProperty("sel_qty") String selQty,
+            @JsonProperty("buy_qty") String buyQty,
+            @JsonProperty("netslmt") String netslmt) {}
 }

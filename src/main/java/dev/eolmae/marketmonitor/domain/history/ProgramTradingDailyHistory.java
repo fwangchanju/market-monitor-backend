@@ -15,48 +15,50 @@ import lombok.Getter;
 @Getter
 @Entity
 @Table(
-	name = "program_trading_daily",
-	uniqueConstraints = @UniqueConstraint(
-		name = "uk_program_trading_daily",
-		columnNames = {"stock_code", "trade_date"}
-	)
-)
+        name = "program_trading_daily",
+        uniqueConstraints =
+                @UniqueConstraint(
+                        name = "uk_program_trading_daily",
+                        columnNames = {"stock_code", "trade_date"}))
 public class ProgramTradingDailyHistory {
 
-	@Id
-	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
-	@Column(nullable = false, length = 20)
-	private String stockCode;
+    @Column(nullable = false, length = 20)
+    private String stockCode;
 
-	@Column(nullable = false)
-	private LocalDate tradeDate;
+    @Column(nullable = false)
+    private LocalDate tradeDate;
 
-	@Column(nullable = false, precision = 19, scale = 2)
-	private BigDecimal programBuyAmount;
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal programBuyAmount;
 
-	@Column(nullable = false, precision = 19, scale = 2)
-	private BigDecimal programSellAmount;
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal programSellAmount;
 
-	@Column(nullable = false, precision = 19, scale = 2)
-	private BigDecimal programNetBuyAmount;
+    @Column(nullable = false, precision = 19, scale = 2)
+    private BigDecimal programNetBuyAmount;
 
-	@Column(nullable = false)
-	private LocalDateTime createdAt;
+    @Column(nullable = false)
+    private LocalDateTime createdAt;
 
-	protected ProgramTradingDailyHistory() {
-	}
+    protected ProgramTradingDailyHistory() {}
 
-	public static ProgramTradingDailyHistory create(String stockCode, LocalDate tradeDate,
-		BigDecimal programBuyAmount, BigDecimal programSellAmount, BigDecimal programNetBuyAmount) {
-		var entity = new ProgramTradingDailyHistory();
-		entity.stockCode = stockCode;
-		entity.tradeDate = tradeDate;
-		entity.programBuyAmount = programBuyAmount;
-		entity.programSellAmount = programSellAmount;
-		entity.programNetBuyAmount = programNetBuyAmount;
-		entity.createdAt = LocalDateTime.now();
-		return entity;
-	}
+    public static ProgramTradingDailyHistory create(
+            String stockCode,
+            LocalDate tradeDate,
+            BigDecimal programBuyAmount,
+            BigDecimal programSellAmount,
+            BigDecimal programNetBuyAmount) {
+        var entity = new ProgramTradingDailyHistory();
+        entity.stockCode = stockCode;
+        entity.tradeDate = tradeDate;
+        entity.programBuyAmount = programBuyAmount;
+        entity.programSellAmount = programSellAmount;
+        entity.programNetBuyAmount = programNetBuyAmount;
+        entity.createdAt = LocalDateTime.now();
+        return entity;
+    }
 }

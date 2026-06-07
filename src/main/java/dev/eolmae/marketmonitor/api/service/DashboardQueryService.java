@@ -248,6 +248,7 @@ public class DashboardQueryService {
         return new SnapshotResponse<>(
                 snapshotTime,
                 snapshots.stream()
+                        .limit(10)
                         .map(item -> new ProgramTradingRankingItem(
                                 item.getRank(),
                                 item.getStockCode(),

@@ -5,7 +5,7 @@ import dev.eolmae.marketmonitor.api.dto.IndexContributionItem;
 import dev.eolmae.marketmonitor.api.dto.IntradayInvestorRankingItem;
 import dev.eolmae.marketmonitor.api.dto.IntradayInvestorTopItem;
 import dev.eolmae.marketmonitor.api.dto.NotificationSettingResponse;
-import dev.eolmae.marketmonitor.api.dto.ProgramTradingDailyHistoryItem;
+// import dev.eolmae.marketmonitor.api.dto.ProgramTradingDailyHistoryItem;
 import dev.eolmae.marketmonitor.api.dto.ProgramTradingHistoryItem;
 import dev.eolmae.marketmonitor.api.dto.ProgramTradingRankingItem;
 import dev.eolmae.marketmonitor.api.dto.SendDashboardResponse;
@@ -146,13 +146,14 @@ public class DashboardController {
         return queryService.getProgramTradingHistory(stockCode, from, to);
     }
 
-    @GetMapping("/stocks/{stockCode}/program-trading/daily")
-    public StockHistoryResponse<ProgramTradingDailyHistoryItem> getProgramTradingDailyHistory(
-            @PathVariable String stockCode,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        return queryService.getProgramTradingDailyHistory(stockCode, from, to);
-    }
+//    종목별프로그램매매추이(일별)
+//    @GetMapping("/stocks/{stockCode}/program-trading/daily")
+//    public StockHistoryResponse<ProgramTradingDailyHistoryItem> getProgramTradingDailyHistory(
+//            @PathVariable String stockCode,
+//            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+//            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+//        return queryService.getProgramTradingDailyHistory(stockCode, from, to);
+//    }
 
     @GetMapping("/stocks/{stockCode}/short-selling")
     public StockHistoryResponse<ShortSellingHistoryItem> getShortSellingHistory(@PathVariable String stockCode) {

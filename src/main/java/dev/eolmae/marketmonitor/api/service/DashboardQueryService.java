@@ -173,7 +173,7 @@ public class DashboardQueryService {
 		var items = intradayInvestorRankingSnapshotRepository
 			.findBySnapshotTimeAndMarketTypeAndInvestorTypeAndRankingTypeOrderByRankAsc(
 				snapshotTime, marketType, investorType, rankingType)
-			.stream().map(item -> new IntradayInvestorRankingItem(
+			.stream().limit(10).map(item -> new IntradayInvestorRankingItem(
 				item.getMarketType(), item.getInvestorType(), item.getRank(),
 				item.getStockCode(), item.getStockName(),
 				item.getNetBuyAmount(), item.getTradedVolume()

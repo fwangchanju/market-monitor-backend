@@ -73,7 +73,7 @@ public class ShortSellingCollector {
 
 			if (dailyRepository.existsByStockCodeAndTradeDate(stockCode, tradeDate)) continue;
 
-			BigDecimal closePrice = NumberParser.parseBigDecimal(tick.closePric());
+			BigDecimal closePrice = NumberParser.parseBigDecimal(tick.closePric()).abs();
 			BigDecimal priceChange = NumberParser.parseBigDecimal(tick.predPre());
 			BigDecimal changeRate = NumberParser.parseBigDecimal(tick.fluRt());
 			long tradingVolume = NumberParser.parseLong(tick.trdeQty());

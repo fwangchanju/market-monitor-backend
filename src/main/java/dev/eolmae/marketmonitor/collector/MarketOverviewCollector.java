@@ -49,7 +49,7 @@ public class MarketOverviewCollector {
 
 		LocalDateTime now = LocalDateTime.now();
 
-		BigDecimal indexValue = NumberParser.parseBigDecimal(response.curPrc());
+		BigDecimal indexValue = NumberParser.parseBigDecimal(response.curPrc()).abs();
 		BigDecimal changeValue = NumberParser.parseBigDecimal(response.predPre());
 		BigDecimal changeRate = NumberParser.parseBigDecimal(response.fluRt());
 		BigDecimal tradingValue = NumberParser.parseBigDecimal(response.trdePrica());

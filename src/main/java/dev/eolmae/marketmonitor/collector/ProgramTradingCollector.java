@@ -91,6 +91,11 @@ public class ProgramTradingCollector {
 	}
 
 	private void collectIntradayForStock(String stockCode, LocalDateTime snapshotTime) {
+		if (historyRepository.existsByStockCodeAndSnapshotTime(stockCode, snapshotTime)) {
+			log.debug("프로그램매매 장중이력 이미 존재, 스킵: stockCode={}, snapshotTime={}", stockCode, snapshotTime);
+			return;
+		}
+
 		String dateStr = snapshotTime.format(DATE_FMT);
 
 		var krxRequest = new Ka90008Request(stockCode, StexType.KRX.code(), dateStr);
@@ -166,6 +171,10 @@ public class ProgramTradingCollector {
 	}
 
 	private void collectDailyForStock(String stockCode, LocalDate targetDate, boolean todayOnly) {
+		if (todayOnly && dailyHistoryRepository.existsByStockCodeAndTradeDate(stockCode, targetDate)) {
+			log.debug("프로그램매매 일별이력 이미 존재, 스킵: stockCode={}, tradeDate={}", stockCode, targetDate);
+			return;
+		}
 		var krxRequest = new Ka90013Request(stockCode, StexType.KRX.code());
 		Ka90013Response krxResponse = kiwoomApiClient.post(krxRequest, Ka90013Response.class);
 

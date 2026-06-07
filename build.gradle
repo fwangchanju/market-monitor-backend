@@ -3,6 +3,7 @@ plugins {
 	id 'org.springframework.boot' version '4.0.3'
 	id 'io.spring.dependency-management' version '1.1.7'
 	id 'com.diffplug.spotless' version '8.6.0'
+	id 'net.ltgt.errorprone' version '5.1.0'
 }
 
 group = 'dev.eolmae'
@@ -55,6 +56,9 @@ dependencies {
 	// ok http, krx data market login
 	implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 	implementation 'com.squareup.okhttp3:okhttp-urlconnection:4.12.0'
+
+	// error prone
+	errorprone 'com.google.errorprone:error_prone_core:2.49.0'
 }
 
 tasks.named('test') {
@@ -66,4 +70,9 @@ spotless {
 		target 'src/**/*.java'
 		palantirJavaFormat()
 	}
+}
+
+tasks.named('compileTestJava') {
+	// 테스트 메서드명에 한글을 사용하는 컨벤션과 충돌(UnicodeInCode 등)하므로 테스트 코드는 검사 대상에서 제외
+	options.errorprone.enabled = false
 }

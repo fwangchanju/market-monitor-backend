@@ -1,5 +1,6 @@
 package dev.eolmae.marketmonitor.domain.stock;
 
+import dev.eolmae.marketmonitor.common.enums.Zone;
 import dev.eolmae.marketmonitor.domain.user.AppUser;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -50,7 +51,7 @@ public class WatchStock {
         entity.stock = stock;
         entity.isPrimary = false;
         entity.registerBy = registerBy;
-        entity.createdAt = LocalDateTime.now();
+        entity.createdAt = LocalDateTime.now(Zone.KST.zoneId());
         return entity;
     }
 }

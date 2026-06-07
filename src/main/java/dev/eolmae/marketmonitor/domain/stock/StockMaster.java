@@ -1,6 +1,7 @@
 package dev.eolmae.marketmonitor.domain.stock;
 
 import dev.eolmae.marketmonitor.common.enums.Exchange;
+import dev.eolmae.marketmonitor.common.enums.Zone;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -62,8 +63,8 @@ public class StockMaster {
         entity.listCount = listCount;
         entity.lastPrice = lastPrice;
         entity.active = true;
-        entity.createdAt = LocalDateTime.now();
-        entity.updatedAt = LocalDateTime.now();
+        entity.createdAt = LocalDateTime.now(Zone.KST.zoneId());
+        entity.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
         return entity;
     }
 
@@ -74,11 +75,11 @@ public class StockMaster {
         this.listCount = listCount;
         this.lastPrice = lastPrice;
         this.active = true;
-        this.updatedAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
     }
 
     public void markInactive() {
         this.active = false;
-        this.updatedAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
     }
 }

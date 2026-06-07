@@ -4,6 +4,7 @@ import dev.eolmae.marketmonitor.common.enums.AmtQtyType;
 import dev.eolmae.marketmonitor.common.enums.Exchange;
 import dev.eolmae.marketmonitor.common.enums.IntradayInvestorType;
 import dev.eolmae.marketmonitor.common.enums.IntradayRankingType;
+import dev.eolmae.marketmonitor.common.enums.Zone;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -104,7 +105,7 @@ public class IntradayInvestorRankingSnapshot {
         entity.sellVolume = sellVolume;
         entity.tradedVolume = tradedVolume;
         entity.snapshotTime = snapshotTime;
-        entity.createdAt = LocalDateTime.now();
+        entity.createdAt = LocalDateTime.now(Zone.KST.zoneId());
         return entity;
     }
 }

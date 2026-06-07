@@ -2,6 +2,7 @@ package dev.eolmae.marketmonitor.collector;
 
 import dev.eolmae.marketmonitor.common.enums.Board;
 import dev.eolmae.marketmonitor.common.enums.Exchange;
+import dev.eolmae.marketmonitor.common.enums.Zone;
 import dev.eolmae.marketmonitor.common.util.NumberParser;
 import dev.eolmae.marketmonitor.domain.dashboard.MarketOverviewSnapshot;
 import dev.eolmae.marketmonitor.domain.dashboard.repository.MarketOverviewSnapshotRepository;
@@ -49,7 +50,7 @@ public class MarketOverviewCollector {
         var request = new Ka20001Request(mrktTp, indsCd);
         var response = kiwoomApiClient.post(request, Ka20001Response.class);
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(Zone.KST.zoneId());
 
         BigDecimal indexValue = NumberParser.parseBigDecimal(response.curPrc()).abs();
         BigDecimal changeValue = NumberParser.parseBigDecimal(response.predPre());

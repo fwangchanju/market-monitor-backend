@@ -5,6 +5,7 @@ import dev.eolmae.marketmonitor.common.enums.Board;
 import dev.eolmae.marketmonitor.common.enums.Exchange;
 import dev.eolmae.marketmonitor.common.enums.InvestorType;
 import dev.eolmae.marketmonitor.common.enums.StexType;
+import dev.eolmae.marketmonitor.common.enums.Zone;
 import dev.eolmae.marketmonitor.common.util.NumberParser;
 import dev.eolmae.marketmonitor.domain.dashboard.InvestorTradingSummarySnapshot;
 import dev.eolmae.marketmonitor.domain.dashboard.repository.InvestorTradingSummarySnapshotRepository;
@@ -71,7 +72,7 @@ public class InvestorTradingSummaryCollector {
                 .orElseThrow(() ->
                         new IllegalStateException("투자자별매매종합 종합지수 행 없음: market=" + marketType + ", indsCd=" + indsCd));
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(Zone.KST.zoneId());
 
         // ka10051은 순매수만 제공하므로 매수/매도는 ZERO로 저장 // TODO 순매수만 제공하는데 매수/매도는 왜 저장함?
         saveSnapshot(

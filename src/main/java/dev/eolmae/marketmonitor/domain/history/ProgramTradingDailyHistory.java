@@ -1,5 +1,6 @@
 package dev.eolmae.marketmonitor.domain.history;
 
+import dev.eolmae.marketmonitor.common.enums.Zone;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -58,7 +59,7 @@ public class ProgramTradingDailyHistory {
         entity.programBuyAmount = programBuyAmount;
         entity.programSellAmount = programSellAmount;
         entity.programNetBuyAmount = programNetBuyAmount;
-        entity.createdAt = LocalDateTime.now();
+        entity.createdAt = LocalDateTime.now(Zone.KST.zoneId());
         return entity;
     }
 }

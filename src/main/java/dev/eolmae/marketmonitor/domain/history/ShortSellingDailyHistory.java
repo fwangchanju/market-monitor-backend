@@ -1,5 +1,6 @@
 package dev.eolmae.marketmonitor.domain.history;
 
+import dev.eolmae.marketmonitor.common.enums.Zone;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -88,7 +89,7 @@ public class ShortSellingDailyHistory {
         entity.shortRatio = shortRatio;
         entity.shortAmount = shortAmount;
         entity.shortAvgPrice = shortAvgPrice;
-        entity.createdAt = LocalDateTime.now();
+        entity.createdAt = LocalDateTime.now(Zone.KST.zoneId());
         return entity;
     }
 }

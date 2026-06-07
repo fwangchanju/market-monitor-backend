@@ -1,6 +1,7 @@
 package dev.eolmae.marketmonitor.domain.dashboard;
 
 import dev.eolmae.marketmonitor.common.enums.Exchange;
+import dev.eolmae.marketmonitor.common.enums.Zone;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -101,7 +102,7 @@ public class MarketOverviewSnapshot {
         entity.advancers = advancers;
         entity.decliners = decliners;
         entity.unchangedCount = unchangedCount;
-        entity.createdAt = LocalDateTime.now();
+        entity.createdAt = LocalDateTime.now(Zone.KST.zoneId());
         return entity;
     }
 }

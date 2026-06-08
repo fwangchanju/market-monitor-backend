@@ -67,11 +67,17 @@ public class ShortSellingCollector {
         }
 
         for (Ka10014Response.ShortTick tick : response.ticks()) {
-            if (tick.dt() == null || tick.dt().isBlank()) continue;
+            if (tick.dt() == null || tick.dt().isBlank()) {
+                continue;
+            }
             LocalDate tradeDate = parseDate(tick.dt());
-            if (tradeDate == null) continue;
+            if (tradeDate == null) {
+                continue;
+            }
 
-            if (dailyRepository.existsByStockCodeAndTradeDate(stockCode, tradeDate)) continue;
+            if (dailyRepository.existsByStockCodeAndTradeDate(stockCode, tradeDate)) {
+                continue;
+            }
 
             BigDecimal closePrice =
                     NumberParser.parseBigDecimal(tick.closePric()).abs();

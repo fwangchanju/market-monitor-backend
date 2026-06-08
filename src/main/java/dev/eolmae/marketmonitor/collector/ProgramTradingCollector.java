@@ -198,20 +198,30 @@ public class ProgramTradingCollector {
 
         for (Ka90013Response.DailyTick tick : krxTicks) {
             String dt = tick.dt() != null ? tick.dt().trim() : null;
-            if (dt == null || dt.isBlank()) continue;
+            if (dt == null || dt.isBlank()) {
+                continue;
+            }
             accumulateDaily(merged, dt, tick.prmBuyAmt(), tick.prmSellAmt());
         }
         for (Ka90013Response.DailyTick tick : nxtTicks) {
             String dt = tick.dt() != null ? tick.dt().trim() : null;
-            if (dt == null || dt.isBlank()) continue;
+            if (dt == null || dt.isBlank()) {
+                continue;
+            }
             accumulateDaily(merged, dt, tick.prmBuyAmt(), tick.prmSellAmt());
         }
 
         for (Map.Entry<String, TradeAmount> entry : merged.entrySet()) {
             LocalDate date = parseDate(entry.getKey());
-            if (date == null) continue;
-            if (todayOnly && !date.equals(targetDate)) continue;
-            if (!todayOnly && dailyHistoryRepository.existsByStockCodeAndTradeDate(stockCode, date)) continue;
+            if (date == null) {
+                continue;
+            }
+            if (todayOnly && !date.equals(targetDate)) {
+                continue;
+            }
+            if (!todayOnly && dailyHistoryRepository.existsByStockCodeAndTradeDate(stockCode, date)) {
+                continue;
+            }
             TradeAmount amt = entry.getValue();
             dailyHistoryRepository.save(
                     ProgramTradingDailyHistory.create(stockCode, date, amt.buy(), amt.sell(), amt.net()));
@@ -223,18 +233,20 @@ public class ProgramTradingCollector {
     private static TradeAmount sumLatestTicks(
             List<Ka90008Response.TradeTick> krxTicks, List<Ka90008Response.TradeTick> nxtTicks) {
 
-        Ka90008Response.TradeTick krxLatest = krxTicks.isEmpty() ? null : krxTicks.get(krxTicks.size() - 1);
-        Ka90008Response.TradeTick nxtLatest = nxtTicks.isEmpty() ? null : nxtTicks.get(nxtTicks.size() - 1);
+        Ka90008Response.TradeTick krxLatest = krxTicks.isEmpty() ? null : krxTicks.getLast();
+        Ka90008Response.TradeTick nxtLatest = nxtTicks.isEmpty() ? null : nxtTicks.getLast();
 
         TradeAmount result = TradeAmount.zero();
-        if (krxLatest != null)
+        if (krxLatest != null) {
             result = result.add(
                     NumberParser.parseBigDecimal(krxLatest.prmBuyAmt()),
                     NumberParser.parseBigDecimal(krxLatest.prmSellAmt()));
-        if (nxtLatest != null)
+        }
+        if (nxtLatest != null) {
             result = result.add(
                     NumberParser.parseBigDecimal(nxtLatest.prmBuyAmt()),
                     NumberParser.parseBigDecimal(nxtLatest.prmSellAmt()));
+        }
         return result;
     }
 

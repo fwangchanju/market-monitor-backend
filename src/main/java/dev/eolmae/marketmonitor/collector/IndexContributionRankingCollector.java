@@ -84,7 +84,9 @@ public class IndexContributionRankingCollector {
         BigDecimal prevTotalMarketCap = BigDecimal.ZERO;
         for (Ka20002Response.StockItem item : items) {
             StockMaster master = masterMap.get(stripSuffix(item.stkCd()));
-            if (!isValidForMarket(master, marketCode)) continue;
+            if (!isValidForMarket(master, marketCode)) {
+                continue;
+            }
             prevTotalMarketCap =
                     prevTotalMarketCap.add(master.getLastPrice().multiply(BigDecimal.valueOf(master.getListCount())));
         }
@@ -97,7 +99,9 @@ public class IndexContributionRankingCollector {
         for (Ka20002Response.StockItem item : items) {
             String stockCode = stripSuffix(item.stkCd());
             StockMaster master = masterMap.get(stockCode);
-            if (!isValidForMarket(master, marketCode)) continue;
+            if (!isValidForMarket(master, marketCode)) {
+                continue;
+            }
 
             BigDecimal curPrice = NumberParser.parseBigDecimal(item.curPrc()).abs();
             BigDecimal prevPrice = master.getLastPrice();
@@ -151,7 +155,9 @@ public class IndexContributionRankingCollector {
     }
 
     private static String stripSuffix(String stkCd) {
-        if (stkCd == null) return "";
+        if (stkCd == null) {
+            return "";
+        }
         int idx = stkCd.indexOf('_');
         return idx >= 0 ? stkCd.substring(0, idx) : stkCd.trim();
     }

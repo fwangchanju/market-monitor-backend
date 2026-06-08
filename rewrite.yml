@@ -1,0 +1,17 @@
+---
+# OpenRewrite 커스텀 스타일.
+# 광범위 레시피(CommonStaticAnalysis 등)는 그대로 활성화해 폭넓게 점검하되,
+# import 와일드카드 묶기만 차단한다. (palantir-java-format은 와일드카드를 펴주지 않으므로
+# OpenRewrite 단에서 막아야 함. import 정렬 자체는 이후 spotlessApply가 원복.)
+type: specs.openrewrite.org/v1beta/style
+name: dev.eolmae.NoWildcardImports
+displayName: No wildcard imports
+description: 별표(*) import 묶기를 비활성화 — 항상 명시적 import 유지.
+styleConfigs:
+  - org.openrewrite.java.style.ImportLayoutStyle:
+      classCountToUseStarImport: 2147483647
+      nameCountToUseStarImport: 2147483647
+      layout:
+        - import all other imports
+        - "<blank line>"
+        - import static all other imports

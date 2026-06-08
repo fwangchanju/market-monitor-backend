@@ -75,7 +75,9 @@ public class ProgramTradingRankingCollector {
         for (Ka90003Response.RankingItem item : items) {
             // stk_cd에 "_AL" 또는 "_NX" suffix가 있으면 제거 (예: 000660_AL → 000660)
             String stockCode = stripAlSuffix(item.stkCd());
-            if (stockCode.isBlank()) continue;
+            if (stockCode.isBlank()) {
+                continue;
+            }
 
             String stockName = item.stkNm() != null ? item.stkNm().trim() : "";
             BigDecimal buyAmount = NumberParser.parseBigDecimal(item.prmBuyAmt());
@@ -114,7 +116,9 @@ public class ProgramTradingRankingCollector {
     }
 
     private static String stripAlSuffix(String stkCd) {
-        if (stkCd == null) return "";
+        if (stkCd == null) {
+            return "";
+        }
         String trimmed = stkCd.trim();
         // "_AL" 또는 "_NX" suffix 제거
         int underscoreIdx = trimmed.indexOf('_');

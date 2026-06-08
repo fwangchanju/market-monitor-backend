@@ -32,7 +32,7 @@ public class TelegramNotifier {
         }
 
         String timeLabel = reminderTime.format(TIME_FORMATTER);
-        String message = String.format("%s 체크 시간입니다.\n\n<a href=\"%s\">대시보드 열기</a>", timeLabel, dashboardBaseUrl);
+        String message = String.format("%s\n<a href=\"%s\">대시보드 열기</a>", timeLabel, dashboardBaseUrl);
 
         telegramClient.sendMessage(chatId, message);
         log.info("리마인더 발송 완료: userKey={}, reminderTime={}", user.getUserKey(), reminderTime);

@@ -374,9 +374,9 @@ public class DashboardQueryService {
             return new SnapshotResponse<>(null, List.of());
         }
 
-        List<Exchange> markets = (market == Exchange.ALL) ? List.of(Exchange.KOSPI, Exchange.KOSDAQ) : List.of(market);
+        List<Exchange> markets = market == Exchange.ALL ? List.of(Exchange.KOSPI, Exchange.KOSDAQ) : List.of(market);
 
-        List<IntradayInvestorType> investors = (investor == IntradayInvestorType.FOREIGN_TOTAL)
+        List<IntradayInvestorType> investors = investor == IntradayInvestorType.FOREIGN_TOTAL
                 ? List.of(IntradayInvestorType.FOREIGNER, IntradayInvestorType.FOREIGN_COMPANY)
                 : List.of(investor);
 

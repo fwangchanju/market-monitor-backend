@@ -14,7 +14,7 @@ public class HoldingsCache {
     }
 
     public String topStockCode() {
-        return holdings.isEmpty() ? null : holdings.get(0).stockCode();
+        return holdings.isEmpty() ? null : holdings.getFirst().stockCode();
     }
 
     public List<Kt00018Response.HoldingItem> getAll() {

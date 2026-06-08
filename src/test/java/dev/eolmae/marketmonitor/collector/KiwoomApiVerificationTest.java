@@ -123,7 +123,7 @@ class KiwoomApiVerificationTest {
                 int tickCount =
                         response.priceTicks() != null ? response.priceTicks().size() : 0;
                 if (tickCount > 0) {
-                    var latest = response.priceTicks().get(0);
+                    var latest = response.priceTicks().getFirst();
                     log.info(
                             "[ka20001][{}] 시간대별 틱: {}건 | 최근={} 지수={}",
                             label,
@@ -252,7 +252,9 @@ class KiwoomApiVerificationTest {
                                 investor.label(),
                                 amtQty.label(),
                                 response);
-                        if (response.items() == null) continue;
+                        if (response.items() == null) {
+                            continue;
+                        }
                         for (var item : response.items()) {
                             long buy = NumberParser.parseLong(item.buyQty());
                             long sel = NumberParser.parseLong(item.selQty());
@@ -550,29 +552,31 @@ class KiwoomApiVerificationTest {
             // [가설: 틱이 누적값] KRX 최신 틱 + NXT 최신 틱 합산
             log.info("[ka90008][가설-누적] KRX 최신 틱 + NXT 최신 틱 합산 (누적값 가설 검증)");
             Ka90008Response.TradeTick krxLatest =
-                    (krx90008.ticks() != null && !krx90008.ticks().isEmpty())
+                    krx90008.ticks() != null && !krx90008.ticks().isEmpty()
                             ? krx90008.ticks().stream()
                                     .max((a, b) -> a.tm().compareTo(b.tm()))
                                     .orElse(null)
                             : null;
             Ka90008Response.TradeTick nxtLatest =
-                    (nxt90008.ticks() != null && !nxt90008.ticks().isEmpty())
+                    nxt90008.ticks() != null && !nxt90008.ticks().isEmpty()
                             ? nxt90008.ticks().stream()
                                     .max((a, b) -> a.tm().compareTo(b.tm()))
                                     .orElse(null)
                             : null;
-            if (krxLatest != null)
+            if (krxLatest != null) {
                 log.info(
                         "[ka90008][가설-누적][KRX최신] 시간={} 매수금액={} 매도금액={}",
                         krxLatest.tm(),
                         krxLatest.prmBuyAmt(),
                         krxLatest.prmSellAmt());
-            if (nxtLatest != null)
+            }
+            if (nxtLatest != null) {
                 log.info(
                         "[ka90008][가설-누적][NXT최신] 시간={} 매수금액={} 매도금액={}",
                         nxtLatest.tm(),
                         nxtLatest.prmBuyAmt(),
                         nxtLatest.prmSellAmt());
+            }
             long latestBuyAmt = (krxLatest != null ? NumberParser.parseLong(krxLatest.prmBuyAmt()) : 0)
                     + (nxtLatest != null ? NumberParser.parseLong(nxtLatest.prmBuyAmt()) : 0);
             long latestSellAmt = (krxLatest != null ? NumberParser.parseLong(krxLatest.prmSellAmt()) : 0)
@@ -593,7 +597,7 @@ class KiwoomApiVerificationTest {
             // [기존 방식: 전 틱 누적합] 비교용
             log.info("[ka90008][기존-누적합] 모든 틱 합산 (이전 방식)");
             Map<String, Agg> tickMap = new LinkedHashMap<>();
-            if (krx90008.ticks() != null)
+            if (krx90008.ticks() != null) {
                 krx90008.ticks()
                         .forEach(t -> tickMap.merge(
                                 t.tm(),
@@ -605,7 +609,8 @@ class KiwoomApiVerificationTest {
                                         NumberParser.parseLong(t.prmSellQty()),
                                         NumberParser.parseLong(t.prmNetprpsQty())),
                                 Agg::merge));
-            if (nxt90008.ticks() != null)
+            }
+            if (nxt90008.ticks() != null) {
                 nxt90008.ticks()
                         .forEach(t -> tickMap.merge(
                                 t.tm(),
@@ -617,7 +622,11 @@ class KiwoomApiVerificationTest {
                                         NumberParser.parseLong(t.prmSellQty()),
                                         NumberParser.parseLong(t.prmNetprpsQty())),
                                 Agg::merge));
-            long[] cumBuyAmt = {0}, cumSellAmt = {0}, cumBuyQty = {0}, cumSellQty = {0};
+            }
+            long[] cumBuyAmt = {0};
+            long[] cumSellAmt = {0};
+            long[] cumBuyQty = {0};
+            long[] cumSellQty = {0};
             tickMap.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(e -> {
                 var a = e.getValue();
                 cumBuyAmt[0] += a.buyAmt();
@@ -646,7 +655,7 @@ class KiwoomApiVerificationTest {
             log.info("[ka90013][NXT] raw: {}", nxt);
 
             Map<String, Agg> aggMap = new LinkedHashMap<>();
-            if (krx.ticks() != null)
+            if (krx.ticks() != null) {
                 krx.ticks()
                         .forEach(t -> aggMap.merge(
                                 t.dt(),
@@ -658,7 +667,8 @@ class KiwoomApiVerificationTest {
                                         NumberParser.parseLong(t.prmSellQty()),
                                         NumberParser.parseLong(t.prmNetprpsQty())),
                                 Agg::merge));
-            if (nxt.ticks() != null)
+            }
+            if (nxt.ticks() != null) {
                 nxt.ticks()
                         .forEach(t -> aggMap.merge(
                                 t.dt(),
@@ -670,6 +680,7 @@ class KiwoomApiVerificationTest {
                                         NumberParser.parseLong(t.prmSellQty()),
                                         NumberParser.parseLong(t.prmNetprpsQty())),
                                 Agg::merge));
+            }
 
             aggMap.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(e -> {
                 var a = e.getValue();

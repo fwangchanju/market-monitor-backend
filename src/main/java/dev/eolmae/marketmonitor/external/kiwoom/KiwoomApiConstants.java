@@ -1,6 +1,6 @@
 package dev.eolmae.marketmonitor.external.kiwoom;
 
-public class KiwoomApiConstants {
+public final class KiwoomApiConstants {
 
     private KiwoomApiConstants() {}
 

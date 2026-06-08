@@ -31,7 +31,7 @@ public class KrxAuthClient {
     @Value("${krx.login-pw}")
     private String loginPw;
 
-    private volatile String cachedCookie = null;
+    private volatile String cachedCookie;
 
     public String getCookie() {
         if (cachedCookie == null) {

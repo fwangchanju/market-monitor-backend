@@ -29,7 +29,7 @@ public class PrimaryStockResolverService {
     public String resolveStockCode() {
         List<WatchStock> primaries = watchStockRepository.findByUserUserKeyAndIsPrimaryTrue(DEFAULT_USER_KEY);
         if (!primaries.isEmpty()) {
-            return primaries.get(0).getStock().getStockCode();
+            return primaries.getFirst().getStock().getStockCode();
         }
 
         String topCode = holdingsCache.topStockCode();

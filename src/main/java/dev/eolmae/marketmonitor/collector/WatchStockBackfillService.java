@@ -1,11 +1,11 @@
 package dev.eolmae.marketmonitor.collector;
 
+import dev.eolmae.marketmonitor.common.enums.Zone;
 import dev.eolmae.marketmonitor.domain.history.repository.ProgramTradingDailyHistoryRepository;
 import dev.eolmae.marketmonitor.domain.history.repository.ProgramTradingHistoryRepository;
 import dev.eolmae.marketmonitor.domain.history.repository.ShortSellingDailyHistoryRepository;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -16,8 +16,6 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class WatchStockBackfillService {
 
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-
     private final ShortSellingCollector shortSellingCollector;
     private final ProgramTradingCollector programTradingCollector;
     private final ShortSellingDailyHistoryRepository shortSellingRepository;
@@ -27,7 +25,7 @@ public class WatchStockBackfillService {
     @Async
     public void backfill(String stockCode) {
         LocalDateTime snapshotTime =
-                LocalDateTime.now(KST).withMinute(0).withSecond(0).withNano(0);
+                LocalDateTime.now(Zone.KST.zoneId()).withMinute(0).withSecond(0).withNano(0);
         LocalDate yesterday = snapshotTime.toLocalDate().minusDays(1);
         log.info("관심종목 백필 시작: stockCode={}, snapshotTime={}", stockCode, snapshotTime);
 

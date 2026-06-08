@@ -4,6 +4,7 @@ import dev.eolmae.marketmonitor.common.enums.Board;
 import dev.eolmae.marketmonitor.common.enums.Exchange;
 import dev.eolmae.marketmonitor.common.enums.StockMarketCode;
 import dev.eolmae.marketmonitor.common.util.NumberParser;
+import dev.eolmae.marketmonitor.common.util.StockCode;
 import dev.eolmae.marketmonitor.domain.dashboard.IndexContributionRankingSnapshot;
 import dev.eolmae.marketmonitor.domain.dashboard.MarketOverviewSnapshot;
 import dev.eolmae.marketmonitor.domain.dashboard.repository.IndexContributionRankingSnapshotRepository;
@@ -83,7 +84,7 @@ public class IndexContributionRankingCollector {
 
         BigDecimal prevTotalMarketCap = BigDecimal.ZERO;
         for (Ka20002Response.StockItem item : items) {
-            StockMaster master = masterMap.get(stripSuffix(item.stkCd()));
+            StockMaster master = masterMap.get(StockCode.removeSuffix(item.stkCd()));
             if (!isValidForMarket(master, marketCode)) {
                 continue;
             }
@@ -97,7 +98,7 @@ public class IndexContributionRankingCollector {
 
         List<ScoredStock> scored = new ArrayList<>();
         for (Ka20002Response.StockItem item : items) {
-            String stockCode = stripSuffix(item.stkCd());
+            String stockCode = StockCode.removeSuffix(item.stkCd());
             StockMaster master = masterMap.get(stockCode);
             if (!isValidForMarket(master, marketCode)) {
                 continue;
@@ -152,14 +153,6 @@ public class IndexContributionRankingCollector {
                 .orElseThrow(() ->
                         new EscalateException("MarketOverviewSnapshot 데이터 없음 — 지수기여도 연산 불가: market=" + marketType));
         return snapshot.getIndexValue().subtract(snapshot.getChangeValue());
-    }
-
-    private static String stripSuffix(String stkCd) {
-        if (stkCd == null) {
-            return "";
-        }
-        int idx = stkCd.indexOf('_');
-        return idx >= 0 ? stkCd.substring(0, idx) : stkCd.trim();
     }
 
     private enum MrktTp {

@@ -1,11 +1,11 @@
 package dev.eolmae.marketmonitor.external.kiwoom.client;
 
+import dev.eolmae.marketmonitor.common.enums.Zone;
 import dev.eolmae.marketmonitor.exception.KiwoomApiException;
 import dev.eolmae.marketmonitor.external.kiwoom.config.KiwoomProperties;
 import dev.eolmae.marketmonitor.external.kiwoom.dto.TokenResponse;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -58,7 +58,7 @@ public class KiwoomTokenManager {
         cachedToken = response.token();
         LocalDateTime expiresDt =
                 LocalDateTime.parse(response.expiresAt(), DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
-        tokenExpiry = expiresDt.minusMinutes(5).atZone(ZoneId.of("Asia/Seoul")).toInstant();
+        tokenExpiry = expiresDt.minusMinutes(5).atZone(Zone.KST.zoneId()).toInstant();
         log.info("Kiwoom 토큰 발급 완료. 만료 예정: {}", tokenExpiry);
         return cachedToken;
     }

@@ -8,9 +8,9 @@ import dev.eolmae.marketmonitor.collector.ProgramTradingCollector;
 import dev.eolmae.marketmonitor.collector.ProgramTradingRankingCollector;
 import dev.eolmae.marketmonitor.collector.ShortSellingCollector;
 import dev.eolmae.marketmonitor.collector.StockMasterCollector;
+import dev.eolmae.marketmonitor.common.enums.Zone;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -23,8 +23,6 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class CollectionScheduler {
 
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-
     private final MarketOverviewCollector marketOverviewCollector;
     private final InvestorTradingSummaryCollector investorTradingSummaryCollector;
     private final IntradayInvestorRankingCollector intradayInvestorRankingCollector;
@@ -34,10 +32,12 @@ public class CollectionScheduler {
     private final ShortSellingCollector shortSellingCollector;
     private final StockMasterCollector stockMasterCollector;
 
+    private static final String KST_ZONE_ID = "Asia/Seoul";
+
     /**
      * 장중 시장 데이터 수집: 평일 08:00~20:00, 1시간 간격
      */
-    @Scheduled(cron = "0 0 8-20 * * MON-FRI", zone = "Asia/Seoul")
+    @Scheduled(cron = "0 0 8-20 * * MON-FRI", zone = KST_ZONE_ID)
     public void collectMarketData() {
         LocalDateTime snapshotTime = resolveSnapshotTime();
         log.info("장중 시장 데이터 수집 시작: snapshotTime={}", snapshotTime);
@@ -55,9 +55,9 @@ public class CollectionScheduler {
     /**
      * 프로그램매매 일별 이력 수집: 평일 21:00 (장 마감 후 1회)
      */
-    @Scheduled(cron = "0 0 21 * * MON-FRI", zone = "Asia/Seoul")
+    @Scheduled(cron = "0 0 21 * * MON-FRI", zone = KST_ZONE_ID)
     public void collectProgramTradingDaily() {
-        LocalDate tradeDate = LocalDate.now(KST);
+        LocalDate tradeDate = LocalDate.now(Zone.KST.zoneId());
         log.info("프로그램매매 일별 이력 수집 시작: tradeDate={}", tradeDate);
         runSafely("프로그램매매일별", () -> programTradingCollector.collectDaily(tradeDate));
         log.info("프로그램매매 일별 이력 수집 완료: tradeDate={}", tradeDate);
@@ -66,10 +66,10 @@ public class CollectionScheduler {
     /**
      * 공매도 데이터 수집: 평일 20:30 (당일 자료 18:30 이후 제공)
      */
-    @Scheduled(cron = "0 30 20 * * MON-FRI", zone = "Asia/Seoul")
+    @Scheduled(cron = "0 30 20 * * MON-FRI", zone = KST_ZONE_ID)
     public void collectShortSelling() {
         LocalDateTime snapshotTime =
-                LocalDateTime.now(KST).withMinute(0).withSecond(0).withNano(0);
+                LocalDateTime.now(Zone.KST.zoneId()).withMinute(0).withSecond(0).withNano(0);
         log.info("공매도 데이터 수집 시작: snapshotTime={}", snapshotTime);
 
         runSafely("공매도", () -> shortSellingCollector.collect(snapshotTime));
@@ -80,7 +80,7 @@ public class CollectionScheduler {
     /**
      * 종목 마스터 동기화: 평일 07:00 (장 시작 전)
      */
-    @Scheduled(cron = "0 0 7 * * MON-FRI", zone = "Asia/Seoul")
+    @Scheduled(cron = "0 0 7 * * MON-FRI", zone = KST_ZONE_ID)
     public void syncStockMaster() {
         log.info("종목 마스터 동기화 시작");
 
@@ -94,7 +94,7 @@ public class CollectionScheduler {
      * 예) 09:07:32 → 09:00:00 / 10:00:12 → 10:00:00
      */
     private LocalDateTime resolveSnapshotTime() {
-        LocalDateTime now = LocalDateTime.now(KST);
+        LocalDateTime now = LocalDateTime.now(Zone.KST.zoneId());
         return now.withMinute(0).withSecond(0).withNano(0);
     }
 

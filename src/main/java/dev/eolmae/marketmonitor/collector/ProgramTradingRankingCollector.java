@@ -6,6 +6,7 @@ import dev.eolmae.marketmonitor.common.enums.Exchange;
 import dev.eolmae.marketmonitor.common.enums.ProgramRankingType;
 import dev.eolmae.marketmonitor.common.enums.StexType;
 import dev.eolmae.marketmonitor.common.util.NumberParser;
+import dev.eolmae.marketmonitor.common.util.StockCode;
 import dev.eolmae.marketmonitor.domain.dashboard.ProgramTradingRankingSnapshot;
 import dev.eolmae.marketmonitor.domain.dashboard.repository.ProgramTradingRankingSnapshotRepository;
 import dev.eolmae.marketmonitor.external.kiwoom.client.KiwoomApiClient;
@@ -73,8 +74,7 @@ public class ProgramTradingRankingCollector {
 
         int rank = 1; // TODO 왜 있어야됨?
         for (Ka90003Response.RankingItem item : items) {
-            // stk_cd에 "_AL" 또는 "_NX" suffix가 있으면 제거 (예: 000660_AL → 000660)
-            String stockCode = stripAlSuffix(item.stkCd());
+            String stockCode = StockCode.removeSuffix(item.stkCd());
             if (stockCode.isBlank()) {
                 continue;
             }
@@ -113,15 +113,5 @@ public class ProgramTradingRankingCollector {
         MrktTp(String value) {
             this.value = value;
         }
-    }
-
-    private static String stripAlSuffix(String stkCd) {
-        if (stkCd == null) {
-            return "";
-        }
-        String trimmed = stkCd.trim();
-        // "_AL" 또는 "_NX" suffix 제거
-        int underscoreIdx = trimmed.indexOf('_');
-        return underscoreIdx >= 0 ? trimmed.substring(0, underscoreIdx) : trimmed;
     }
 }

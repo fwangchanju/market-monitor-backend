@@ -54,16 +54,15 @@ dependencies {
 	implementation 'com.github.ben-manes.caffeine:caffeine'
 	implementation 'com.google.guava:guava:33.4.8-jre'
 
+	// commons-lang3
+	implementation 'org.apache.commons:commons-lang3'
+
 	// ok http, krx data market login
 	implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 	implementation 'com.squareup.okhttp3:okhttp-urlconnection:4.12.0'
 
-	// error prone
+	// 코드 품질 (error prone, openrewrite)
 	errorprone 'com.google.errorprone:error_prone_core:2.49.0'
-
-	// openrewrite — 수동 실행(rewriteDryRun/rewriteRun)용. 광범위 레시피로 폭넓게 점검하되,
-	// spotless(palantir)와 충돌하는 import 정렬은 이후 spotlessApply가 자동 원복하고,
-	// 와일드카드 묶기는 rewrite.yml의 no-wildcard 스타일로 차단한다.
 	rewrite(platform('org.openrewrite.recipe:rewrite-recipe-bom:3.32.0'))
 	rewrite('org.openrewrite.recipe:rewrite-migrate-java')
 	rewrite('org.openrewrite.recipe:rewrite-static-analysis')
@@ -76,7 +75,7 @@ tasks.named('test') {
 rewrite {
 	activeRecipe('org.openrewrite.java.migrate.UpgradeToJava21')
 	activeRecipe('org.openrewrite.staticanalysis.CommonStaticAnalysis')
-	// 와일드카드 import 묶기 차단 (palantir은 와일드카드를 펴주지 않으므로 OpenRewrite 단에서 막음)
+	// rewrite.yml 로 custom style 정의, import 와일드카드 병합 차단
 	activeStyle('dev.eolmae.NoWildcardImports')
 }
 
@@ -88,6 +87,6 @@ spotless {
 }
 
 tasks.named('compileTestJava') {
-	// 테스트 메서드명에 한글을 사용하는 컨벤션과 충돌(UnicodeInCode 등)하므로 테스트 코드는 검사 대상에서 제외
+	// 테스트 코드는 검사 대상에서 제외
 	options.errorprone.enabled = false
 }

@@ -1,8 +1,8 @@
 package dev.eolmae.marketmonitor.domain.notification.service;
 
-import dev.eolmae.marketmonitor.external.renderer.ScreenshotClient;
+import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
+import dev.eolmae.marketmonitor.domain.renderer.ScreenshotClient;
 import dev.eolmae.marketmonitor.external.telegram.TelegramClient;
-import dev.eolmae.marketmonitor.external.telegram.TelegramProperties;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

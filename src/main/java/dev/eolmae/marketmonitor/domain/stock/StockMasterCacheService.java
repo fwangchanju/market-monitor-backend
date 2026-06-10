@@ -1,6 +1,6 @@
 package dev.eolmae.marketmonitor.domain.stock;
 
-import dev.eolmae.marketmonitor.config.CacheConfig;
+import dev.eolmae.marketmonitor.domain.stock.config.CacheConfig;
 import dev.eolmae.marketmonitor.domain.stock.repository.StockMasterRepository;
 import java.util.Map;
 import java.util.stream.Collectors;

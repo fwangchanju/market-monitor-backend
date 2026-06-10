@@ -1,5 +1,6 @@
 package dev.eolmae.marketmonitor.external.telegram;
 
+import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

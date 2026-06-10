@@ -1,4 +1,4 @@
-package dev.eolmae.marketmonitor.collector;
+package dev.eolmae.marketmonitor.domain.stock.collector;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -34,25 +34,25 @@ class FullDataCollectionTest {
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     @Autowired
-    StockMasterCollector stockMasterCollector;
+    StockInfoCollector stockInfoCollector;
 
     @Autowired
-    MarketOverviewCollector marketOverviewCollector;
+    SectorCurrentPriceCollector sectorCurrentPriceCollector;
 
     @Autowired
-    InvestorTradingSummaryCollector investorTradingSummaryCollector;
+    SectorInvestorNetBuyCollector sectorInvestorNetBuyCollector;
 
     @Autowired
     IntradayInvestorRankingCollector intradayInvestorRankingCollector;
 
     @Autowired
-    ProgramTradingRankingCollector programTradingRankingCollector;
+    ProgramNetBuyRankingCollector programNetBuyRankingCollector;
 
     @Autowired
-    ProgramTradingCollector programTradingCollector;
+    ProgramTradeTrendCollector programTradeTrendCollector;
 
     @Autowired
-    ShortSellingCollector shortSellingCollector;
+    ShortSellingTrendCollector shortSellingTrendCollector;
 
     @Autowired
     IndexContributionRankingCollector indexContributionRankingCollector;
@@ -78,7 +78,7 @@ class FullDataCollectionTest {
         //        run("지수기여도랭킹",       () -> indexContributionRankingCollector.collect(snapshotTime));
         //        run("프로그램매매일별",     () -> programTradingCollector.collectDaily(tradeDate));
         //        run("프로그램매매장중",     () -> programTradingCollector.collect(snapshotTime));
-        run("공매도", () -> shortSellingCollector.collect(snapshotTime));
+        run("공매도", () -> shortSellingTrendCollector.collect(snapshotTime));
 
         log.info("=== 전체 수집 완료 ===");
     }

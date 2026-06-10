@@ -1,0 +1,20 @@
+package dev.eolmae.marketmonitor.domain.stock.dto;
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import dev.eolmae.marketmonitor.domain.stock.client.BaseRequest;
+
+// ka20001: 업종현재가요청
+public record SectorCurrentPriceRequest(
+        @JsonProperty("mrkt_tp") String mrktTp,
+        @JsonProperty("inds_cd") String indsCd) implements BaseRequest {
+
+    @Override
+    public String path() {
+        return "/api/dostk/sect";
+    }
+
+    @Override
+    public String apiId() {
+        return "ka20001";
+    }
+}

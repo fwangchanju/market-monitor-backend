@@ -1,15 +1,15 @@
 package dev.eolmae.marketmonitor.domain.stock;
 
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Kt00018Response;
+import dev.eolmae.marketmonitor.domain.stock.dto.AccountBalanceResponse;
 import java.util.List;
 import org.springframework.stereotype.Component;
 
 @Component
 public class HoldingsCache {
 
-    private volatile List<Kt00018Response.HoldingItem> holdings = List.of();
+    private volatile List<AccountBalanceResponse.HoldingItem> holdings = List.of();
 
-    public void update(List<Kt00018Response.HoldingItem> sorted) {
+    public void update(List<AccountBalanceResponse.HoldingItem> sorted) {
         this.holdings = sorted;
     }
 
@@ -17,7 +17,7 @@ public class HoldingsCache {
         return holdings.isEmpty() ? null : holdings.getFirst().stockCode();
     }
 
-    public List<Kt00018Response.HoldingItem> getAll() {
+    public List<AccountBalanceResponse.HoldingItem> getAll() {
         return holdings;
     }
 }

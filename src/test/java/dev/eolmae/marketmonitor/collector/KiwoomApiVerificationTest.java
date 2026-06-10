@@ -1,31 +1,14 @@
-package dev.eolmae.marketmonitor.collector;
+package dev.eolmae.marketmonitor.domain.stock.collector;
 
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import dev.eolmae.marketmonitor.common.enums.Exchange;
 import dev.eolmae.marketmonitor.common.util.NumberParser;
-import dev.eolmae.marketmonitor.domain.dashboard.IndexContributionRankingSnapshot;
-import dev.eolmae.marketmonitor.domain.dashboard.repository.IndexContributionRankingSnapshotRepository;
-import dev.eolmae.marketmonitor.domain.dashboard.repository.MarketOverviewSnapshotRepository;
-import dev.eolmae.marketmonitor.external.kiwoom.client.KiwoomApiClient;
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10051Request;
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10051Response;
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10065Request;
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10065Response;
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10099Request;
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10099Response;
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka20001Request;
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka20001Response;
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka20002Request;
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka20002Response;
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka90003Request;
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka90003Response;
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka90008Request;
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka90008Response;
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka90013Request;
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Ka90013Response;
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Kt00018Request;
-import dev.eolmae.marketmonitor.external.kiwoom.dto.Kt00018Response;
+import dev.eolmae.marketmonitor.domain.stock.IndexContributionRankingSnapshot;
+import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
+import dev.eolmae.marketmonitor.domain.stock.dto.*;
+import dev.eolmae.marketmonitor.domain.stock.repository.IndexContributionRankingSnapshotRepository;
+import dev.eolmae.marketmonitor.domain.stock.repository.MarketOverviewSnapshotRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -77,7 +60,7 @@ class KiwoomApiVerificationTest {
     KiwoomApiClient kiwoomApiClient;
 
     @Autowired
-    MarketOverviewCollector marketOverviewCollector;
+    SectorCurrentPriceCollector sectorCurrentPriceCollector;
 
     @Autowired
     IndexContributionRankingCollector indexContributionRankingCollector;
@@ -104,7 +87,8 @@ class KiwoomApiVerificationTest {
         for (var market : List.of(new String[] {"KOSPI", "0", "001"}, new String[] {"KOSDAQ", "1", "101"})) {
             String label = market[0];
             try {
-                var response = kiwoomApiClient.post(new Ka20001Request(market[1], market[2]), Ka20001Response.class);
+                var response = kiwoomApiClient.post(
+                        new SectorCurrentPriceRequest(market[1], market[2]), SectorCurrentPriceResponse.class);
 
                 log.info("[ka20001][{}] raw: {}", label, response);
                 log.info(
@@ -158,8 +142,9 @@ class KiwoomApiVerificationTest {
             String label = market[0];
             String indsCd = market[2];
             try {
-                var response =
-                        kiwoomApiClient.post(new Ka10051Request(market[1], "0", today, "1"), Ka10051Response.class);
+                var response = kiwoomApiClient.post(
+                        new SectorInvestorNetBuyRequest(market[1], "0", today, "1"),
+                        SectorInvestorNetBuyResponse.class);
 
                 log.info("[ka10051][{}] raw: {}", label, response);
 
@@ -244,8 +229,9 @@ class KiwoomApiVerificationTest {
 
                 for (var investor : foreignInvestors) {
                     try {
-                        var request = new Ka10065Request("1", market.mrktTp(), investor.orgnTp(), amtQty.amtQtyTp());
-                        var response = kiwoomApiClient.post(request, Ka10065Response.class);
+                        var request = new IntradayInvestorRankingRequest(
+                                "1", market.mrktTp(), investor.orgnTp(), amtQty.amtQtyTp());
+                        var response = kiwoomApiClient.post(request, IntradayInvestorRankingResponse.class);
                         log.info(
                                 "[ka10065][{}][{}][{}] raw: {}",
                                 market.label(),
@@ -320,8 +306,8 @@ class KiwoomApiVerificationTest {
                 String label = String.format("[%s][%s]", market.label(), ranking.label());
                 try {
                     // amt_qty_tp=1(금액), stex_tp=3(KRX+NXT 통합)
-                    var request = new Ka90003Request(ranking.trdeUpperTp(), "1", market.mrktTp(), "1");
-                    var response = kiwoomApiClient.post(request, Ka90003Response.class);
+                    var request = new ProgramNetBuyRankingRequest(ranking.trdeUpperTp(), "1", market.mrktTp(), "1");
+                    var response = kiwoomApiClient.post(request, ProgramNetBuyRankingResponse.class);
 
                     log.info("[ka90003]{} raw: {}", label, response);
 
@@ -383,8 +369,7 @@ class KiwoomApiVerificationTest {
 
         try {
             var response = kiwoomApiClient.post(
-                    new dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10014Request(stockCode, "2", startDt, today),
-                    dev.eolmae.marketmonitor.external.kiwoom.dto.Ka10014Response.class);
+                    new ShortSellingTrendRequest(stockCode, "2", startDt, today), ShortSellingTrendResponse.class);
 
             log.info("[ka10014] raw: {}", response);
 
@@ -441,7 +426,7 @@ class KiwoomApiVerificationTest {
         // IndexContributionRankingCollector가 전일 지수값 역산에 MarketOverviewSnapshot을 사용하므로 선행 수집 필요
         if (marketOverviewSnapshotRepository.count() == 0) {
             log.info("MarketOverviewSnapshot 없음 → 선행 수집 실행");
-            marketOverviewCollector.collect(snapshotTime);
+            sectorCurrentPriceCollector.collect(snapshotTime);
         }
 
         indexContributionRankingCollector.collect(snapshotTime);
@@ -503,11 +488,13 @@ class KiwoomApiVerificationTest {
 
         // ka90008 — 장중 (각 틱 raw 값 확인 + 최신 틱 합산 vs 전 틱 누적합 비교)
         log.info("--- ka90008 장중(시간별) KRX raw 틱 ---");
-        Ka90008Response krx90008 = null;
-        Ka90008Response nxt90008 = null;
+        HourlyProgramTradeTrendResponse krx90008 = null;
+        HourlyProgramTradeTrendResponse nxt90008 = null;
         try {
-            krx90008 = kiwoomApiClient.post(new Ka90008Request("039490", "1", today), Ka90008Response.class);
-            nxt90008 = kiwoomApiClient.post(new Ka90008Request("039490_NX", "1", today), Ka90008Response.class);
+            krx90008 = kiwoomApiClient.post(
+                    new HourlyProgramTradeTrendRequest("039490", "1", today), HourlyProgramTradeTrendResponse.class);
+            nxt90008 = kiwoomApiClient.post(
+                    new HourlyProgramTradeTrendRequest("039490_NX", "1", today), HourlyProgramTradeTrendResponse.class);
 
             // KRX raw 틱 (시간 오름차순)
             log.info(
@@ -551,13 +538,13 @@ class KiwoomApiVerificationTest {
 
             // [가설: 틱이 누적값] KRX 최신 틱 + NXT 최신 틱 합산
             log.info("[ka90008][가설-누적] KRX 최신 틱 + NXT 최신 틱 합산 (누적값 가설 검증)");
-            Ka90008Response.TradeTick krxLatest =
+            HourlyProgramTradeTrendResponse.TradeTick krxLatest =
                     krx90008.ticks() != null && !krx90008.ticks().isEmpty()
                             ? krx90008.ticks().stream()
                                     .max((a, b) -> a.tm().compareTo(b.tm()))
                                     .orElse(null)
                             : null;
-            Ka90008Response.TradeTick nxtLatest =
+            HourlyProgramTradeTrendResponse.TradeTick nxtLatest =
                     nxt90008.ticks() != null && !nxt90008.ticks().isEmpty()
                             ? nxt90008.ticks().stream()
                                     .max((a, b) -> a.tm().compareTo(b.tm()))
@@ -649,8 +636,10 @@ class KiwoomApiVerificationTest {
         // ka90013 — 일별 (KRX+NXT 날짜별 합산)
         log.info("--- ka90013 일별 KRX+NXT 합산 ---");
         try {
-            var krx = kiwoomApiClient.post(new Ka90013Request("039490", "1"), Ka90013Response.class);
-            var nxt = kiwoomApiClient.post(new Ka90013Request("039490_NX", "1"), Ka90013Response.class);
+            var krx = kiwoomApiClient.post(
+                    new DailyProgramTradeTrendRequest("039490", "1"), DailyProgramTradeTrendResponse.class);
+            var nxt = kiwoomApiClient.post(
+                    new DailyProgramTradeTrendRequest("039490_NX", "1"), DailyProgramTradeTrendResponse.class);
             log.info("[ka90013][KRX] raw: {}", krx);
             log.info("[ka90013][NXT] raw: {}", nxt);
 
@@ -704,7 +693,7 @@ class KiwoomApiVerificationTest {
     @Test
     void kt00018_보유종목현황() {
         try {
-            var response = kiwoomApiClient.post(Kt00018Request.defaults(), Kt00018Response.class);
+            var response = kiwoomApiClient.post(AccountBalanceRequest.defaults(), AccountBalanceResponse.class);
             log.info("[kt00018] raw: {}", response);
         } catch (Exception e) {
             log.warn("[kt00018] 예외: {}", e.getMessage());
@@ -715,8 +704,8 @@ class KiwoomApiVerificationTest {
     void ka20002_업종별주가() {
         for (var market : List.of(new String[] {"KOSPI", "0", "001"}, new String[] {"KOSDAQ", "1", "101"})) {
             try {
-                var response =
-                        kiwoomApiClient.post(new Ka20002Request(market[1], market[2], "3"), Ka20002Response.class);
+                var response = kiwoomApiClient.post(
+                        new SectorPriceListRequest(market[1], market[2], "3"), SectorPriceListResponse.class);
                 log.info("[ka20002][{}] raw: {}", market[0], response);
             } catch (Exception e) {
                 log.warn("[ka20002][{}] 예외: {}", market[0], e.getMessage());
@@ -728,7 +717,7 @@ class KiwoomApiVerificationTest {
     void ka10099_종목정보리스트() {
         for (String mrktTp : List.of("0", "10")) {
             try {
-                var response = kiwoomApiClient.post(new Ka10099Request(mrktTp), Ka10099Response.class);
+                var response = kiwoomApiClient.post(new StockInfoRequest(mrktTp), StockInfoResponse.class);
                 log.info("[ka10099][mrkt_tp={}] raw: {}", mrktTp, response);
             } catch (Exception e) {
                 log.warn("[ka10099][mrkt_tp={}] 예외: {}", mrktTp, e.getMessage());

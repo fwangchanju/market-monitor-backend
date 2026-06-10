@@ -1,5 +1,6 @@
 package dev.eolmae.marketmonitor.domain.krx.client;
 
+import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.domain.krx.enums.KrxResponseCode;
 import java.net.CookieManager;
@@ -76,7 +77,7 @@ public class KrxAuthClient {
             }
 
             if (!KrxResponseCode.LOGIN_SUCCESS.in(responseBody)) {
-                throw new EscalateException("KRX 로그인 실패: " + responseBody);
+                throw new EscalateException(ErrorCode.KRX_LOGIN_FAILED, responseBody);
             }
 
             String cookie = cookieManager.getCookieStore().getCookies().stream()
@@ -89,7 +90,7 @@ public class KrxAuthClient {
         } catch (EscalateException e) {
             throw e;
         } catch (Exception e) {
-            throw new EscalateException("KRX 로그인 중 오류: " + e.getMessage(), e);
+            throw new EscalateException(ErrorCode.KRX_LOGIN_FAILED, e);
         }
     }
 

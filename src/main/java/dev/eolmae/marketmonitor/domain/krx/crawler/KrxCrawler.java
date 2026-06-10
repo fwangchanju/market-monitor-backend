@@ -2,6 +2,7 @@ package dev.eolmae.marketmonitor.domain.krx.crawler;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.domain.krx.client.KrxAuthClient;
 import dev.eolmae.marketmonitor.domain.krx.enums.KrxResponseCode;
@@ -42,7 +43,7 @@ public class KrxCrawler {
             responseBody = doFetch(params, cookie);
 
             if (KrxResponseCode.SESSION_EXPIRED.matches(responseBody)) {
-                throw new EscalateException("KRX 재로그인 후에도 LOGOUT — 수동 확인 필요: bld=" + params.get("bld"));
+                throw new EscalateException(ErrorCode.KRX_SESSION_EXPIRED, params.get("bld"));
             }
         }
 
@@ -69,12 +70,12 @@ public class KrxCrawler {
         try {
             root = objectMapper.readTree(responseBody);
         } catch (Exception e) {
-            throw new EscalateException("KRX 응답 JSON 파싱 실패: bld=" + bld, e);
+            throw new EscalateException(ErrorCode.KRX_RESPONSE_INVALID, e, bld);
         }
 
         JsonNode outBlock = root.get("OutBlock_1");
         if (outBlock == null || outBlock.isNull()) {
-            throw new EscalateException("KRX 응답에 OutBlock_1이 없음 — 인터페이스 구조 변경 의심: bld=" + bld);
+            throw new EscalateException(ErrorCode.KRX_RESPONSE_INVALID, bld);
         }
 
         List<JsonNode> result = new ArrayList<>();

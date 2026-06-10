@@ -5,6 +5,7 @@ import dev.eolmae.marketmonitor.domain.notification.properties.TelegramPropertie
 import dev.eolmae.marketmonitor.external.telegram.TelegramClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
 /**
@@ -14,21 +15,18 @@ import org.springframework.stereotype.Service;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class AlertService {
+public class EscalationService {
 
     private final TelegramClient telegramClient;
     private final TelegramProperties properties;
 
-    public void sendEscalation(EscalateException e) {
+    public void notificationError(EscalateException e) {
         String chatId = properties.developerChatId();
-        if (chatId == null || chatId.isBlank()) {
-            log.warn("DEVELOPER_CHAT_ID 미설정 — 에스컬레이션 알림 스킵: {}", e.getMessage());
+
+        if (StringUtils.isBlank(chatId)) {
             return;
         }
 
-        String message = String.format(
-                "⚠️ <b>에스컬레이션 오류 발생</b>\n\n<code>%s</code>\n\n%s", e.getClass().getSimpleName(), e.getMessage());
-
-        telegramClient.sendMessage(chatId, message);
+        telegramClient.sendMessage(chatId, e.createMessage());
     }
 }

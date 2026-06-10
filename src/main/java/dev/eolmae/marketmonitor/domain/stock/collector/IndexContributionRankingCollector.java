@@ -1,6 +1,7 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
 import dev.eolmae.marketmonitor.common.enums.Exchange;
+import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.common.util.NumberParser;
 import dev.eolmae.marketmonitor.common.util.StockCode;
@@ -100,7 +101,7 @@ public class IndexContributionRankingCollector {
         }
 
         if (prevTotalMarketCap.compareTo(BigDecimal.ZERO) == 0) {
-            throw new EscalateException("전일 전체 시가총액 합산 결과가 0: board=" + board);
+            throw new EscalateException(ErrorCode.PREV_MARKET_CAP_ZERO, board.name());
         }
 
         List<ScoredStock> scored = new ArrayList<>();
@@ -157,8 +158,7 @@ public class IndexContributionRankingCollector {
     private BigDecimal resolvePrevIndexValue(Exchange marketType) {
         MarketOverviewSnapshot snapshot = marketOverviewSnapshotRepository
                 .findTopByMarketTypeOrderBySnapshotTimeDesc(marketType)
-                .orElseThrow(() ->
-                        new EscalateException("MarketOverviewSnapshot 데이터 없음 — 지수기여도 연산 불가: market=" + marketType));
+                .orElseThrow(() -> new EscalateException(ErrorCode.BASE_SNAPSHOT_NOT_FOUND, marketType.name()));
         return snapshot.getIndexValue().subtract(snapshot.getChangeValue());
     }
 

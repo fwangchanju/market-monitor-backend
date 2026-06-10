@@ -19,7 +19,7 @@ public class TelegramClient {
     private static final String BASE_URL = "https://api.telegram.org";
 
     private final TelegramProperties properties;
-    private final RestClient restClient = RestClient.create();
+    private final RestClient restClient = RestClient.create(); // TODO RestClient Bean 사용
 
     public void sendMessage(String chatId, String text) {
         try {
@@ -27,7 +27,7 @@ public class TelegramClient {
                     .post()
                     .uri(BASE_URL + "/bot" + properties.botToken() + "/sendMessage")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(Map.of(
+                    .body(Map.of( // TODO Map 대신 DTO
                             "chat_id", chatId,
                             "text", text,
                             "parse_mode", "HTML"))

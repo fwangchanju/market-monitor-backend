@@ -6,11 +6,11 @@ package dev.eolmae.marketmonitor.common.exception;
  */
 public class EscalateException extends BusinessException {
 
-    public EscalateException(String message) {
-        super(message);
+    public EscalateException(ErrorCode errorCode, String... args) {
+        super(errorCode, args);
     }
 
-    public EscalateException(String message, Throwable cause) {
-        super(message, cause);
+    public EscalateException(ErrorCode errorCode, Throwable cause, String... args) {
+        super(errorCode, cause, args);
     }
 }

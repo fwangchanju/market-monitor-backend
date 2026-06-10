@@ -1,8 +1,9 @@
 package dev.eolmae.marketmonitor.domain.stock.client;
 
 import dev.eolmae.marketmonitor.common.enums.Zone;
+import dev.eolmae.marketmonitor.common.exception.BusinessException;
+import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.domain.stock.dto.TokenResponse;
-import dev.eolmae.marketmonitor.domain.stock.exception.KiwoomApiException;
 import dev.eolmae.marketmonitor.domain.stock.properties.KiwoomProperties;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -52,7 +53,7 @@ public class KiwoomTokenManager {
 
         if (response == null || response.returnCode() != SUCCESS_CODE) {
             String msg = response != null ? response.returnMsg() : "응답 없음";
-            throw new KiwoomApiException("Kiwoom 토큰 발급 실패: " + msg);
+            throw new BusinessException(ErrorCode.KIWOOM_TOKEN_ISSUE_FAILED, msg);
         }
 
         cachedToken = response.token();

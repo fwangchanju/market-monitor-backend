@@ -3,7 +3,8 @@ package dev.eolmae.marketmonitor.domain.stock.client;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.util.concurrent.RateLimiter;
-import dev.eolmae.marketmonitor.domain.stock.exception.KiwoomApiException;
+import dev.eolmae.marketmonitor.common.exception.BusinessException;
+import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.domain.stock.exception.KiwoomRateLimitException;
 import dev.eolmae.marketmonitor.domain.stock.properties.KiwoomProperties;
 import lombok.RequiredArgsConstructor;
@@ -53,7 +54,7 @@ public class KiwoomApiClient {
     @Recover
     public <T> T recoverFromRateLimit(KiwoomRateLimitException e, BaseRequest request, Class<T> dataClass) {
         log.warn("Kiwoom API rate limit 재시도 횟수 초과, 사이클 스킵: apiId={}", request.apiId());
-        throw new KiwoomApiException("Kiwoom API rate limit 초과로 사이클 스킵: " + request.apiId());
+        throw new BusinessException(ErrorCode.KIWOOM_RATE_LIMIT, request.apiId());
     }
 
     private JsonNode callApi(String path, String apiId, Object requestBody) {
@@ -73,16 +74,16 @@ public class KiwoomApiClient {
         } catch (HttpClientErrorException e) {
             if (e.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS) {
                 log.warn("Kiwoom API 429 rate limit: apiId={}", apiId);
-                throw new KiwoomRateLimitException("Kiwoom API 429: apiId=" + apiId);
+                throw new KiwoomRateLimitException(ErrorCode.KIWOOM_RATE_LIMIT, apiId);
             }
-            throw new KiwoomApiException("Kiwoom API HTTP 오류: " + e.getMessage(), e);
+            throw new BusinessException(ErrorCode.KIWOOM_HTTP_ERROR, e, apiId);
         }
 
         JsonNode response;
         try {
             response = objectMapper.readTree(raw);
         } catch (Exception e) {
-            throw new KiwoomApiException("Kiwoom API 응답 파싱 실패: " + raw, e);
+            throw new BusinessException(ErrorCode.KIWOOM_RESPONSE_PARSE_FAILED, e, apiId);
         }
 
         String returnCode = response.path("return_code").asText();
@@ -92,8 +93,10 @@ public class KiwoomApiClient {
                     apiId,
                     returnCode,
                     response.path("return_msg").asText());
-            throw new KiwoomApiException(
-                    "Kiwoom API 오류: " + response.path("return_msg").asText());
+            throw new BusinessException(
+                    ErrorCode.KIWOOM_ERROR_RESPONSE,
+                    apiId,
+                    response.path("return_msg").asText());
         }
 
         return response;

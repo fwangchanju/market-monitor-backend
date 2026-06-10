@@ -2,6 +2,7 @@ package dev.eolmae.marketmonitor.domain.dashboard.controller;
 
 import dev.eolmae.marketmonitor.common.enums.Exchange;
 import dev.eolmae.marketmonitor.common.exception.BusinessException;
+import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.DashboardResponse;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.IndexContributionItem;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.IntradayInvestorRankingItem;
@@ -61,7 +62,7 @@ public class DashboardController {
     @PostMapping("/send-dashboard") // renderer.enabled=true 시 활성화
     public SendDashboardResponse sendDashboard() {
         DashboardSendService svc =
-                dashboardSendService.orElseThrow(() -> new BusinessException("renderer가 비활성화 상태입니다."));
+                dashboardSendService.orElseThrow(() -> new BusinessException(ErrorCode.RENDERER_DISABLED));
         return new SendDashboardResponse(svc.sendDashboard());
     }
 

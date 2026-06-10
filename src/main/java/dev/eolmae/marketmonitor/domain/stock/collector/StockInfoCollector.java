@@ -1,6 +1,7 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
 import dev.eolmae.marketmonitor.common.enums.Exchange;
+import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.common.util.NumberParser;
 import dev.eolmae.marketmonitor.domain.stock.StockMaster;
@@ -41,7 +42,7 @@ public class StockInfoCollector {
         } catch (EscalateException e) {
             throw e;
         } catch (Exception e) {
-            throw new EscalateException("종목 마스터 동기화 실패 — API 호출 불가", e);
+            throw new EscalateException(ErrorCode.STOCK_MASTER_SYNC_FAILED, e);
         }
 
         // API에서 더 이상 조회되지 않는 종목은 비활성화

@@ -3,7 +3,7 @@ package dev.eolmae.marketmonitor.common.handler;
 import dev.eolmae.marketmonitor.common.exception.BusinessException;
 import dev.eolmae.marketmonitor.common.exception.ErrorResponse;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
-import dev.eolmae.marketmonitor.common.service.AlertService;
+import dev.eolmae.marketmonitor.common.service.EscalationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -16,20 +16,24 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RequiredArgsConstructor
 public class GlobalExceptionHandler {
 
-    private final AlertService alertService;
+    private final EscalationService escalationService;
 
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     @ExceptionHandler(EscalateException.class)
     public ErrorResponse handleEscalateException(EscalateException e) {
-        log.error("[ESCALATE] {}", e.getMessage(), e);
-        alertService.sendEscalation(e);
-        return new ErrorResponse(e.getMessage());
+        String message = e.createMessage();
+        log.error(message);
+        escalationService.notificationError(e);
+
+        return ErrorResponse.of(e.getErrorCode(), message);
     }
 
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     @ExceptionHandler(BusinessException.class)
     public ErrorResponse handleBusinessException(BusinessException e) {
-        log.error("[BUSINESS] {}", e.getMessage(), e);
-        return new ErrorResponse(e.getMessage());
+        String message = e.createMessage();
+        log.error(message);
+
+        return ErrorResponse.of(e.getErrorCode(), message);
     }
 }

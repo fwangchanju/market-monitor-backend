@@ -1,12 +1,12 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
 import dev.eolmae.marketmonitor.common.util.NumberParser;
-import dev.eolmae.marketmonitor.domain.stock.ShortSellingDailyHistory;
-import dev.eolmae.marketmonitor.domain.stock.WatchStockCacheService;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.ShortSellingTrendRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.ShortSellingTrendResponse;
+import dev.eolmae.marketmonitor.domain.stock.entity.ShortSellingDailyHistory;
 import dev.eolmae.marketmonitor.domain.stock.repository.ShortSellingDailyHistoryRepository;
+import dev.eolmae.marketmonitor.domain.stock.service.WatchStockCacheService;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;

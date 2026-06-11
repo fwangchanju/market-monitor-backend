@@ -1,7 +1,7 @@
 package dev.eolmae.marketmonitor.domain.stock.repository;
 
-import dev.eolmae.marketmonitor.common.enums.Exchange;
-import dev.eolmae.marketmonitor.domain.stock.*;
+import dev.eolmae.marketmonitor.common.enums.Market;
+import dev.eolmae.marketmonitor.domain.stock.entity.*;
 import dev.eolmae.marketmonitor.domain.stock.enums.AmtQtyType;
 import dev.eolmae.marketmonitor.domain.stock.enums.ProgramRankingType;
 import java.time.LocalDateTime;
@@ -16,10 +16,10 @@ public interface ProgramTradingRankingSnapshotRepository extends JpaRepository<P
             LocalDateTime snapshotTime, ProgramRankingType rankingType);
 
     boolean existsBySnapshotTimeAndMarketTypeAndRankingTypeAndAmtQtyType(
-            LocalDateTime snapshotTime, Exchange marketType, ProgramRankingType rankingType, AmtQtyType amtQtyType);
+            LocalDateTime snapshotTime, Market marketType, ProgramRankingType rankingType, AmtQtyType amtQtyType);
 
     List<ProgramTradingRankingSnapshot> findBySnapshotTimeAndMarketTypeAndRankingTypeAndAmtQtyTypeOrderByRankAsc(
-            LocalDateTime snapshotTime, Exchange marketType, ProgramRankingType rankingType, AmtQtyType amtQtyType);
+            LocalDateTime snapshotTime, Market marketType, ProgramRankingType rankingType, AmtQtyType amtQtyType);
 
     @Query("SELECT MAX(s.snapshotTime) FROM ProgramTradingRankingSnapshot s")
     Optional<LocalDateTime> findLatestSnapshotTime();

@@ -12,5 +12,4 @@ public record DashboardResponse(
         List<IntradayInvestorRankingItem> intradayTopRankings,
         List<ProgramTradingRankingItem> programTradingHighlights,
         List<IndexContributionItem> indexContributionHighlights,
-        List<WatchStockItem> watchStocks,
-        NotificationSettingResponse notificationSetting) {}
+        List<WatchStockItem> watchStocks) {}

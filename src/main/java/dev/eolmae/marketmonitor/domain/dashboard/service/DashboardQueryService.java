@@ -1,13 +1,12 @@
 package dev.eolmae.marketmonitor.domain.dashboard.service;
 
-import dev.eolmae.marketmonitor.common.enums.Exchange;
+import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.DashboardResponse;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.IndexContributionItem;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.IntradayInvestorRankingItem;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.IntradayInvestorSummaryItem;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.InvestorTradingSummaryItem;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.MarketOverviewItem;
-import dev.eolmae.marketmonitor.domain.dashboard.dto.NotificationSettingResponse;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.ProgramTradingDailyHistoryItem;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.ProgramTradingHistoryItem;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.ProgramTradingRankingItem;
@@ -16,8 +15,8 @@ import dev.eolmae.marketmonitor.domain.dashboard.dto.SnapshotResponse;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.StockHistoryResponse;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.StockInfoItem;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.WatchStockItem;
-import dev.eolmae.marketmonitor.domain.stock.MarketOverviewSnapshot;
-import dev.eolmae.marketmonitor.domain.stock.ProgramTradingRankingSnapshot;
+import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
+import dev.eolmae.marketmonitor.domain.stock.entity.ProgramTradingRankingSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.enums.AmtQtyType;
 import dev.eolmae.marketmonitor.domain.stock.enums.IntradayInvestorType;
 import dev.eolmae.marketmonitor.domain.stock.enums.IntradayRankingType;
@@ -30,9 +29,8 @@ import dev.eolmae.marketmonitor.domain.stock.repository.ProgramTradingDailyHisto
 import dev.eolmae.marketmonitor.domain.stock.repository.ProgramTradingHistoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.ProgramTradingRankingSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.ShortSellingDailyHistoryRepository;
-import dev.eolmae.marketmonitor.domain.stock.repository.StockMasterRepository;
+import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.WatchStockRepository;
-import dev.eolmae.marketmonitor.domain.user.repository.UserNotificationSettingRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -48,16 +46,13 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class DashboardQueryService {
 
-    private static final String DEFAULT_USER_KEY = "default";
-
     private final MarketOverviewSnapshotRepository marketOverviewSnapshotRepository;
     private final InvestorTradingSummarySnapshotRepository investorTradingSummarySnapshotRepository;
     private final IntradayInvestorRankingSnapshotRepository intradayInvestorRankingSnapshotRepository;
     private final ProgramTradingRankingSnapshotRepository programTradingRankingSnapshotRepository;
     private final IndexContributionRankingSnapshotRepository indexContributionRankingSnapshotRepository;
-    private final StockMasterRepository stockMasterRepository;
+    private final StockInfoRepository stockInfoRepository;
     private final WatchStockRepository watchStockRepository;
-    private final UserNotificationSettingRepository userNotificationSettingRepository;
     private final ProgramTradingHistoryRepository programTradingHistoryRepository;
     private final ProgramTradingDailyHistoryRepository programTradingDailyHistoryRepository;
     private final ShortSellingDailyHistoryRepository shortSellingDailyHistoryRepository;
@@ -68,9 +63,8 @@ public class DashboardQueryService {
             IntradayInvestorRankingSnapshotRepository intradayInvestorRankingSnapshotRepository,
             ProgramTradingRankingSnapshotRepository programTradingRankingSnapshotRepository,
             IndexContributionRankingSnapshotRepository indexContributionRankingSnapshotRepository,
-            StockMasterRepository stockMasterRepository,
+            StockInfoRepository stockInfoRepository,
             WatchStockRepository watchStockRepository,
-            UserNotificationSettingRepository userNotificationSettingRepository,
             ProgramTradingHistoryRepository programTradingHistoryRepository,
             ProgramTradingDailyHistoryRepository programTradingDailyHistoryRepository,
             ShortSellingDailyHistoryRepository shortSellingDailyHistoryRepository) {
@@ -79,13 +73,12 @@ public class DashboardQueryService {
         this.intradayInvestorRankingSnapshotRepository = intradayInvestorRankingSnapshotRepository;
         this.programTradingRankingSnapshotRepository = programTradingRankingSnapshotRepository;
         this.indexContributionRankingSnapshotRepository = indexContributionRankingSnapshotRepository;
-        this.stockMasterRepository = stockMasterRepository;
+        this.stockInfoRepository = stockInfoRepository;
         this.watchStockRepository = watchStockRepository;
-        this.userNotificationSettingRepository = userNotificationSettingRepository;
         this.programTradingHistoryRepository = programTradingHistoryRepository;
         this.programTradingDailyHistoryRepository = programTradingDailyHistoryRepository;
         this.shortSellingDailyHistoryRepository = shortSellingDailyHistoryRepository;
-    }
+    } // TODO 이거 왜 RequiredArgs.. 로 안하고 직접 명시했지
 
     public DashboardResponse getDashboard() {
         var snapshotTime =
@@ -94,17 +87,8 @@ public class DashboardQueryService {
         // 아직 수집된 데이터가 없으면 빈 응답 반환
         if (snapshotTime == null) {
             return new DashboardResponse(
-                    null,
-                    null,
-                    null,
-                    List.of(),
-                    List.of(),
-                    List.of(),
-                    List.of(),
-                    List.of(),
-                    getWatchStocks(),
-                    getNotificationSetting());
-        }
+                    null, null, null, List.of(), List.of(), List.of(), List.of(), List.of(), getWatchStocks());
+        } // TODO 죄다 null 인 파라미터로 객체 생성할바에 record 말고 그냥 class 사용은 어떤지, 혹은 record 내부에 위 메서드를 생성하는 안 은 어떤지.
 
         var marketOverviews = marketOverviewSnapshotRepository.findBySnapshotTimeOrderByMarketTypeAsc(snapshotTime);
 
@@ -125,7 +109,7 @@ public class DashboardQueryService {
         // 대시보드 요약: KOSPI 기준 외국인 순매수 상위 (대표 조합)
         var intradayItems = intradayInvestorRankingSnapshotRepository
                 .findBySnapshotTimeAndMarketTypeAndInvestorTypeAndRankingTypeOrderByRankAsc(
-                        snapshotTime, Exchange.KOSPI, IntradayInvestorType.FOREIGNER, IntradayRankingType.NET_BUY)
+                        snapshotTime, Market.KOSPI, IntradayInvestorType.FOREIGNER, IntradayRankingType.NET_BUY)
                 .stream()
                 .map(item -> new IntradayInvestorRankingItem(
                         item.getMarketType(),
@@ -138,13 +122,13 @@ public class DashboardQueryService {
                 .toList();
 
         // 대시보드 요약: 프로그램 순매수 상위 (KOSPI 기준 금액)
-        var programItems = getProgramTradingRankings(Exchange.KOSPI, ProgramRankingType.NET_BUY, AmtQtyType.AMOUNT)
+        var programItems = getProgramTradingRankings(Market.KOSPI, ProgramRankingType.NET_BUY, AmtQtyType.AMOUNT)
                 .items();
 
         // 대시보드 요약: KOSPI 지수 기여도 상위
         var indexContributionItems =
                 indexContributionRankingSnapshotRepository
-                        .findBySnapshotTimeAndMarketTypeOrderByRankAsc(snapshotTime, Exchange.KOSPI)
+                        .findBySnapshotTimeAndMarketTypeOrderByRankAsc(snapshotTime, Market.KOSPI)
                         .stream()
                         .map(item -> new IndexContributionItem(
                                 item.getMarketType(),
@@ -184,12 +168,11 @@ public class DashboardQueryService {
                 intradayItems,
                 programItems,
                 indexContributionItems,
-                getWatchStocks(),
-                getNotificationSetting());
+                getWatchStocks());
     }
 
     public SnapshotResponse<IntradayInvestorRankingItem> getIntradayRankings(
-            Exchange marketType, IntradayInvestorType investorType, IntradayRankingType rankingType) {
+            Market marketType, IntradayInvestorType investorType, IntradayRankingType rankingType) {
         var snapshotTime = intradayInvestorRankingSnapshotRepository
                 .findLatestSnapshotTime()
                 .orElse(null);
@@ -216,7 +199,7 @@ public class DashboardQueryService {
     }
 
     public SnapshotResponse<ProgramTradingRankingItem> getProgramTradingRankings(
-            Exchange marketType, ProgramRankingType rankingType, AmtQtyType amtQtyType) {
+            Market marketType, ProgramRankingType rankingType, AmtQtyType amtQtyType) {
         var snapshotTime =
                 programTradingRankingSnapshotRepository.findLatestSnapshotTime().orElse(null);
         if (snapshotTime == null) {
@@ -229,11 +212,11 @@ public class DashboardQueryService {
             var kospi =
                     programTradingRankingSnapshotRepository
                             .findBySnapshotTimeAndMarketTypeAndRankingTypeAndAmtQtyTypeOrderByRankAsc(
-                                    snapshotTime, Exchange.KOSPI, rankingType, amtQtyType);
+                                    snapshotTime, Market.KOSPI, rankingType, amtQtyType);
             var kosdaq =
                     programTradingRankingSnapshotRepository
                             .findBySnapshotTimeAndMarketTypeAndRankingTypeAndAmtQtyTypeOrderByRankAsc(
-                                    snapshotTime, Exchange.KOSDAQ, rankingType, amtQtyType);
+                                    snapshotTime, Market.KOSDAQ, rankingType, amtQtyType);
             snapshots = Stream.concat(kospi.stream(), kosdaq.stream())
                     .sorted(Comparator.comparing(ProgramTradingRankingSnapshot::getProgramNetBuyAmount)
                             .reversed())
@@ -259,7 +242,7 @@ public class DashboardQueryService {
                         .toList());
     }
 
-    public SnapshotResponse<IndexContributionItem> getIndexContribution(Exchange marketType) {
+    public SnapshotResponse<IndexContributionItem> getIndexContribution(Market marketType) {
         var snapshotTime = indexContributionRankingSnapshotRepository
                 .findLatestSnapshotTime()
                 .orElse(null);
@@ -283,19 +266,8 @@ public class DashboardQueryService {
         return new SnapshotResponse<>(snapshotTime, items);
     }
 
-    public NotificationSettingResponse getNotificationSetting() {
-        return userNotificationSettingRepository
-                .findByUserUserKey(DEFAULT_USER_KEY)
-                .map(setting -> new NotificationSettingResponse(
-                        setting.getUser().getUserKey(),
-                        setting.isReminderEnabled(),
-                        setting.getReminderTime(),
-                        setting.getTimezone()))
-                .orElse(null);
-    }
-
     public List<WatchStockItem> getWatchStocks() {
-        return watchStockRepository.findByUserUserKey(DEFAULT_USER_KEY).stream()
+        return watchStockRepository.findAll().stream()
                 .map(item -> new WatchStockItem(
                         item.getStock().getStockCode(),
                         item.getStock().getStockName(),
@@ -360,13 +332,13 @@ public class DashboardQueryService {
     /**
      * 장중 투자자별 매매 상위 top 10 반환.
      * <ul>
-     *   <li>{@code market=ALL}: KOSPI+KOSDAQ 스냅샷 종목코드 기준 합산 후 재정렬</li>
+     *   <li>{@code market 미지정}: KOSPI+KOSDAQ 스냅샷 종목코드 기준 합산 후 재정렬</li>
      *   <li>{@code investor=FOREIGN_TOTAL}: FOREIGNER+FOREIGN_COMPANY 종목코드 기준 합산 후 재정렬</li>
      *   <li>{@code ranking=NET_SELL}: netBuyAmount 절댓값 변환 후 반환</li>
      * </ul>
      */
     public SnapshotResponse<IntradayInvestorSummaryItem> getIntradayTop(
-            Exchange market, IntradayInvestorType investor, IntradayRankingType ranking) {
+            Market market, IntradayInvestorType investor, IntradayRankingType ranking) {
         var snapshotTime = intradayInvestorRankingSnapshotRepository
                 .findLatestSnapshotTime()
                 .orElse(null);
@@ -374,27 +346,23 @@ public class DashboardQueryService {
             return new SnapshotResponse<>(null, List.of());
         }
 
-        List<Exchange> markets = market == Exchange.ALL ? List.of(Exchange.KOSPI, Exchange.KOSDAQ) : List.of(market);
+        List<Market> markets = market == null ? List.of(Market.KOSPI, Market.KOSDAQ) : List.of(market);
 
         List<IntradayInvestorType> investors = investor == IntradayInvestorType.FOREIGN_TOTAL
                 ? List.of(IntradayInvestorType.FOREIGNER, IntradayInvestorType.FOREIGN_COMPANY)
                 : List.of(investor);
 
-        // 모든 조합 조회 → stockCode 기준 합산
+        // market·investor를 IN으로 한 번에 조회 → stockCode 기준 합산
         Map<String, BigDecimal> netByStock = new HashMap<>();
         Map<String, String> nameByStock = new HashMap<>();
 
-        for (Exchange m : markets) {
-            for (IntradayInvestorType inv : investors) {
-                intradayInvestorRankingSnapshotRepository
-                        .findBySnapshotTimeAndMarketTypeAndInvestorTypeAndRankingTypeOrderByRankAsc(
-                                snapshotTime, m, inv, ranking)
-                        .forEach(s -> {
-                            netByStock.merge(s.getStockCode(), s.getNetBuyAmount(), BigDecimal::add);
-                            nameByStock.putIfAbsent(s.getStockCode(), s.getStockName());
-                        });
-            }
-        }
+        intradayInvestorRankingSnapshotRepository
+                .findBySnapshotTimeAndMarketTypeInAndInvestorTypeInAndRankingTypeOrderByRankAsc(
+                        snapshotTime, markets, investors, ranking)
+                .forEach(s -> {
+                    netByStock.merge(s.getStockCode(), s.getNetBuyAmount(), BigDecimal::add);
+                    nameByStock.putIfAbsent(s.getStockCode(), s.getStockName());
+                });
 
         boolean isNetSell = ranking == IntradayRankingType.NET_SELL;
 
@@ -417,7 +385,7 @@ public class DashboardQueryService {
 
     /** 활성 종목 전체 반환 — 관심종목 등록 화면 자동완성용 */
     public List<StockInfoItem> getActiveStocks() {
-        return stockMasterRepository.findByActiveTrueOrderByStockCodeAsc().stream()
+        return stockInfoRepository.findByActiveTrueOrderByStockCodeAsc().stream()
                 .map(s -> new StockInfoItem(s.getStockCode(), s.getStockName(), s.getMarketType()))
                 .toList();
     }

@@ -1,7 +1,6 @@
 package dev.eolmae.marketmonitor.domain.stock.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import dev.eolmae.marketmonitor.domain.stock.client.BaseRequest;
 
 // ka20001: 업종현재가요청
 public record SectorCurrentPriceRequest(

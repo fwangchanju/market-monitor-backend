@@ -1,7 +1,6 @@
 package dev.eolmae.marketmonitor.domain.stock.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import dev.eolmae.marketmonitor.domain.stock.client.BaseRequest;
 
 // ka90008: 종목시간별프로그램매매추이요청
 public record HourlyProgramTradeTrendRequest(

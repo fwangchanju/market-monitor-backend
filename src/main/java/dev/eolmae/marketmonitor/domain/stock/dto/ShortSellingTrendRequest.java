@@ -1,7 +1,6 @@
 package dev.eolmae.marketmonitor.domain.stock.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import dev.eolmae.marketmonitor.domain.stock.client.BaseRequest;
 
 // ka10014: 공매도추이요청
 public record ShortSellingTrendRequest(

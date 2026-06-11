@@ -1,10 +1,10 @@
 package dev.eolmae.marketmonitor.domain.dashboard.dto;
 
-import dev.eolmae.marketmonitor.common.enums.Exchange;
+import dev.eolmae.marketmonitor.common.enums.Market;
 import java.math.BigDecimal;
 
 public record IndexContributionItem(
-        Exchange marketType,
+        Market marketType,
         int rank,
         String stockCode,
         String stockName,

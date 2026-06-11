@@ -1,6 +1,6 @@
 package dev.eolmae.marketmonitor.domain.stock.repository;
 
-import dev.eolmae.marketmonitor.domain.stock.*;
+import dev.eolmae.marketmonitor.domain.stock.entity.*;
 import java.time.LocalDate;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;

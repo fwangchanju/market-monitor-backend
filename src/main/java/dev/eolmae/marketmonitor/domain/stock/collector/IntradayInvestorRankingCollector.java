@@ -1,13 +1,12 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
-import dev.eolmae.marketmonitor.common.enums.Exchange;
+import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.util.NumberParser;
-import dev.eolmae.marketmonitor.domain.stock.IntradayInvestorRankingSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.IntradayInvestorRankingRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.IntradayInvestorRankingResponse;
+import dev.eolmae.marketmonitor.domain.stock.entity.IntradayInvestorRankingSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.enums.AmtQtyType;
-import dev.eolmae.marketmonitor.domain.stock.enums.Board;
 import dev.eolmae.marketmonitor.domain.stock.enums.IntradayInvestorType;
 import dev.eolmae.marketmonitor.domain.stock.enums.IntradayRankingType;
 import dev.eolmae.marketmonitor.domain.stock.repository.IntradayInvestorRankingSnapshotRepository;
@@ -31,15 +30,15 @@ public class IntradayInvestorRankingCollector {
 
     @Transactional
     public void collect(LocalDateTime snapshotTime) {
-        for (Board board : Board.values()) {
+        for (Market marketType : Market.values()) {
             for (IntradayInvestorType investorType : IntradayInvestorType.storableValues()) {
                 for (IntradayRankingType rankingType : IntradayRankingType.values()) {
                     try {
-                        collectForCombination(board, investorType, rankingType, snapshotTime);
+                        collectForCombination(marketType, investorType, rankingType, snapshotTime);
                     } catch (Exception e) {
                         log.error(
-                                "장중투자자랭킹 수집 실패: board={}, investor={}, ranking={}",
-                                board,
+                                "장중투자자랭킹 수집 실패: marketType={}, investor={}, ranking={}",
+                                marketType,
                                 investorType,
                                 rankingType,
                                 e);
@@ -50,14 +49,13 @@ public class IntradayInvestorRankingCollector {
     }
 
     private void collectForCombination(
-            Board board,
+            Market marketType,
             IntradayInvestorType investorType,
             IntradayRankingType rankingType,
             LocalDateTime snapshotTime) {
 
-        Exchange marketType = Exchange.valueOf(board.name());
         String mrktTp =
-                switch (board) {
+                switch (marketType) {
                     case KOSPI -> MrktTp.KOSPI.value;
                     case KOSDAQ -> MrktTp.KOSDAQ.value;
                 };
@@ -67,8 +65,8 @@ public class IntradayInvestorRankingCollector {
                         snapshotTime, marketType, investorType, rankingType);
         if (!existing.isEmpty()) {
             log.debug(
-                    "장중투자자랭킹 이미 존재, 스킵: board={}, investor={}, ranking={}, snapshotTime={}",
-                    board,
+                    "장중투자자랭킹 이미 존재, 스킵: marketType={}, investor={}, ranking={}, snapshotTime={}",
+                    marketType,
                     investorType,
                     rankingType,
                     snapshotTime);

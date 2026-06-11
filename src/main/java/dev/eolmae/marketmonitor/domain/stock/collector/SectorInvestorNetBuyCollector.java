@@ -1,14 +1,13 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
-import dev.eolmae.marketmonitor.common.enums.Exchange;
+import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.enums.Zone;
 import dev.eolmae.marketmonitor.common.util.NumberParser;
-import dev.eolmae.marketmonitor.domain.stock.InvestorTradingSummarySnapshot;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.SectorInvestorNetBuyRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.SectorInvestorNetBuyResponse;
+import dev.eolmae.marketmonitor.domain.stock.entity.InvestorTradingSummarySnapshot;
 import dev.eolmae.marketmonitor.domain.stock.enums.AmtQtyType;
-import dev.eolmae.marketmonitor.domain.stock.enums.Board;
 import dev.eolmae.marketmonitor.domain.stock.enums.InvestorType;
 import dev.eolmae.marketmonitor.domain.stock.enums.StexType;
 import dev.eolmae.marketmonitor.domain.stock.repository.InvestorTradingSummarySnapshotRepository;
@@ -36,24 +35,23 @@ public class SectorInvestorNetBuyCollector {
 
     @Transactional
     public void collect(LocalDateTime snapshotTime) {
-        for (Board board : Board.values()) {
+        for (Market marketType : Market.values()) {
             try {
-                collectForMarket(board, snapshotTime);
+                collectForMarket(marketType, snapshotTime);
             } catch (Exception e) {
-                log.error("투자자별매매종합 수집 실패: board={}", board, e);
+                log.error("투자자별매매종합 수집 실패: marketType={}", marketType, e);
             }
         }
     }
 
-    private void collectForMarket(Board board, LocalDateTime snapshotTime) {
-        Exchange marketType = Exchange.valueOf(board.name());
+    private void collectForMarket(Market marketType, LocalDateTime snapshotTime) {
         String mrktTp =
-                switch (board) {
+                switch (marketType) {
                     case KOSPI -> MrktTp.KOSPI.value;
                     case KOSDAQ -> MrktTp.KOSDAQ.value;
                 };
         String indsCd =
-                switch (board) {
+                switch (marketType) {
                     case KOSPI -> IndsCd.KOSPI.value;
                     case KOSDAQ -> IndsCd.KOSDAQ.value;
                 };
@@ -178,7 +176,7 @@ public class SectorInvestorNetBuyCollector {
     }
 
     private void saveSnapshot(
-            Exchange marketType,
+            Market marketType,
             InvestorType investorType,
             BigDecimal netBuyAmount,
             LocalDateTime snapshotTime,

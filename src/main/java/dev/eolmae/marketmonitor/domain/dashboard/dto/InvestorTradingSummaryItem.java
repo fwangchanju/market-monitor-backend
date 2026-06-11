@@ -1,11 +1,11 @@
 package dev.eolmae.marketmonitor.domain.dashboard.dto;
 
-import dev.eolmae.marketmonitor.common.enums.Exchange;
+import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.domain.stock.enums.InvestorType;
 import java.math.BigDecimal;
 
 public record InvestorTradingSummaryItem(
-        Exchange marketType,
+        Market marketType,
         InvestorType investorType,
         BigDecimal buyAmount,
         BigDecimal sellAmount,

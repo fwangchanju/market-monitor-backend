@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.util.concurrent.RateLimiter;
 import dev.eolmae.marketmonitor.common.exception.BusinessException;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
+import dev.eolmae.marketmonitor.domain.stock.dto.BaseRequest;
 import dev.eolmae.marketmonitor.domain.stock.exception.KiwoomRateLimitException;
 import dev.eolmae.marketmonitor.domain.stock.properties.KiwoomProperties;
 import lombok.RequiredArgsConstructor;

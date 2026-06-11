@@ -1,7 +1,7 @@
 package dev.eolmae.marketmonitor.domain.stock.repository;
 
-import dev.eolmae.marketmonitor.common.enums.Exchange;
-import dev.eolmae.marketmonitor.domain.stock.*;
+import dev.eolmae.marketmonitor.common.enums.Market;
+import dev.eolmae.marketmonitor.domain.stock.entity.*;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -12,7 +12,7 @@ public interface IndexContributionRankingSnapshotRepository
         extends JpaRepository<IndexContributionRankingSnapshot, Long> {
 
     List<IndexContributionRankingSnapshot> findBySnapshotTimeAndMarketTypeOrderByRankAsc(
-            LocalDateTime snapshotTime, Exchange marketType);
+            LocalDateTime snapshotTime, Market marketType);
 
     @Query("SELECT MAX(s.snapshotTime) FROM IndexContributionRankingSnapshot s")
     Optional<LocalDateTime> findLatestSnapshotTime();

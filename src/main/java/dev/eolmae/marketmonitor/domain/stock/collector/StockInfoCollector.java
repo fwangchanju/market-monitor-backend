@@ -1,16 +1,15 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
-import dev.eolmae.marketmonitor.common.enums.Exchange;
+import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.common.util.NumberParser;
-import dev.eolmae.marketmonitor.domain.stock.StockMaster;
-import dev.eolmae.marketmonitor.domain.stock.StockMasterCacheService;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.StockInfoRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.StockInfoResponse;
-import dev.eolmae.marketmonitor.domain.stock.enums.Board;
-import dev.eolmae.marketmonitor.domain.stock.repository.StockMasterRepository;
+import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
+import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
+import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.List;
@@ -28,40 +27,39 @@ public class StockInfoCollector {
     // ka10099: 종목정보 리스트 (종목정보 카테고리)
 
     private final KiwoomApiClient kiwoomApiClient;
-    private final StockMasterRepository stockMasterRepository;
-    private final StockMasterCacheService stockMasterCacheService;
+    private final StockInfoRepository stockInfoRepository;
+    private final StockInfoCacheService stockInfoCacheService;
 
     @Transactional
     public void sync() {
         Set<String> fetchedCodes = new HashSet<>();
 
         try {
-            for (Board board : Board.values()) {
-                fetchedCodes.addAll(syncForMarket(board));
+            for (Market marketType : Market.values()) {
+                fetchedCodes.addAll(syncForMarket(marketType));
             }
         } catch (EscalateException e) {
             throw e;
         } catch (Exception e) {
-            throw new EscalateException(ErrorCode.STOCK_MASTER_SYNC_FAILED, e);
+            throw new EscalateException(ErrorCode.STOCK_INFO_SYNC_FAILED, e);
         }
 
         // API에서 더 이상 조회되지 않는 종목은 비활성화
-        List<StockMaster> allStocks = stockMasterRepository.findAll();
-        for (StockMaster stock : allStocks) {
+        List<StockInfo> allStocks = stockInfoRepository.findAll();
+        for (StockInfo stock : allStocks) {
             if (stock.isActive() && !fetchedCodes.contains(stock.getStockCode())) {
                 stock.markInactive();
                 log.debug("종목 비활성화: stockCode={}, stockName={}", stock.getStockCode(), stock.getStockName());
             }
         }
 
-        stockMasterCacheService.evict();
+        stockInfoCacheService.evict();
         log.info("종목 마스터 동기화 완료: 조회 종목 수={}", fetchedCodes.size());
     }
 
-    private Set<String> syncForMarket(Board board) {
-        Exchange marketType = Exchange.valueOf(board.name());
+    private Set<String> syncForMarket(Market marketType) {
         String mrktTp =
-                switch (board) {
+                switch (marketType) {
                     case KOSPI -> MrktTp.KOSPI.value;
                     case KOSDAQ -> MrktTp.KOSDAQ.value;
                 };
@@ -87,10 +85,10 @@ public class StockInfoCollector {
             BigDecimal lastPrice = NumberParser.parseBigDecimal(item.lastPrice());
             fetchedCodes.add(stockCode);
 
-            StockMaster existing = stockMasterRepository.findById(stockCode).orElse(null);
+            StockInfo existing = stockInfoRepository.findById(stockCode).orElse(null);
             if (existing == null) {
-                stockMasterRepository.save(
-                        StockMaster.create(stockCode, stockName, marketType, marketCode, listCount, lastPrice));
+                stockInfoRepository.save(
+                        StockInfo.create(stockCode, stockName, marketType, marketCode, listCount, lastPrice));
             } else if (!existing.getStockName().equals(stockName) || !existing.isActive()) {
                 existing.update(stockName, marketType, marketCode, listCount, lastPrice);
             }

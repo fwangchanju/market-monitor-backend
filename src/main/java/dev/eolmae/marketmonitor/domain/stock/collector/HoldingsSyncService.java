@@ -1,17 +1,15 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
 import dev.eolmae.marketmonitor.common.util.NumberParser;
-import dev.eolmae.marketmonitor.domain.stock.HoldingsCache;
-import dev.eolmae.marketmonitor.domain.stock.RegisterBy;
-import dev.eolmae.marketmonitor.domain.stock.WatchStock;
-import dev.eolmae.marketmonitor.domain.stock.WatchStockCacheService;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.AccountBalanceRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.AccountBalanceResponse;
-import dev.eolmae.marketmonitor.domain.stock.repository.StockMasterRepository;
+import dev.eolmae.marketmonitor.domain.stock.entity.WatchStock;
+import dev.eolmae.marketmonitor.domain.stock.enums.RegisterBy;
+import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.WatchStockRepository;
-import dev.eolmae.marketmonitor.domain.user.AppUser;
-import dev.eolmae.marketmonitor.domain.user.repository.AppUserRepository;
+import dev.eolmae.marketmonitor.domain.stock.service.HoldingsCache;
+import dev.eolmae.marketmonitor.domain.stock.service.WatchStockCacheService;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -27,8 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class HoldingsSyncService {
 
     private final KiwoomApiClient kiwoomApiClient;
-    private final AppUserRepository appUserRepository;
-    private final StockMasterRepository stockMasterRepository;
+    private final StockInfoRepository stockInfoRepository;
     private final WatchStockRepository watchStockRepository;
     private final WatchStockCacheService watchStockCacheService;
     private final HoldingsCache holdingsCache;
@@ -41,12 +38,6 @@ public class HoldingsSyncService {
      */
     @Transactional
     public List<AccountBalanceResponse.HoldingItem> sync() {
-        AppUser user = appUserRepository.findAll().stream().findFirst().orElse(null);
-        if (user == null) {
-            log.warn("보유종목 동기화 스킵: 등록된 사용자 없음");
-            return List.of();
-        }
-
         AccountBalanceResponse response =
                 kiwoomApiClient.post(AccountBalanceRequest.defaults(), AccountBalanceResponse.class);
         if (response.holdings() == null || response.holdings().isEmpty()) {
@@ -69,13 +60,13 @@ public class HoldingsSyncService {
 
         // 신규 보유종목 등록
         for (String stockCode : currentHoldingCodes) {
-            if (watchStockRepository.existsByUserUserKeyAndStockStockCode(user.getUserKey(), stockCode)) {
+            if (watchStockRepository.existsByStockStockCode(stockCode)) {
                 continue;
             }
-            stockMasterRepository
+            stockInfoRepository
                     .findById(stockCode)
                     .ifPresentOrElse(
-                            stock -> watchStockRepository.save(WatchStock.create(user, stock, RegisterBy.HOLDINGS)),
+                            stock -> watchStockRepository.save(WatchStock.create(stock, RegisterBy.HOLDINGS)),
                             () -> log.warn("보유종목이 종목마스터에 없음: stockCode={}", stockCode));
         }
 
@@ -83,11 +74,9 @@ public class HoldingsSyncService {
         log.info("보유종목 동기화 완료: 보유종목={}", currentHoldingCodes);
 
         // 평가금액(현재 가치) 기준 정렬된 보유종목 목록 → holdingsCache 갱신 및 반환
-        // 비중(poss_rt)은 계좌 내 상대값이라 여러 계좌(app key)를 동시에 쓰게 되면 비교 기준이 될 수 없음
+        // 비중(poss_rt)은 계좌 내 상대값이라 여러 계좌(app key)를 동시에 쓰면 비교 기준이 될 수 없음
         List<AccountBalanceResponse.HoldingItem> sorted = response.holdings().stream()
-                .collect(Collectors.toMap(
-                        AccountBalanceResponse.HoldingItem::stockCode, h -> h, (a, b) -> a // dedup — 첫 번째 항목 유지
-                        ))
+                .collect(Collectors.toMap(AccountBalanceResponse.HoldingItem::stockCode, h -> h, (a, b) -> a))
                 .values()
                 .stream()
                 .sorted((a, b) ->

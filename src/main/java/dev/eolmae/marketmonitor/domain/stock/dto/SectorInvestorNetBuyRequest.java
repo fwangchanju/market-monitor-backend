@@ -1,7 +1,6 @@
 package dev.eolmae.marketmonitor.domain.stock.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import dev.eolmae.marketmonitor.domain.stock.client.BaseRequest;
 
 // ka10051: 업종별투자자순매수요청
 public record SectorInvestorNetBuyRequest(

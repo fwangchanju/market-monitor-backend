@@ -1,29 +1,4 @@
-CREATE TABLE app_user (
-    id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
-    user_key VARCHAR(64) NOT NULL,
-    display_name VARCHAR(100) NOT NULL,
-    telegram_chat_id VARCHAR(100) NULL,
-    timezone VARCHAR(40) NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_app_user PRIMARY KEY (id),
-    CONSTRAINT uk_app_user_user_key UNIQUE (user_key)
-);
-
-CREATE TABLE user_notification_setting (
-    id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
-    user_id BIGINT NOT NULL,
-    reminder_enabled BOOLEAN NOT NULL,
-    reminder_time TIME NOT NULL,
-    timezone VARCHAR(40) NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_user_notification_setting PRIMARY KEY (id),
-    CONSTRAINT uk_user_notification_setting_user UNIQUE (user_id),
-    CONSTRAINT fk_user_notification_setting_user FOREIGN KEY (user_id) REFERENCES app_user (id)
-);
-
-CREATE TABLE stock_master (
+CREATE TABLE stock_info (
     stock_code VARCHAR(20) NOT NULL,
     stock_name VARCHAR(100) NOT NULL,
     market_type VARCHAR(20) NOT NULL,
@@ -33,20 +8,18 @@ CREATE TABLE stock_master (
     active BOOLEAN NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_stock_master PRIMARY KEY (stock_code)
+    CONSTRAINT pk_stock_info PRIMARY KEY (stock_code)
 );
 
 CREATE TABLE watch_stock (
     id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
-    user_id BIGINT NOT NULL,
     stock_code VARCHAR(20) NOT NULL,
     is_primary BOOLEAN NOT NULL DEFAULT FALSE,
     register_by VARCHAR(20) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_watch_stock PRIMARY KEY (id),
-    CONSTRAINT uk_watch_stock_user_stock UNIQUE (user_id, stock_code),
-    CONSTRAINT fk_watch_stock_user FOREIGN KEY (user_id) REFERENCES app_user (id),
-    CONSTRAINT fk_watch_stock_stock FOREIGN KEY (stock_code) REFERENCES stock_master (stock_code)
+    CONSTRAINT uk_watch_stock_stock UNIQUE (stock_code),
+    CONSTRAINT fk_watch_stock_stock FOREIGN KEY (stock_code) REFERENCES stock_info (stock_code)
 );
 
 CREATE TABLE market_overview_snapshot (
@@ -100,7 +73,7 @@ CREATE TABLE intraday_investor_ranking_snapshot (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_intraday_investor_ranking_snapshot PRIMARY KEY (id),
     CONSTRAINT uk_intraday_investor_ranking_snapshot UNIQUE (market_type, investor_type, ranking_type, amt_qty_type, stock_code, snapshot_time),
-    CONSTRAINT fk_intraday_investor_ranking_stock FOREIGN KEY (stock_code) REFERENCES stock_master (stock_code)
+    CONSTRAINT fk_intraday_investor_ranking_stock FOREIGN KEY (stock_code) REFERENCES stock_info (stock_code)
 );
 
 CREATE TABLE program_trading_ranking_snapshot (
@@ -118,7 +91,7 @@ CREATE TABLE program_trading_ranking_snapshot (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_program_trading_ranking_snapshot PRIMARY KEY (id),
     CONSTRAINT uk_program_trading_ranking_snapshot UNIQUE (market_type, amt_qty_type, ranking_type, stock_code, snapshot_time),
-    CONSTRAINT fk_program_trading_ranking_stock FOREIGN KEY (stock_code) REFERENCES stock_master (stock_code)
+    CONSTRAINT fk_program_trading_ranking_stock FOREIGN KEY (stock_code) REFERENCES stock_info (stock_code)
 );
 
 CREATE TABLE program_trading_history (
@@ -131,7 +104,7 @@ CREATE TABLE program_trading_history (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_program_trading_history PRIMARY KEY (id),
     CONSTRAINT uk_program_trading_history UNIQUE (stock_code, snapshot_time),
-    CONSTRAINT fk_program_trading_history_stock FOREIGN KEY (stock_code) REFERENCES stock_master (stock_code)
+    CONSTRAINT fk_program_trading_history_stock FOREIGN KEY (stock_code) REFERENCES stock_info (stock_code)
 );
 
 CREATE TABLE program_trading_daily (
@@ -144,7 +117,7 @@ CREATE TABLE program_trading_daily (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_program_trading_daily PRIMARY KEY (id),
     CONSTRAINT uk_program_trading_daily UNIQUE (stock_code, trade_date),
-    CONSTRAINT fk_program_trading_daily_stock FOREIGN KEY (stock_code) REFERENCES stock_master (stock_code)
+    CONSTRAINT fk_program_trading_daily_stock FOREIGN KEY (stock_code) REFERENCES stock_info (stock_code)
 );
 
 CREATE TABLE short_selling_daily (
@@ -163,7 +136,7 @@ CREATE TABLE short_selling_daily (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_short_selling_daily PRIMARY KEY (id),
     CONSTRAINT uk_short_selling_daily UNIQUE (stock_code, trade_date),
-    CONSTRAINT fk_short_selling_daily_stock FOREIGN KEY (stock_code) REFERENCES stock_master (stock_code)
+    CONSTRAINT fk_short_selling_daily_stock FOREIGN KEY (stock_code) REFERENCES stock_info (stock_code)
 );
 
 CREATE TABLE index_contribution_ranking_snapshot (
@@ -179,7 +152,7 @@ CREATE TABLE index_contribution_ranking_snapshot (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_index_contribution_ranking_snapshot PRIMARY KEY (id),
     CONSTRAINT uk_index_contribution_ranking_snapshot UNIQUE (market_type, stock_code, snapshot_time),
-    CONSTRAINT fk_index_contribution_ranking_stock FOREIGN KEY (stock_code) REFERENCES stock_master (stock_code)
+    CONSTRAINT fk_index_contribution_ranking_stock FOREIGN KEY (stock_code) REFERENCES stock_info (stock_code)
 );
 
 CREATE INDEX idx_market_overview_snapshot_time ON market_overview_snapshot (snapshot_time);

@@ -25,7 +25,7 @@ public enum ErrorCode {
     KRX_RESPONSE_INVALID("KRX 응답 구조 이상."),
 
     // Stock 수집
-    STOCK_MASTER_SYNC_FAILED("종목 마스터 동기화 실패."),
+    STOCK_INFO_SYNC_FAILED("종목 마스터 동기화 실패."),
     PREV_MARKET_CAP_ZERO("전일 전체 시가총액 합산이 0."),
     BASE_SNAPSHOT_NOT_FOUND("연산 기준 스냅샷 데이터 없음."),
 

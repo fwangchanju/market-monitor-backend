@@ -1,7 +1,6 @@
 package dev.eolmae.marketmonitor.domain.stock.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import dev.eolmae.marketmonitor.domain.stock.client.BaseRequest;
 
 // ka10065: 장중투자자별매매상위요청
 public record IntradayInvestorRankingRequest(

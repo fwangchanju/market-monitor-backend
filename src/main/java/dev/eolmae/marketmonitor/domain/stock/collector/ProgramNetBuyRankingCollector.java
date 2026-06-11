@@ -1,14 +1,13 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
-import dev.eolmae.marketmonitor.common.enums.Exchange;
+import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.util.NumberParser;
 import dev.eolmae.marketmonitor.common.util.StockCode;
-import dev.eolmae.marketmonitor.domain.stock.ProgramTradingRankingSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.ProgramNetBuyRankingRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.ProgramNetBuyRankingResponse;
+import dev.eolmae.marketmonitor.domain.stock.entity.ProgramTradingRankingSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.enums.AmtQtyType;
-import dev.eolmae.marketmonitor.domain.stock.enums.Board;
 import dev.eolmae.marketmonitor.domain.stock.enums.ProgramRankingType;
 import dev.eolmae.marketmonitor.domain.stock.enums.StexType;
 import dev.eolmae.marketmonitor.domain.stock.repository.ProgramTradingRankingSnapshotRepository;
@@ -31,23 +30,22 @@ public class ProgramNetBuyRankingCollector {
 
     @Transactional
     public void collect(LocalDateTime snapshotTime) {
-        for (Board board : Board.values()) {
+        for (Market marketType : Market.values()) {
             for (ProgramRankingType rankingType : ProgramRankingType.values()) {
                 try {
-                    collectForCombination(board, rankingType, AmtQtyType.AMOUNT, snapshotTime);
+                    collectForCombination(marketType, rankingType, AmtQtyType.AMOUNT, snapshotTime);
                 } catch (Exception e) {
-                    log.error("프로그램매매 랭킹 수집 실패: board={}, ranking={}", board, rankingType, e);
+                    log.error("프로그램매매 랭킹 수집 실패: marketType={}, ranking={}", marketType, rankingType, e);
                 }
             }
         }
     }
 
     private void collectForCombination(
-            Board board, ProgramRankingType rankingType, AmtQtyType amtQtyType, LocalDateTime snapshotTime) {
+            Market marketType, ProgramRankingType rankingType, AmtQtyType amtQtyType, LocalDateTime snapshotTime) {
 
-        Exchange marketType = Exchange.valueOf(board.name());
         String mrktTp =
-                switch (board) {
+                switch (marketType) {
                     case KOSPI -> MrktTp.KOSPI.value;
                     case KOSDAQ -> MrktTp.KOSDAQ.value;
                 };
@@ -59,8 +57,8 @@ public class ProgramNetBuyRankingCollector {
                 amtQtyType); // TODO 매 스케줄에서 한번만 수행해서 데이터 적재하는 구조 아닌가? 이 조회로 유효성 검증하는 것처럼 보이는 행위를 하는 이유는?
         if (alreadyExists) {
             log.debug(
-                    "프로그램매매 랭킹 이미 존재, 스킵: board={}, ranking={}, amtQty={}, snapshotTime={}",
-                    board,
+                    "프로그램매매 랭킹 이미 존재, 스킵: marketType={}, ranking={}, amtQty={}, snapshotTime={}",
+                    marketType,
                     rankingType,
                     amtQtyType,
                     snapshotTime);

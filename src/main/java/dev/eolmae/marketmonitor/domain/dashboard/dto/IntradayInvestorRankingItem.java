@@ -1,11 +1,11 @@
 package dev.eolmae.marketmonitor.domain.dashboard.dto;
 
-import dev.eolmae.marketmonitor.common.enums.Exchange;
+import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.domain.stock.enums.IntradayInvestorType;
 import java.math.BigDecimal;
 
 public record IntradayInvestorRankingItem(
-        Exchange marketType,
+        Market marketType,
         IntradayInvestorType investorType,
         int rank,
         String stockCode,

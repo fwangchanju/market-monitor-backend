@@ -1,13 +1,12 @@
 package dev.eolmae.marketmonitor.domain.dashboard.controller;
 
-import dev.eolmae.marketmonitor.common.enums.Exchange;
+import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.exception.BusinessException;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.DashboardResponse;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.IndexContributionItem;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.IntradayInvestorRankingItem;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.IntradayInvestorSummaryItem;
-import dev.eolmae.marketmonitor.domain.dashboard.dto.NotificationSettingResponse;
 // import dev.eolmae.marketmonitor.domain.dashboard.dto.ProgramTradingDailyHistoryItem;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.ProgramTradingHistoryItem;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.ProgramTradingRankingItem;
@@ -19,11 +18,11 @@ import dev.eolmae.marketmonitor.domain.dashboard.dto.StockInfoItem;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.WatchStockItem;
 import dev.eolmae.marketmonitor.domain.dashboard.service.DashboardQueryService;
 import dev.eolmae.marketmonitor.domain.notification.service.DashboardSendService;
-import dev.eolmae.marketmonitor.domain.stock.PrimaryStockResolverService;
 import dev.eolmae.marketmonitor.domain.stock.enums.AmtQtyType;
 import dev.eolmae.marketmonitor.domain.stock.enums.IntradayInvestorType;
 import dev.eolmae.marketmonitor.domain.stock.enums.IntradayRankingType;
 import dev.eolmae.marketmonitor.domain.stock.enums.ProgramRankingType;
+import dev.eolmae.marketmonitor.domain.stock.service.PrimaryStockResolverService;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -75,7 +74,7 @@ public class DashboardController {
      */
     @GetMapping("/intraday-top")
     public SnapshotResponse<IntradayInvestorSummaryItem> getIntradayTop(
-            @RequestParam Exchange market,
+            @RequestParam(required = false) Market market,
             @RequestParam IntradayInvestorType investor,
             @RequestParam IntradayRankingType ranking) {
         return queryService.getIntradayTop(market, investor, ranking);
@@ -84,7 +83,7 @@ public class DashboardController {
     /** 상세 랭킹 (기존 호환용) */
     @GetMapping("/intraday-rankings")
     public SnapshotResponse<IntradayInvestorRankingItem> getIntradayRankings(
-            @RequestParam Exchange market,
+            @RequestParam Market market,
             @RequestParam IntradayInvestorType investor,
             @RequestParam IntradayRankingType ranking) {
         return queryService.getIntradayRankings(market, investor, ranking);
@@ -95,7 +94,7 @@ public class DashboardController {
     @GetMapping("/program-trading-rankings")
     public SnapshotResponse<ProgramTradingRankingItem> getProgramTradingRankings(
             @RequestParam ProgramRankingType ranking,
-            @RequestParam(required = false) Exchange market,
+            @RequestParam(required = false) Market market,
             @RequestParam(required = false) AmtQtyType amtQty) {
         AmtQtyType resolvedAmtQty = amtQty != null ? amtQty : AmtQtyType.AMOUNT;
         return queryService.getProgramTradingRankings(market, ranking, resolvedAmtQty);
@@ -104,7 +103,7 @@ public class DashboardController {
     // ── 지수 기여도 상위 상세 ─────────────────────────────────────────────
 
     @GetMapping("/index-contribution")
-    public SnapshotResponse<IndexContributionItem> getIndexContribution(@RequestParam Exchange market) {
+    public SnapshotResponse<IndexContributionItem> getIndexContribution(@RequestParam Market market) {
         return queryService.getIndexContribution(market);
     }
 
@@ -127,13 +126,6 @@ public class DashboardController {
     @GetMapping("/primary-stock")
     public String getPrimaryStockCode() {
         return primaryStockResolverService.resolveStockCode();
-    }
-
-    // ── 사용자 설정 ───────────────────────────────────────────────────────
-
-    @GetMapping("/user-settings/default")
-    public NotificationSettingResponse getDefaultUserSetting() {
-        return queryService.getNotificationSetting();
     }
 
     // ── 종목별 이력 ───────────────────────────────────────────────────────

@@ -1,17 +1,17 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
 import dev.eolmae.marketmonitor.common.util.NumberParser;
-import dev.eolmae.marketmonitor.domain.stock.ProgramTradingDailyHistory;
-import dev.eolmae.marketmonitor.domain.stock.ProgramTradingHistory;
-import dev.eolmae.marketmonitor.domain.stock.WatchStockCacheService;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.DailyProgramTradeTrendRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.DailyProgramTradeTrendResponse;
 import dev.eolmae.marketmonitor.domain.stock.dto.HourlyProgramTradeTrendRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.HourlyProgramTradeTrendResponse;
+import dev.eolmae.marketmonitor.domain.stock.entity.ProgramTradingDailyHistory;
+import dev.eolmae.marketmonitor.domain.stock.entity.ProgramTradingHistory;
 import dev.eolmae.marketmonitor.domain.stock.enums.StexType;
 import dev.eolmae.marketmonitor.domain.stock.repository.ProgramTradingDailyHistoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.ProgramTradingHistoryRepository;
+import dev.eolmae.marketmonitor.domain.stock.service.WatchStockCacheService;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;

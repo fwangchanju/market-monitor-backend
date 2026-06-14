@@ -6,12 +6,9 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
-import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import lombok.Getter;
@@ -25,9 +22,8 @@ public class WatchStock {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "stock_code", nullable = false)
-    private StockInfo stock;
+    @Column(name = "stock_code", nullable = false)
+    private String stockCode;
 
     @Column(nullable = false)
     private boolean isPrimary;
@@ -36,17 +32,33 @@ public class WatchStock {
     @Column(nullable = false, length = 20)
     private RegisterBy registerBy;
 
+    @Column(name = "holding_rank")
+    private Integer holdingRank;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
     protected WatchStock() {}
 
-    public static WatchStock create(StockInfo stock, RegisterBy registerBy) {
+    private static WatchStock create(String stockCode, RegisterBy registerBy, Integer holdingRank) {
         var entity = new WatchStock();
-        entity.stock = stock;
+        entity.stockCode = stockCode;
         entity.isPrimary = false;
         entity.registerBy = registerBy;
+        entity.holdingRank = holdingRank;
         entity.createdAt = LocalDateTime.now(Zone.KST.zoneId());
         return entity;
+    }
+
+    public static WatchStock createManual(String stockCode) {
+        return create(stockCode, RegisterBy.USER, null);
+    }
+
+    public static WatchStock createHolding(String stockCode, int holdingRank) {
+        return create(stockCode, RegisterBy.HOLDINGS, holdingRank);
+    }
+
+    public void updateHoldingRank(Integer holdingRank) {
+        this.holdingRank = holdingRank;
     }
 }

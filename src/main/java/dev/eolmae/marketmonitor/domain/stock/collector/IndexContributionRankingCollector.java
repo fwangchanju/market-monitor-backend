@@ -51,7 +51,7 @@ public class IndexContributionRankingCollector {
 
     @Transactional
     public void collect(LocalDateTime snapshotTime) {
-        Map<String, StockInfo> masterMap = stockInfoCacheService.findAllAsMap();
+        Map<String, StockInfo> masterMap = stockInfoCacheService.getCache();
 
         for (Market marketType : Market.values()) {
             try {

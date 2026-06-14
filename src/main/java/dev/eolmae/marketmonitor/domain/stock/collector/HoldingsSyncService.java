@@ -4,18 +4,21 @@ import dev.eolmae.marketmonitor.common.util.NumberParser;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.AccountBalanceRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.AccountBalanceResponse;
+import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.entity.WatchStock;
 import dev.eolmae.marketmonitor.domain.stock.enums.RegisterBy;
-import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.WatchStockRepository;
-import dev.eolmae.marketmonitor.domain.stock.service.HoldingsCache;
+import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketmonitor.domain.stock.service.WatchStockCacheService;
+
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.ObjectUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,72 +28,62 @@ import org.springframework.transaction.annotation.Transactional;
 public class HoldingsSyncService {
 
     private final KiwoomApiClient kiwoomApiClient;
-    private final StockInfoRepository stockInfoRepository;
+    private final StockInfoCacheService stockInfoCacheService;
     private final WatchStockRepository watchStockRepository;
     private final WatchStockCacheService watchStockCacheService;
-    private final HoldingsCache holdingsCache;
 
     /**
      * kt00018 보유종목 동기화.
      * - 신규 보유종목 → watch_stock에 HOLDINGS로 등록
      * - 기존 HOLDINGS 중 보유 없는 종목 → 삭제
-     * - 보유종목 목록(비중 포함) 반환 — 캐시 저장용
+     * - 평가금액(evltAmt) 내림차순 holdingRank 1,2,3… 부여/갱신
      */
     @Transactional
-    public List<AccountBalanceResponse.HoldingItem> sync() {
+    public void sync() {
         AccountBalanceResponse response =
                 kiwoomApiClient.post(AccountBalanceRequest.defaults(), AccountBalanceResponse.class);
-        if (response.holdings() == null || response.holdings().isEmpty()) {
+
+        if (ObjectUtils.isEmpty(response.holdings())) {
             log.info("보유종목 없음 — HOLDINGS 전체 삭제");
-            watchStockRepository.deleteAll(watchStockRepository.findByRegisterBy(RegisterBy.HOLDINGS));
-            return List.of();
+            watchStockRepository.deleteByRegisterBy(RegisterBy.HOLDINGS);
+            watchStockCacheService.evict();
+            return;
         }
 
-        // 동일 종목 여러 행(복수 매수 로트) → stockCode 기준 dedup, poss_rt 합산
-        Map<String, Double> holdingsMap = response.holdings().stream()
-                .collect(Collectors.toMap(
-                        AccountBalanceResponse.HoldingItem::stockCode, h -> parseDouble(h.possRt()), Double::sum));
-
-        Set<String> currentHoldingCodes = holdingsMap.keySet();
+        // 평가금액(evltAmt) 내림차순 정렬
+        List<AccountBalanceResponse.HoldingItem> sortedHoldings = response.holdings().stream()
+                .sorted((a, b) -> NumberParser.parseBigDecimal(b.evltAmt())
+                        .compareTo(NumberParser.parseBigDecimal(a.evltAmt())))
+                .toList();
 
         // 보유 없는 HOLDINGS 삭제
-        watchStockRepository.findByRegisterBy(RegisterBy.HOLDINGS).stream()
-                .filter(ws -> !currentHoldingCodes.contains(ws.getStock().getStockCode()))
-                .forEach(watchStockRepository::delete);
+        watchStockRepository.deleteByRegisterByAndStockCodeNotIn(
+                RegisterBy.HOLDINGS,
+                sortedHoldings.stream().map(AccountBalanceResponse.HoldingItem::stockCode).toList());
 
-        // 신규 보유종목 등록
-        for (String stockCode : currentHoldingCodes) {
-            if (watchStockRepository.existsByStockStockCode(stockCode)) {
-                continue;
+        Map<String, WatchStock> existingHoldings = watchStockRepository.findByRegisterBy(RegisterBy.HOLDINGS).stream()
+                .collect(Collectors.toMap(WatchStock::getStockCode, Function.identity()));
+        Map<String, StockInfo> stockInfoCache = stockInfoCacheService.getCache();
+
+        IntStream.range(0, sortedHoldings.size()).forEach(i -> {
+            String stockCode = sortedHoldings.get(i).stockCode();
+            int holdingRank = i + 1;
+
+            WatchStock existing = existingHoldings.get(stockCode);
+            if (existing != null) {
+                existing.updateHoldingRank(holdingRank);
+                return;
             }
-            stockInfoRepository
-                    .findById(stockCode)
-                    .ifPresentOrElse(
-                            stock -> watchStockRepository.save(WatchStock.create(stock, RegisterBy.HOLDINGS)),
-                            () -> log.warn("보유종목이 종목마스터에 없음: stockCode={}", stockCode));
-        }
+
+            if (stockInfoCache.containsKey(stockCode)) {
+                watchStockRepository.save(WatchStock.createHolding(stockCode, holdingRank));
+            }
+            else {
+                log.warn("보유종목이 종목마스터에 없음: stockCode={}", stockCode);
+            }
+        });
 
         watchStockCacheService.evict();
-        log.info("보유종목 동기화 완료: 보유종목={}", currentHoldingCodes);
-
-        // 평가금액(현재 가치) 기준 정렬된 보유종목 목록 → holdingsCache 갱신 및 반환
-        // 비중(poss_rt)은 계좌 내 상대값이라 여러 계좌(app key)를 동시에 쓰면 비교 기준이 될 수 없음
-        List<AccountBalanceResponse.HoldingItem> sorted = response.holdings().stream()
-                .collect(Collectors.toMap(AccountBalanceResponse.HoldingItem::stockCode, h -> h, (a, b) -> a))
-                .values()
-                .stream()
-                .sorted((a, b) ->
-                        NumberParser.parseBigDecimal(b.evltAmt()).compareTo(NumberParser.parseBigDecimal(a.evltAmt())))
-                .toList();
-        holdingsCache.update(sorted);
-        return sorted;
-    }
-
-    private static double parseDouble(String value) {
-        try {
-            return value == null ? 0.0 : Double.parseDouble(value.trim());
-        } catch (NumberFormatException e) {
-            return 0.0;
-        }
+        log.info("보유종목 동기화 완료: 종목수={}", sortedHoldings.size());
     }
 }

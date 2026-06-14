@@ -37,7 +37,7 @@ public class ShortSellingTrendCollector {
     @Transactional
     public void collect(LocalDateTime snapshotTime) {
         String todayStr = snapshotTime.toLocalDate().format(DATE_FMT);
-        List<String> stockCodes = watchStockCacheService.findDistinctStockCodes();
+        List<String> stockCodes = watchStockCacheService.getCache();
         for (String stockCode : stockCodes) {
             try {
                 collectForStock(stockCode, todayStr, todayStr);

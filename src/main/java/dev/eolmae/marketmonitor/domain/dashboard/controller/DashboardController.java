@@ -3,53 +3,28 @@ package dev.eolmae.marketmonitor.domain.dashboard.controller;
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.exception.BusinessException;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
-import dev.eolmae.marketmonitor.domain.dashboard.dto.DashboardResponse;
-import dev.eolmae.marketmonitor.domain.dashboard.dto.IndexContributionItem;
-import dev.eolmae.marketmonitor.domain.dashboard.dto.IntradayInvestorRankingItem;
-import dev.eolmae.marketmonitor.domain.dashboard.dto.IntradayInvestorSummaryItem;
-// import dev.eolmae.marketmonitor.domain.dashboard.dto.ProgramTradingDailyHistoryItem;
-import dev.eolmae.marketmonitor.domain.dashboard.dto.ProgramTradingHistoryItem;
-import dev.eolmae.marketmonitor.domain.dashboard.dto.ProgramTradingRankingItem;
-import dev.eolmae.marketmonitor.domain.dashboard.dto.SendDashboardResponse;
-import dev.eolmae.marketmonitor.domain.dashboard.dto.ShortSellingHistoryItem;
-import dev.eolmae.marketmonitor.domain.dashboard.dto.SnapshotResponse;
-import dev.eolmae.marketmonitor.domain.dashboard.dto.StockHistoryResponse;
-import dev.eolmae.marketmonitor.domain.dashboard.dto.StockInfoItem;
-import dev.eolmae.marketmonitor.domain.dashboard.dto.WatchStockItem;
+import dev.eolmae.marketmonitor.domain.dashboard.dto.*;
 import dev.eolmae.marketmonitor.domain.dashboard.service.DashboardQueryService;
 import dev.eolmae.marketmonitor.domain.notification.service.DashboardSendService;
 import dev.eolmae.marketmonitor.domain.stock.enums.AmtQtyType;
 import dev.eolmae.marketmonitor.domain.stock.enums.IntradayInvestorType;
 import dev.eolmae.marketmonitor.domain.stock.enums.IntradayRankingType;
 import dev.eolmae.marketmonitor.domain.stock.enums.ProgramRankingType;
-import dev.eolmae.marketmonitor.domain.stock.service.PrimaryStockResolverService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.web.bind.annotation.*;
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api")
+@RequiredArgsConstructor
 public class DashboardController {
 
     private final DashboardQueryService queryService;
-    private final PrimaryStockResolverService primaryStockResolverService;
     private final Optional<DashboardSendService> dashboardSendService;
-
-    public DashboardController(
-            DashboardQueryService queryService,
-            PrimaryStockResolverService primaryStockResolverService,
-            Optional<DashboardSendService> dashboardSendService) {
-        this.queryService = queryService;
-        this.primaryStockResolverService = primaryStockResolverService;
-        this.dashboardSendService = dashboardSendService;
-    }
 
     // ── 메인 대시보드 ─────────────────────────────────────────────────────
 
@@ -111,21 +86,15 @@ public class DashboardController {
 
     /** 활성 종목 전체 반환 — 관심종목 등록 화면 진입 시 1회 호출, 프론트 캐시 후 자동완성 */
     @GetMapping("/stocks")
-    public List<StockInfoItem> getActiveStocks() {
-        return queryService.getActiveStocks();
+    public List<StockResponse> getAllStocks() {
+        return queryService.getAllStocks();
     }
 
     // ── 관심종목 ─────────────────────────────────────────────────────────
 
     @GetMapping("/watch-stocks")
-    public List<WatchStockItem> getWatchStocks() {
+    public List<WatchStockResponse> getWatchStocks() {
         return queryService.getWatchStocks();
-    }
-
-    /** 최우선 종목코드 — is_primary=true 있으면 해당 종목, 없으면 보유 비중 1위 */
-    @GetMapping("/primary-stock")
-    public String getPrimaryStockCode() {
-        return primaryStockResolverService.resolveStockCode();
     }
 
     // ── 종목별 이력 ───────────────────────────────────────────────────────

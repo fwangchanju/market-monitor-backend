@@ -62,7 +62,7 @@ public class ProgramTradeTrendCollector {
     /** 스케줄러 호출 — 당일 장중 스냅샷 적재 */
     @Transactional
     public void collect(LocalDateTime snapshotTime) {
-        List<String> stockCodes = watchStockCacheService.findDistinctStockCodes();
+        List<String> stockCodes = watchStockCacheService.getCache();
         for (String stockCode : stockCodes) {
             try {
                 collectIntradayForStock(stockCode, snapshotTime);
@@ -75,7 +75,7 @@ public class ProgramTradeTrendCollector {
     /** 스케줄러 호출 — 당일 일별 데이터만 적재 */
     @Transactional
     public void collectDaily(LocalDate tradeDate) {
-        List<String> stockCodes = watchStockCacheService.findDistinctStockCodes();
+        List<String> stockCodes = watchStockCacheService.getCache();
         for (String stockCode : stockCodes) {
             try {
                 collectDailyForStock(stockCode, tradeDate, true);

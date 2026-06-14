@@ -16,6 +16,7 @@ CREATE TABLE watch_stock (
     stock_code VARCHAR(20) NOT NULL,
     is_primary BOOLEAN NOT NULL DEFAULT FALSE,
     register_by VARCHAR(20) NOT NULL,
+    holding_rank INT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_watch_stock PRIMARY KEY (id),
     CONSTRAINT uk_watch_stock_stock UNIQUE (stock_code),

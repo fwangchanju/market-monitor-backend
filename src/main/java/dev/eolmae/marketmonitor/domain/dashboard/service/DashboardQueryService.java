@@ -13,10 +13,12 @@ import dev.eolmae.marketmonitor.domain.dashboard.dto.ProgramTradingRankingItem;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.ShortSellingHistoryItem;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.SnapshotResponse;
 import dev.eolmae.marketmonitor.domain.dashboard.dto.StockHistoryResponse;
-import dev.eolmae.marketmonitor.domain.dashboard.dto.StockInfoItem;
-import dev.eolmae.marketmonitor.domain.dashboard.dto.WatchStockItem;
+import dev.eolmae.marketmonitor.domain.dashboard.dto.StockResponse;
+import dev.eolmae.marketmonitor.domain.dashboard.dto.WatchStockResponse;
 import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.ProgramTradingRankingSnapshot;
+import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
+import dev.eolmae.marketmonitor.domain.stock.entity.WatchStock;
 import dev.eolmae.marketmonitor.domain.stock.enums.AmtQtyType;
 import dev.eolmae.marketmonitor.domain.stock.enums.IntradayInvestorType;
 import dev.eolmae.marketmonitor.domain.stock.enums.IntradayRankingType;
@@ -30,7 +32,8 @@ import dev.eolmae.marketmonitor.domain.stock.repository.ProgramTradingHistoryRep
 import dev.eolmae.marketmonitor.domain.stock.repository.ProgramTradingRankingSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.ShortSellingDailyHistoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
-import dev.eolmae.marketmonitor.domain.stock.repository.WatchStockRepository;
+import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
+import dev.eolmae.marketmonitor.domain.stock.service.WatchStockCacheService;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -52,10 +55,11 @@ public class DashboardQueryService {
     private final ProgramTradingRankingSnapshotRepository programTradingRankingSnapshotRepository;
     private final IndexContributionRankingSnapshotRepository indexContributionRankingSnapshotRepository;
     private final StockInfoRepository stockInfoRepository;
-    private final WatchStockRepository watchStockRepository;
     private final ProgramTradingHistoryRepository programTradingHistoryRepository;
     private final ProgramTradingDailyHistoryRepository programTradingDailyHistoryRepository;
     private final ShortSellingDailyHistoryRepository shortSellingDailyHistoryRepository;
+    private final WatchStockCacheService watchStockCacheService;
+    private final StockInfoCacheService stockInfoCacheService;
 
     public DashboardQueryService(
             MarketOverviewSnapshotRepository marketOverviewSnapshotRepository,
@@ -64,20 +68,22 @@ public class DashboardQueryService {
             ProgramTradingRankingSnapshotRepository programTradingRankingSnapshotRepository,
             IndexContributionRankingSnapshotRepository indexContributionRankingSnapshotRepository,
             StockInfoRepository stockInfoRepository,
-            WatchStockRepository watchStockRepository,
             ProgramTradingHistoryRepository programTradingHistoryRepository,
             ProgramTradingDailyHistoryRepository programTradingDailyHistoryRepository,
-            ShortSellingDailyHistoryRepository shortSellingDailyHistoryRepository) {
+            ShortSellingDailyHistoryRepository shortSellingDailyHistoryRepository,
+            WatchStockCacheService watchStockCacheService,
+            StockInfoCacheService stockInfoCacheService) {
         this.marketOverviewSnapshotRepository = marketOverviewSnapshotRepository;
         this.investorTradingSummarySnapshotRepository = investorTradingSummarySnapshotRepository;
         this.intradayInvestorRankingSnapshotRepository = intradayInvestorRankingSnapshotRepository;
         this.programTradingRankingSnapshotRepository = programTradingRankingSnapshotRepository;
         this.indexContributionRankingSnapshotRepository = indexContributionRankingSnapshotRepository;
         this.stockInfoRepository = stockInfoRepository;
-        this.watchStockRepository = watchStockRepository;
         this.programTradingHistoryRepository = programTradingHistoryRepository;
         this.programTradingDailyHistoryRepository = programTradingDailyHistoryRepository;
         this.shortSellingDailyHistoryRepository = shortSellingDailyHistoryRepository;
+        this.watchStockCacheService = watchStockCacheService;
+        this.stockInfoCacheService = stockInfoCacheService;
     } // TODO 이거 왜 RequiredArgs.. 로 안하고 직접 명시했지
 
     public DashboardResponse getDashboard() {
@@ -266,14 +272,23 @@ public class DashboardQueryService {
         return new SnapshotResponse<>(snapshotTime, items);
     }
 
-    public List<WatchStockItem> getWatchStocks() {
-        return watchStockRepository.findAll().stream()
-                .map(item -> new WatchStockItem(
-                        item.getStock().getStockCode(),
-                        item.getStock().getStockName(),
-                        item.getStock().getMarketType(),
-                        item.isPrimary()))
+    public List<WatchStockResponse> getWatchStocks() {
+        List<WatchStock> watchStockCache = watchStockCacheService.getCache();
+        boolean isPrimaryRegistered = watchStockCache.stream().anyMatch(WatchStock::isPrimary);
+        Map<String, StockInfo> stockInfoCache = stockInfoCacheService.getCache();
+
+        return watchStockCache.stream()
+                .map(ws -> {
+                    StockInfo stockInfo = stockInfoCache.get(ws.getStockCode());
+                    return new WatchStockResponse(
+                            ws.getStockCode(),
+                            stockInfo.getStockName(),
+                            stockInfo.getMarketType(),
+                            ws.isPrimary(),
+                            isPrimaryRegistered ? ws.isPrimary() : Integer.valueOf(1).equals(ws.getHoldingRank()));
+                })
                 .toList();
+
     }
 
     public StockHistoryResponse<ProgramTradingHistoryItem> getProgramTradingHistory(
@@ -384,9 +399,9 @@ public class DashboardQueryService {
     }
 
     /** 활성 종목 전체 반환 — 관심종목 등록 화면 자동완성용 */
-    public List<StockInfoItem> getActiveStocks() {
+    public List<StockResponse> getAllStocks() {
         return stockInfoRepository.findByActiveTrueOrderByStockCodeAsc().stream()
-                .map(s -> new StockInfoItem(s.getStockCode(), s.getStockName(), s.getMarketType()))
+                .map(s -> new StockResponse(s.getStockCode(), s.getStockName(), s.getMarketType()))
                 .toList();
     }
 }

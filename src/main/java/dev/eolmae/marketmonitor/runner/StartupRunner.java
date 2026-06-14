@@ -2,6 +2,7 @@ package dev.eolmae.marketmonitor.runner;
 
 import dev.eolmae.marketmonitor.domain.stock.collector.HoldingsSyncService;
 import dev.eolmae.marketmonitor.domain.stock.collector.WatchStockBackfillService;
+import dev.eolmae.marketmonitor.domain.stock.entity.WatchStock;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketmonitor.domain.stock.service.WatchStockCacheService;
 import java.util.List;
@@ -23,36 +24,52 @@ public class StartupRunner implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        // 1. 종목 마스터 캐시 워밍
-        try {
-            stockInfoCacheService.findAllAsMap();
-            log.info("[startup] 종목 마스터 캐시 로드 완료");
-        } catch (Exception e) {
-            log.error("[startup] 종목 마스터 캐시 로드 실패", e);
-        }
+        // 1. 전종목 캐싱
+        loadStockInfoCache();
 
-        // 2. kt00018 동기화 — HOLDINGS watch_stock 반영 + HoldingsCache 업데이트
+        // 2. 보유종목 동기화 및 캐싱(kt00018)
+        syncHoldings();
+
+        // 3. 관심종목 캐시 read
+        List<WatchStock> watchStockCache = getWatchStockCache();
+
+        // 4. 전체 watch_stock 백필 가드 확인 (비동기 — 기동 지연 최소화)
+        for (WatchStock watchStock : watchStockCache) {
+            watchStockBackfillService.backfill(watchStock.getStockCode());
+        }
+        log.info("[startup] 백필 요청 완료: {}종목 (비동기 처리 중)", watchStockCache.size());
+    }
+
+    private void loadStockInfoCache() {
+
+        try {
+            stockInfoCacheService.getCache();
+            log.info("[startup] 전체 종목 정보 캐싱 완료");
+        } catch (Exception e) {
+            log.error("[startup] 전체 종목 정보 캐싱 실패", e);
+        }
+    }
+
+    private void syncHoldings() {
+
         try {
             holdingsSyncService.sync();
             log.info("[startup] 보유종목 동기화 완료");
         } catch (Exception e) {
-            log.error("[startup] 보유종목 동기화 실패 (Kiwoom API 미설정 시 정상)", e);
+            log.error("[startup] 보유종목 동기화 실패", e);
         }
+    }
 
-        // 3. 관심종목 캐시 워밍 (2번 완료 후 최신 watch_stock 반영)
-        List<String> watchCodes;
+    private List<WatchStock> getWatchStockCache() {
+
         try {
-            watchCodes = watchStockCacheService.findDistinctStockCodes();
-            log.info("[startup] 관심종목 캐시 로드 완료: {}종목", watchCodes.size());
+            List<WatchStock> watchStockCache = watchStockCacheService.getCache();
+            log.info("[startup] 관심종목 캐시 로드 완료: {}종목", watchStockCache.size());
+
+            return watchStockCache;
         } catch (Exception e) {
             log.error("[startup] 관심종목 캐시 로드 실패", e);
-            return;
+            return List.of();
         }
-
-        // 4. 전체 watch_stock 백필 가드 확인 (비동기 — 기동 지연 최소화)
-        for (String stockCode : watchCodes) {
-            watchStockBackfillService.backfill(stockCode);
-        }
-        log.info("[startup] 백필 요청 완료: {}종목 (비동기 처리 중)", watchCodes.size());
     }
 }

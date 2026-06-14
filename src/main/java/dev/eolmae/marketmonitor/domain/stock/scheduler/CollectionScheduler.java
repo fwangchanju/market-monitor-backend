@@ -1,6 +1,7 @@
 package dev.eolmae.marketmonitor.domain.stock.scheduler;
 
 import dev.eolmae.marketmonitor.common.enums.Zone;
+import dev.eolmae.marketmonitor.domain.stock.collector.HoldingsSyncService;
 import dev.eolmae.marketmonitor.domain.stock.collector.IndexContributionRankingCollector;
 import dev.eolmae.marketmonitor.domain.stock.collector.IntradayInvestorRankingCollector;
 import dev.eolmae.marketmonitor.domain.stock.collector.ProgramNetBuyRankingCollector;
@@ -23,6 +24,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class CollectionScheduler {
 
+    private final HoldingsSyncService holdingsSyncService;
     private final SectorCurrentPriceCollector sectorCurrentPriceCollector;
     private final SectorInvestorNetBuyCollector sectorInvestorNetBuyCollector;
     private final IntradayInvestorRankingCollector intradayInvestorRankingCollector;
@@ -42,6 +44,7 @@ public class CollectionScheduler {
         LocalDateTime snapshotTime = resolveSnapshotTime();
         log.info("장중 시장 데이터 수집 시작: snapshotTime={}", snapshotTime);
 
+        runSafely("보유종목동기화", holdingsSyncService::sync);
         runSafely("시장종합", () -> sectorCurrentPriceCollector.collect(snapshotTime));
         runSafely("투자자별매매종합", () -> sectorInvestorNetBuyCollector.collect(snapshotTime));
         runSafely("장중투자자랭킹", () -> intradayInvestorRankingCollector.collect(snapshotTime));

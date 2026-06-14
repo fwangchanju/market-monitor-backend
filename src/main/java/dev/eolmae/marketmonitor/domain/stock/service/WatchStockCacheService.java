@@ -1,6 +1,8 @@
 package dev.eolmae.marketmonitor.domain.stock.service;
 
-import dev.eolmae.marketmonitor.config.CacheConfig;
+import dev.eolmae.marketmonitor.common.cache.CacheKey;
+import dev.eolmae.marketmonitor.common.cache.CacheService;
+import dev.eolmae.marketmonitor.domain.stock.entity.WatchStock;
 import dev.eolmae.marketmonitor.domain.stock.repository.WatchStockRepository;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -9,18 +11,22 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.swing.text.html.Option;
+
 @Service
 @RequiredArgsConstructor
-public class WatchStockCacheService {
+public class WatchStockCacheService implements CacheService<List<WatchStock>> {
 
-    private final WatchStockRepository repository;
+    private final WatchStockRepository watchStockRepository;
 
-    @Cacheable(CacheConfig.WATCH_CODES)
+    @Override
+    @Cacheable(CacheKey.WATCH_STOCK)
     @Transactional(readOnly = true)
-    public List<String> findDistinctStockCodes() {
-        return repository.findDistinctStockCodes();
+    public List<WatchStock> getCache() {
+        return watchStockRepository.findAll();
     }
 
-    @CacheEvict(value = CacheConfig.WATCH_CODES, allEntries = true)
+    @Override
+    @CacheEvict(value = CacheKey.WATCH_STOCK, allEntries = true)
     public void evict() {}
 }

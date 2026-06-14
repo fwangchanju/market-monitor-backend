@@ -1,9 +1,11 @@
 package dev.eolmae.marketmonitor.domain.stock.service;
 
-import dev.eolmae.marketmonitor.config.CacheConfig;
+import dev.eolmae.marketmonitor.common.cache.CacheKey;
+import dev.eolmae.marketmonitor.common.cache.CacheService;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
@@ -13,16 +15,20 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-public class StockInfoCacheService {
+public class StockInfoCacheService implements CacheService<Map<String, StockInfo>> {
 
-    private final StockInfoRepository repository;
+    private final StockInfoRepository stockInfoRepository;
 
-    @Cacheable(CacheConfig.STOCK_INFO)
+    @Override
+    @Cacheable(CacheKey.STOCK_INFO)
     @Transactional(readOnly = true)
-    public Map<String, StockInfo> findAllAsMap() {
-        return repository.findAll().stream().collect(Collectors.toMap(StockInfo::getStockCode, s -> s));
+    public Map<String, StockInfo> getCache() {
+        return stockInfoRepository.findAll()
+                .stream()
+                .collect(Collectors.toMap(StockInfo::getStockCode, Function.identity()));
     }
 
-    @CacheEvict(value = CacheConfig.STOCK_INFO, allEntries = true)
+    @Override
+    @CacheEvict(value = CacheKey.STOCK_INFO, allEntries = true)
     public void evict() {}
 }

@@ -7,7 +7,10 @@ import java.util.List;
 // ka10051: 업종별투자자순매수요청
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record SectorInvestorNetBuyResponse(
-        @JsonProperty("inds_netprps") List<IndsNetprps> indsNetprps) {
+        @JsonProperty("return_code") String returnCode,
+        @JsonProperty("return_msg") String returnMsg,
+        @JsonProperty("inds_netprps") List<IndsNetprps> indsNetprps)
+        implements BaseResponse {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record IndsNetprps(

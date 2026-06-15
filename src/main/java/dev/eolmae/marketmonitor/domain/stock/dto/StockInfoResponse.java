@@ -6,7 +6,11 @@ import java.util.List;
 
 // ka10099: 종목정보 리스트
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record StockInfoResponse(@JsonProperty("list") List<StockItem> list) {
+public record StockInfoResponse(
+        @JsonProperty("return_code") String returnCode,
+        @JsonProperty("return_msg") String returnMsg,
+        @JsonProperty("list") List<StockItem> list)
+        implements BaseResponse {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record StockItem(

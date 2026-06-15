@@ -7,6 +7,8 @@ import java.util.List;
 // ka20001: 업종현재가요청
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record SectorCurrentPriceResponse(
+        @JsonProperty("return_code") String returnCode,
+        @JsonProperty("return_msg") String returnMsg,
         @JsonProperty("cur_prc") String curPrc,
         @JsonProperty("pred_pre_sig") String predPreSig,
         @JsonProperty("pred_pre") String predPre,
@@ -23,7 +25,8 @@ public record SectorCurrentPriceResponse(
         @JsonProperty("stdns") String stdns,
         @JsonProperty("fall") String fall,
         @JsonProperty("lst") String lst,
-        @JsonProperty("inds_cur_prc_tm") List<PriceTick> priceTicks) {
+        @JsonProperty("inds_cur_prc_tm") List<PriceTick> priceTicks)
+        implements BaseResponse {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record PriceTick(

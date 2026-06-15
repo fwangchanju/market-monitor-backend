@@ -12,6 +12,7 @@ import dev.eolmae.marketmonitor.domain.stock.collector.ShortSellingTrendCollecto
 import dev.eolmae.marketmonitor.domain.stock.collector.StockInfoCollector;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -41,7 +42,7 @@ public class CollectionScheduler {
      */
     @Scheduled(cron = "0 0 8-20 * * MON-FRI", zone = KST_ZONE_ID)
     public void collectMarketData() {
-        LocalDateTime snapshotTime = resolveSnapshotTime();
+        LocalDateTime snapshotTime = LocalDateTime.now(Zone.KST.zoneId()).truncatedTo(ChronoUnit.HOURS);
         log.info("장중 시장 데이터 수집 시작: snapshotTime={}", snapshotTime);
 
         runSafely("보유종목동기화", holdingsSyncService::sync);
@@ -71,8 +72,7 @@ public class CollectionScheduler {
      */
     @Scheduled(cron = "0 30 20 * * MON-FRI", zone = KST_ZONE_ID)
     public void collectShortSelling() {
-        LocalDateTime snapshotTime =
-                LocalDateTime.now(Zone.KST.zoneId()).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime snapshotTime = LocalDateTime.now(Zone.KST.zoneId()).truncatedTo(ChronoUnit.HOURS);
         log.info("공매도 데이터 수집 시작: snapshotTime={}", snapshotTime);
 
         runSafely("공매도", () -> shortSellingTrendCollector.collect(snapshotTime));
@@ -90,15 +90,6 @@ public class CollectionScheduler {
         runSafely("종목마스터", stockInfoCollector::sync);
 
         log.info("종목 마스터 동기화 완료");
-    }
-
-    /**
-     * snapshotTime: 현재 시각을 1시간 단위로 내림 처리한 논리적 기준 시각
-     * 예) 09:07:32 → 09:00:00 / 10:00:12 → 10:00:00
-     */
-    private LocalDateTime resolveSnapshotTime() {
-        LocalDateTime now = LocalDateTime.now(Zone.KST.zoneId());
-        return now.withMinute(0).withSecond(0).withNano(0);
     }
 
     private void runSafely(String collectorName, Runnable task) {

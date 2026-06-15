@@ -20,7 +20,7 @@ import org.springframework.web.client.RestClient;
 
 @Slf4j
 @Component
-@ConditionalOnProperty(name = "stock.collection.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "krx.collection.enabled", havingValue = "true")
 @RequiredArgsConstructor
 public class KrxCrawler {
 

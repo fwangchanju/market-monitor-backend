@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
-@ConditionalOnProperty(name = "stock.collection.enabled", havingValue = "true")
+@ConditionalOnProperty(name = "krx.collection.enabled", havingValue = "true")
 public class KrxAuthClient {
 
     private static final String LOGIN_PAGE = "https://data.krx.co.kr/contents/MDC/COMS/client/MDCCOMS001.cmd";

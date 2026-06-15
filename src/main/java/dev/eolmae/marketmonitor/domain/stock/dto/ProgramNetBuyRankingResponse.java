@@ -7,7 +7,10 @@ import java.util.List;
 // ka90003: 프로그램순매수상위50요청
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record ProgramNetBuyRankingResponse(
-        @JsonProperty("prm_netprps_upper_50") List<RankingItem> items) {
+        @JsonProperty("return_code") String returnCode,
+        @JsonProperty("return_msg") String returnMsg,
+        @JsonProperty("prm_netprps_upper_50") List<RankingItem> items)
+        implements BaseResponse {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record RankingItem(

@@ -7,7 +7,10 @@ import java.util.List;
 // ka20002: 업종별주가요청
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record SectorPriceListResponse(
-        @JsonProperty("inds_stkpc") List<StockItem> items) {
+        @JsonProperty("return_code") String returnCode,
+        @JsonProperty("return_msg") String returnMsg,
+        @JsonProperty("inds_stkpc") List<StockItem> items)
+        implements BaseResponse {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record StockItem(

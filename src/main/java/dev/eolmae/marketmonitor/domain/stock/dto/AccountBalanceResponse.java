@@ -7,7 +7,10 @@ import java.util.List;
 // ka00018: 계좌평가잔고내역요청
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record AccountBalanceResponse(
-        @JsonProperty("acnt_evlt_remn_indv_tot") List<HoldingItem> holdings) {
+        @JsonProperty("return_code") String returnCode,
+        @JsonProperty("return_msg") String returnMsg,
+        @JsonProperty("acnt_evlt_remn_indv_tot") List<HoldingItem> holdings)
+        implements BaseResponse {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record HoldingItem(

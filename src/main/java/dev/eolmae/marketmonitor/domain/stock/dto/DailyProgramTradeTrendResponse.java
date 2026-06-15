@@ -7,7 +7,10 @@ import java.util.List;
 // ka90013: 종목일별프로그램매매추이요청
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record DailyProgramTradeTrendResponse(
-        @JsonProperty("stk_daly_prm_trde_trnsn") List<DailyTick> ticks) {
+        @JsonProperty("return_code") String returnCode,
+        @JsonProperty("return_msg") String returnMsg,
+        @JsonProperty("stk_daly_prm_trde_trnsn") List<DailyTick> ticks)
+        implements BaseResponse {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record DailyTick(

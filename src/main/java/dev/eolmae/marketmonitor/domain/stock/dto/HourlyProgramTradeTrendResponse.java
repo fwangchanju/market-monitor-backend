@@ -7,7 +7,10 @@ import java.util.List;
 // ka90008: 종목시간별프로그램매매추이요청
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record HourlyProgramTradeTrendResponse(
-        @JsonProperty("stk_tm_prm_trde_trnsn") List<TradeTick> ticks) {
+        @JsonProperty("return_code") String returnCode,
+        @JsonProperty("return_msg") String returnMsg,
+        @JsonProperty("stk_tm_prm_trde_trnsn") List<TradeTick> ticks)
+        implements BaseResponse {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record TradeTick(

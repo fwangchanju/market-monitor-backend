@@ -7,7 +7,10 @@ import java.util.List;
 // ka10014: 공매도추이요청
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record ShortSellingTrendResponse(
-        @JsonProperty("shrts_trnsn") List<ShortTick> ticks) {
+        @JsonProperty("return_code") String returnCode,
+        @JsonProperty("return_msg") String returnMsg,
+        @JsonProperty("shrts_trnsn") List<ShortTick> ticks)
+        implements BaseResponse {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record ShortTick(

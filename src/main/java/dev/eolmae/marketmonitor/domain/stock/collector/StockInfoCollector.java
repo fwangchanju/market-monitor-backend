@@ -11,11 +11,12 @@ import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import java.math.BigDecimal;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,71 +33,83 @@ public class StockInfoCollector {
 
     @Transactional
     public void sync() {
-        Set<String> fetchedCodes = new HashSet<>();
+        Map<String, FetchStockInfo> fetchedStocks = new HashMap<>();
 
         try {
             for (Market marketType : Market.values()) {
-                fetchedCodes.addAll(syncForMarket(marketType));
+                collectMarket(marketType, fetchedStocks);
             }
-        } catch (EscalateException e) {
-            throw e;
         } catch (Exception e) {
             throw new EscalateException(ErrorCode.STOCK_INFO_SYNC_FAILED, e);
         }
 
-        // API에서 더 이상 조회되지 않는 종목은 비활성화
-        List<StockInfo> allStocks = stockInfoRepository.findAll();
-        for (StockInfo stock : allStocks) {
-            if (stock.isActive() && !fetchedCodes.contains(stock.getStockCode())) {
-                stock.markInactive();
-                log.debug("종목 비활성화: stockCode={}, stockName={}", stock.getStockCode(), stock.getStockName());
+        int fetchedCount = fetchedStocks.size();
+
+        for (StockInfo existing : stockInfoRepository.findAll()) {
+            FetchStockInfo fetched = fetchedStocks.remove(existing.getStockCode());
+
+            if (fetched == null) {
+                if (existing.isActive()) {
+                    existing.markInactive();
+                    log.debug(
+                            "종목 비활성화: stockCode={}, stockName={}",
+                            existing.getStockCode(),
+                            existing.getStockName());
+                }
+                continue;
             }
+
+            existing.update(
+                    fetched.stockName(), fetched.market(), fetched.marketCode(), fetched.listCount(), fetched.lastPrice());
         }
 
+        // DB에 없던 신규 종목
+        List<StockInfo> newStocks = fetchedStocks.values().stream()
+                .map(fetched -> StockInfo.create(
+                        fetched.stockCode(),
+                        fetched.stockName(),
+                        fetched.market(),
+                        fetched.marketCode(),
+                        fetched.listCount(),
+                        fetched.lastPrice()))
+                .toList();
+        stockInfoRepository.saveAll(newStocks);
+
         stockInfoCacheService.evict();
-        log.info("종목 마스터 동기화 완료: 조회 종목 수={}", fetchedCodes.size());
+        log.info("종목 정보 동기화 완료: 조회 종목 수={}", fetchedCount);
     }
 
-    private Set<String> syncForMarket(Market marketType) {
-        String mrktTp =
-                switch (marketType) {
-                    case KOSPI -> MrktTp.KOSPI.value;
-                    case KOSDAQ -> MrktTp.KOSDAQ.value;
-                };
-        Set<String> fetchedCodes = new HashSet<>(); // TODO 이거 꼭 Set 이어야됨?
+    private void collectMarket(Market marketType, Map<String, FetchStockInfo> fetchedStocks) {
+        String mrktTp = MrktTp.codeOf(marketType);
 
         var request = new StockInfoRequest(mrktTp);
         StockInfoResponse response = kiwoomApiClient.post(request, StockInfoResponse.class);
 
-        if (response.list() == null) { // TODO Set.of() 로 리턴하고 여기 이후에서 객체 생성해야 이득아님?
-            return fetchedCodes;
+        if (response.list() == null) {
+            return;
         }
 
         for (StockInfoResponse.StockItem item : response.list()) {
-            String stockCode = item.code() != null ? item.code().trim() : ""; // TODO 옵셔널처리
-            if (stockCode.isEmpty()) { // TODO 위에서 3항연산자로 null 인거 없도록 만들어놓고 이건 뭐하는짓임?
+            String stockCode = StringUtils.trimToEmpty(item.code());
+            if (stockCode.isEmpty()) {
+                log.warn("종목코드 없는 항목 스킵: stockName={}", item.name());
                 continue;
             }
 
-            // 키움 API가 종목명에 공백을 포함해 반환하는 경우가 있어 제거
-            String stockName = item.name() != null ? item.name().replace(" ", "") : ""; // TODO 옵셔널
+            String stockName = StringUtils.trimToEmpty(item.name());
             String marketCode = item.marketCode();
             Long listCount = NumberParser.parseLong(item.listCount());
             BigDecimal lastPrice = NumberParser.parseBigDecimal(item.lastPrice());
-            fetchedCodes.add(stockCode);
 
-            StockInfo existing = stockInfoRepository.findById(stockCode).orElse(null);
-            if (existing == null) {
-                stockInfoRepository.save(
-                        StockInfo.create(stockCode, stockName, marketType, marketCode, listCount, lastPrice));
-            } else if (!existing.getStockName().equals(stockName) || !existing.isActive()) {
-                existing.update(stockName, marketType, marketCode, listCount, lastPrice);
-            }
+            fetchedStocks.put(
+                    stockCode, new FetchStockInfo(stockCode, stockName, marketType, marketCode, listCount, lastPrice));
         }
 
-        log.debug("종목 마스터 시장별 동기화 완료: market={}, count={}", marketType, fetchedCodes.size());
-        return fetchedCodes;
+        log.debug("종목 정보 시장별 동기화 완료: market={}", marketType);
     }
+
+    private record FetchStockInfo(
+            String stockCode, String stockName, Market market, String marketCode, Long listCount, BigDecimal lastPrice) {}
 
     private enum MrktTp {
         KOSPI("0"),
@@ -105,6 +118,13 @@ public class StockInfoCollector {
 
         MrktTp(String value) {
             this.value = value;
+        }
+
+        static String codeOf(Market market) {
+            return switch (market) {
+                case KOSPI -> MrktTp.KOSPI.value;
+                case KOSDAQ -> MrktTp.KOSDAQ.value;
+            };
         }
     }
 }

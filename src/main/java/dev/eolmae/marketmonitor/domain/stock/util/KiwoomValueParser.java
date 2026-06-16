@@ -4,34 +4,32 @@ import dev.eolmae.marketmonitor.common.util.NumberParser;
 import java.math.BigDecimal;
 import org.apache.commons.lang3.StringUtils;
 
+
 public final class KiwoomValueParser {
 
     private KiwoomValueParser() {}
 
-    public static BigDecimal parseBigDecimal(String value) {
+    // 키움 API 응답 숫자 문자열 전처리: 공백/쉼표 제거, 대시 단독(데이터 없음) → 빈 문자열, -- 접두사(음수 오류 패턴) → - 로 정규화
+    private static String normalize(String value) {
         String normalized = StringUtils.trimToEmpty(value).replace(",", "");
         if ("-".equals(normalized)) {
-            return BigDecimal.ZERO;
+            return "";
         }
         if (normalized.startsWith("--")) {
             normalized = normalized.substring(1);
         }
-        return NumberParser.parseBigDecimal(normalized);
+        return normalized;
+    }
+
+    public static BigDecimal parseBigDecimal(String value) {
+        return NumberParser.parseBigDecimal(normalize(value));
     }
 
     public static long parseLong(String value) {
-        String normalized = StringUtils.trimToEmpty(value).replace(",", "");
-        if ("-".equals(normalized)) {
-            return 0L;
-        }
-        return NumberParser.parseLong(normalized);
+        return NumberParser.parseLong(normalize(value));
     }
 
     public static int parseInt(String value) {
-        String normalized = StringUtils.trimToEmpty(value).replace(",", "");
-        if ("-".equals(normalized)) {
-            return 0;
-        }
-        return NumberParser.parseInt(normalized);
+        return NumberParser.parseInt(normalize(value));
     }
 }

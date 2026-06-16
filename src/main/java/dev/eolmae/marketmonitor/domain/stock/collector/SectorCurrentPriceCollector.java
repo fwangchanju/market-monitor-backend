@@ -2,7 +2,7 @@ package dev.eolmae.marketmonitor.domain.stock.collector;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.enums.Zone;
-import dev.eolmae.marketmonitor.common.util.NumberParser;
+import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.SectorCurrentPriceRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.SectorCurrentPriceResponse;
@@ -52,17 +52,17 @@ public class SectorCurrentPriceCollector {
 
         LocalDateTime now = LocalDateTime.now(Zone.KST.zoneId());
 
-        BigDecimal indexValue = NumberParser.parseBigDecimal(response.curPrc()).abs();
-        BigDecimal changeValue = NumberParser.parseBigDecimal(response.predPre());
-        BigDecimal changeRate = NumberParser.parseBigDecimal(response.fluRt());
-        BigDecimal tradingValue = NumberParser.parseBigDecimal(response.trdePrica());
+        BigDecimal indexValue = KiwoomValueParser.parseBigDecimal(response.curPrc()).abs();
+        BigDecimal changeValue = KiwoomValueParser.parseBigDecimal(response.predPre());
+        BigDecimal changeRate = KiwoomValueParser.parseBigDecimal(response.fluRt());
+        BigDecimal tradingValue = KiwoomValueParser.parseBigDecimal(response.trdePrica());
         String marketStatus =
                 response.mrktStatClsCode() != null ? response.mrktStatClsCode().trim() : "";
-        int upperLimitCount = NumberParser.parseInt(response.upl());
-        int lowerLimitCount = NumberParser.parseInt(response.lst());
-        int advancers = NumberParser.parseInt(response.rising());
-        int decliners = NumberParser.parseInt(response.fall());
-        int unchangedCount = NumberParser.parseInt(response.stdns());
+        int upperLimitCount = KiwoomValueParser.parseInt(response.upl());
+        int lowerLimitCount = KiwoomValueParser.parseInt(response.lst());
+        int advancers = KiwoomValueParser.parseInt(response.rising());
+        int decliners = KiwoomValueParser.parseInt(response.fall());
+        int unchangedCount = KiwoomValueParser.parseInt(response.stdns());
 
         if (marketOverviewSnapshotRepository
                 .findByMarketTypeAndSnapshotTime(marketType, snapshotTime)

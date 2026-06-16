@@ -1,7 +1,7 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
-import dev.eolmae.marketmonitor.common.util.NumberParser;
+import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import dev.eolmae.marketmonitor.common.util.StockCode;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.ProgramNetBuyRankingRequest;
@@ -79,9 +79,9 @@ public class ProgramNetBuyRankingCollector {
             }
 
             String stockName = item.stkNm() != null ? item.stkNm().trim() : "";
-            BigDecimal buyAmount = NumberParser.parseBigDecimal(item.prmBuyAmt());
-            BigDecimal sellAmount = NumberParser.parseBigDecimal(item.prmSellAmt());
-            BigDecimal netBuyAmount = NumberParser.parseBigDecimal(item.prmNetprpsAmt());
+            BigDecimal buyAmount = KiwoomValueParser.parseBigDecimal(item.prmBuyAmt());
+            BigDecimal sellAmount = KiwoomValueParser.parseBigDecimal(item.prmSellAmt());
+            BigDecimal netBuyAmount = KiwoomValueParser.parseBigDecimal(item.prmNetprpsAmt());
 
             rankingRepository.save(ProgramTradingRankingSnapshot.create(
                     marketType,

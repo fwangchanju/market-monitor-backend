@@ -3,7 +3,7 @@ package dev.eolmae.marketmonitor.domain.stock.collector;
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
-import dev.eolmae.marketmonitor.common.util.NumberParser;
+import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.StockInfoRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.StockInfoResponse;
@@ -98,8 +98,8 @@ public class StockInfoCollector {
 
             String stockName = StringUtils.trimToEmpty(item.name());
             String marketCode = item.marketCode();
-            Long listCount = NumberParser.parseLong(item.listCount());
-            BigDecimal lastPrice = NumberParser.parseBigDecimal(item.lastPrice());
+            Long listCount = KiwoomValueParser.parseLong(item.listCount());
+            BigDecimal lastPrice = KiwoomValueParser.parseBigDecimal(item.lastPrice());
 
             fetchedStocks.put(
                     stockCode, new FetchStockInfo(stockCode, stockName, marketType, marketCode, listCount, lastPrice));

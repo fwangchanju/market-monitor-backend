@@ -1,7 +1,7 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
-import dev.eolmae.marketmonitor.common.util.NumberParser;
+import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.IntradayInvestorRankingRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.IntradayInvestorRankingResponse;
@@ -91,9 +91,9 @@ public class IntradayInvestorRankingCollector {
                     rank++,
                     item.stkCd(),
                     item.stkNm(),
-                    NumberParser.parseBigDecimal(item.netslmt()),
-                    NumberParser.parseLong(item.selQty()),
-                    NumberParser.parseLong(item.buyQty()),
+                    KiwoomValueParser.parseBigDecimal(item.netslmt()),
+                    KiwoomValueParser.parseLong(item.selQty()),
+                    KiwoomValueParser.parseLong(item.buyQty()),
                     snapshotTime));
         }
 

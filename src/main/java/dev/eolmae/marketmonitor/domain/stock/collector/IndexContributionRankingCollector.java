@@ -3,7 +3,7 @@ package dev.eolmae.marketmonitor.domain.stock.collector;
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
-import dev.eolmae.marketmonitor.common.util.NumberParser;
+import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import dev.eolmae.marketmonitor.common.util.StockCode;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.SectorPriceListRequest;
@@ -108,7 +108,7 @@ public class IndexContributionRankingCollector {
                 continue;
             }
 
-            BigDecimal curPrice = NumberParser.parseBigDecimal(item.curPrc()).abs();
+            BigDecimal curPrice = KiwoomValueParser.parseBigDecimal(item.curPrc()).abs();
             BigDecimal prevPrice = master.getLastPrice();
             BigDecimal listCount = BigDecimal.valueOf(master.getListCount());
 

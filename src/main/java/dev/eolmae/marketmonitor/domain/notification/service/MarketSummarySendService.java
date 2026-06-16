@@ -11,15 +11,15 @@ import org.springframework.stereotype.Service;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class DashboardSendService {
+public class MarketSummarySendService {
 
     private final ScreenshotClient screenshotClient;
     private final TelegramClient telegramClient;
     private final TelegramProperties properties;
 
-    public void sendDashboard() {
+    public void sendMarketSummary() {
         List<byte[]> images = screenshotClient.captureAll();
         telegramClient.sendMediaGroup(properties.chatId(), images);
-        log.info("대시보드 발송 완료: {}장", images.size());
+        log.info("시장 현황 이미지 발송 완료: {}장", images.size());
     }
 }

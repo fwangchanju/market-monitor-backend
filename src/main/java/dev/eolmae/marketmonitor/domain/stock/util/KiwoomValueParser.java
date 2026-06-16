@@ -9,27 +9,35 @@ public final class KiwoomValueParser {
 
     private KiwoomValueParser() {}
 
-    // 키움 API 응답 숫자 문자열 전처리: 공백/쉼표 제거, 대시 단독(데이터 없음) → 빈 문자열, -- 접두사(음수 오류 패턴) → - 로 정규화
-    private static String normalize(String value) {
-        String normalized = StringUtils.trimToEmpty(value).replace(",", "");
-        if ("-".equals(normalized)) {
-            return "";
+    // 키움 API 음수 오류 패턴: --1234.56 형태로 오는 경우 -1234.56으로 정규화
+    private static String fixDoubleNegative(String value) {
+        if (value.startsWith("--")) {
+            return value.substring(1);
         }
-        if (normalized.startsWith("--")) {
-            normalized = normalized.substring(1);
-        }
-        return normalized;
+        return value;
     }
 
     public static BigDecimal parseBigDecimal(String value) {
-        return NumberParser.parseBigDecimal(normalize(value));
+        String normalized = StringUtils.trimToEmpty(value).replace(",", "");
+        if ("-".equals(normalized)) {
+            return BigDecimal.ZERO;
+        }
+        return NumberParser.parseBigDecimal(fixDoubleNegative(normalized));
     }
 
     public static long parseLong(String value) {
-        return NumberParser.parseLong(normalize(value));
+        String normalized = StringUtils.trimToEmpty(value).replace(",", "");
+        if ("-".equals(normalized)) {
+            return 0L;
+        }
+        return NumberParser.parseLong(normalized);
     }
 
     public static int parseInt(String value) {
-        return NumberParser.parseInt(normalize(value));
+        String normalized = StringUtils.trimToEmpty(value).replace(",", "");
+        if ("-".equals(normalized)) {
+            return 0;
+        }
+        return NumberParser.parseInt(normalized);
     }
 }

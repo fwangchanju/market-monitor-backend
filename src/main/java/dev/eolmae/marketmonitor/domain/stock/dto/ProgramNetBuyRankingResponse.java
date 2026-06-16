@@ -10,7 +10,7 @@ public record ProgramNetBuyRankingResponse(
         @JsonProperty("return_code") String returnCode,
         @JsonProperty("return_msg") String returnMsg,
         @JsonProperty("prm_netprps_upper_50") List<RankingItem> items)
-        implements BaseResponse {
+        implements KiwoomResponse {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record RankingItem(

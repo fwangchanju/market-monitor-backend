@@ -2,7 +2,7 @@ package dev.eolmae.marketmonitor.domain.stock.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 
-public interface BaseResponse {
+public interface KiwoomResponse {
 
     @JsonProperty("return_code")
     String returnCode();

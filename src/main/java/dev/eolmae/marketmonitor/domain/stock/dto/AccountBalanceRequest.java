@@ -5,7 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 // ka00018: 계좌평가잔고내역요청
 public record AccountBalanceRequest(
         @JsonProperty("qry_tp") String qryTp,
-        @JsonProperty("dmst_stex_tp") String dmstStexTp) implements BaseRequest {
+        @JsonProperty("dmst_stex_tp") String dmstStexTp) implements KiwoomRequest {
 
     public static AccountBalanceRequest defaults() {
         return new AccountBalanceRequest("1", "KRX");

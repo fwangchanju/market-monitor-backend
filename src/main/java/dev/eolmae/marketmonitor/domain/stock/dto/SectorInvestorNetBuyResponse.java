@@ -10,7 +10,7 @@ public record SectorInvestorNetBuyResponse(
         @JsonProperty("return_code") String returnCode,
         @JsonProperty("return_msg") String returnMsg,
         @JsonProperty("inds_netprps") List<IndsNetprps> indsNetprps)
-        implements BaseResponse {
+        implements KiwoomResponse {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record IndsNetprps(

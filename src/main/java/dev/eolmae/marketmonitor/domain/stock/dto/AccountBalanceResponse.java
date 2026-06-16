@@ -10,7 +10,7 @@ public record AccountBalanceResponse(
         @JsonProperty("return_code") String returnCode,
         @JsonProperty("return_msg") String returnMsg,
         @JsonProperty("acnt_evlt_remn_indv_tot") List<HoldingItem> holdings)
-        implements BaseResponse {
+        implements KiwoomResponse {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record HoldingItem(

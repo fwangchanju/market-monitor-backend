@@ -7,7 +7,7 @@ public record SectorPriceListRequest(
         @JsonProperty("mrkt_tp") String mrktTp,
         @JsonProperty("inds_cd") String indsCd,
         @JsonProperty("stex_tp") String stexTp)
-        implements BaseRequest {
+        implements KiwoomRequest {
 
     @Override
     public String path() {

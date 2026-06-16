@@ -10,7 +10,7 @@ public record ShortSellingTrendResponse(
         @JsonProperty("return_code") String returnCode,
         @JsonProperty("return_msg") String returnMsg,
         @JsonProperty("shrts_trnsn") List<ShortTick> ticks)
-        implements BaseResponse {
+        implements KiwoomResponse {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record ShortTick(

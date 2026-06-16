@@ -6,7 +6,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 public record DailyProgramTradeTrendRequest(
         @JsonProperty("stk_cd") String stkCd,
         @JsonProperty("amt_qty_tp") String amtQtyTp // 1=금액
-        ) implements BaseRequest {
+        ) implements KiwoomRequest {
 
     @Override
     public String path() {

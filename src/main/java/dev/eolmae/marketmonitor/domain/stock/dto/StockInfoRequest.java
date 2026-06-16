@@ -3,7 +3,7 @@ package dev.eolmae.marketmonitor.domain.stock.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 // ka10099: 종목정보 리스트
-public record StockInfoRequest(@JsonProperty("mrkt_tp") String mrktTp) implements BaseRequest {
+public record StockInfoRequest(@JsonProperty("mrkt_tp") String mrktTp) implements KiwoomRequest {
 
     @Override
     public String path() {

@@ -10,7 +10,7 @@ public record StockInfoResponse(
         @JsonProperty("return_code") String returnCode,
         @JsonProperty("return_msg") String returnMsg,
         @JsonProperty("list") List<StockItem> list)
-        implements BaseResponse {
+        implements KiwoomResponse {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record StockItem(

@@ -10,7 +10,7 @@ public record HourlyProgramTradeTrendResponse(
         @JsonProperty("return_code") String returnCode,
         @JsonProperty("return_msg") String returnMsg,
         @JsonProperty("stk_tm_prm_trde_trnsn") List<TradeTick> ticks)
-        implements BaseResponse {
+        implements KiwoomResponse {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record TradeTick(

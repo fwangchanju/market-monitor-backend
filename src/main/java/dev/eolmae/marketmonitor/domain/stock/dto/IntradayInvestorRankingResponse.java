@@ -10,7 +10,7 @@ public record IntradayInvestorRankingResponse(
         @JsonProperty("return_code") String returnCode,
         @JsonProperty("return_msg") String returnMsg,
         @JsonProperty("opmr_invsr_trde_upper") List<RankingItem> items)
-        implements BaseResponse {
+        implements KiwoomResponse {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record RankingItem(

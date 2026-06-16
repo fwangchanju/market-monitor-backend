@@ -7,7 +7,7 @@ public record HourlyProgramTradeTrendRequest(
         @JsonProperty("stk_cd") String stkCd,
         @JsonProperty("amt_qty_tp") String amtQtyTp, // 1=금액
         @JsonProperty("date") String date // yyyyMMdd
-        ) implements BaseRequest {
+        ) implements KiwoomRequest {
 
     @Override
     public String path() {

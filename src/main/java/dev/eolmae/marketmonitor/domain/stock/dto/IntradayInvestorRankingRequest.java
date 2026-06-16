@@ -8,7 +8,7 @@ public record IntradayInvestorRankingRequest(
         @JsonProperty("mrkt_tp") String mrktTp,
         @JsonProperty("orgn_tp") String orgnTp,
         @JsonProperty("amt_qty_tp") String amtQtyTp)
-        implements BaseRequest {
+        implements KiwoomRequest {
 
     @Override
     public String path() {

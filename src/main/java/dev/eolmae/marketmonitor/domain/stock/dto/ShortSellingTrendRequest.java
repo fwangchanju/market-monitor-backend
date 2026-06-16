@@ -8,7 +8,7 @@ public record ShortSellingTrendRequest(
         @JsonProperty("tm_tp") String tmTp, // 2=일별
         @JsonProperty("strt_dt") String strtDt, // yyyyMMdd
         @JsonProperty("end_dt") String endDt // yyyyMMdd
-        ) implements BaseRequest {
+        ) implements KiwoomRequest {
 
     @Override
     public String path() {

@@ -26,7 +26,7 @@ public record SectorCurrentPriceResponse(
         @JsonProperty("fall") String fall,
         @JsonProperty("lst") String lst,
         @JsonProperty("inds_cur_prc_tm") List<PriceTick> priceTicks)
-        implements BaseResponse {
+        implements KiwoomResponse {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record PriceTick(

@@ -3,8 +3,8 @@ package dev.eolmae.marketmonitor.domain.stock.client;
 import com.google.common.util.concurrent.RateLimiter;
 import dev.eolmae.marketmonitor.common.exception.BusinessException;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
-import dev.eolmae.marketmonitor.domain.stock.dto.BaseRequest;
-import dev.eolmae.marketmonitor.domain.stock.dto.BaseResponse;
+import dev.eolmae.marketmonitor.domain.stock.dto.KiwoomRequest;
+import dev.eolmae.marketmonitor.domain.stock.dto.KiwoomResponse;
 import dev.eolmae.marketmonitor.domain.stock.exception.KiwoomRateLimitException;
 import dev.eolmae.marketmonitor.domain.stock.properties.KiwoomProperties;
 import java.util.Optional;
@@ -43,19 +43,19 @@ public class KiwoomApiClient {
      */
     @SuppressWarnings("UnstableApiUsage")
     @Retryable(retryFor = KiwoomRateLimitException.class, maxAttempts = 2, backoff = @Backoff(delay = 1000))
-    public <T extends BaseResponse> T post(BaseRequest request, Class<T> dataClass) {
+    public <T extends KiwoomResponse> T post(KiwoomRequest request, Class<T> dataClass) {
         log.debug("Kiwoom API 호출: apiId={}, path={}", request.apiId(), request.path());
         rateLimiter.acquire();
         return fetchResponse(request, dataClass);
     }
 
     @Recover
-    public <T> T recoverFromRateLimit(KiwoomRateLimitException e, BaseRequest request, Class<T> dataClass) {
+    public <T> T recoverFromRateLimit(KiwoomRateLimitException e, KiwoomRequest request, Class<T> dataClass) {
         log.warn("Kiwoom API rate limit 재시도 횟수 초과, 사이클 스킵: apiId={}", request.apiId());
         throw new BusinessException(ErrorCode.KIWOOM_RATE_LIMIT, request.apiId());
     }
 
-    private <T extends BaseResponse> T fetchResponse(BaseRequest request, Class<T> dataClass) {
+    private <T extends KiwoomResponse> T fetchResponse(KiwoomRequest request, Class<T> dataClass) {
         T response = Optional.ofNullable(requestApi(request, dataClass))
                 .orElseThrow(() -> new BusinessException(ErrorCode.KIWOOM_RESPONSE_PARSE_FAILED, request.apiId()));
 
@@ -71,7 +71,7 @@ public class KiwoomApiClient {
         return response;
     }
 
-    private <T> T requestApi(BaseRequest request, Class<T> dataClass) {
+    private <T> T requestApi(KiwoomRequest request, Class<T> dataClass) {
         try {
             return restClient
                     .post()

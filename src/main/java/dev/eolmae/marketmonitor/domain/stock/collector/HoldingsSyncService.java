@@ -1,6 +1,6 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
-import dev.eolmae.marketmonitor.common.util.NumberParser;
+import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.AccountBalanceRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.AccountBalanceResponse;
@@ -52,8 +52,8 @@ public class HoldingsSyncService {
 
         // 평가금액(evltAmt) 내림차순 정렬
         List<AccountBalanceResponse.HoldingItem> sortedHoldings = response.holdings().stream()
-                .sorted((a, b) -> NumberParser.parseBigDecimal(b.evltAmt())
-                        .compareTo(NumberParser.parseBigDecimal(a.evltAmt())))
+                .sorted((a, b) -> KiwoomValueParser.parseBigDecimal(b.evltAmt())
+                        .compareTo(KiwoomValueParser.parseBigDecimal(a.evltAmt())))
                 .toList();
 
         // 보유 없는 HOLDINGS 삭제

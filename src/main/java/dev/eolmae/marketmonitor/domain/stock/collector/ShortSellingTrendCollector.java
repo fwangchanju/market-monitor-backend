@@ -1,6 +1,6 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
-import dev.eolmae.marketmonitor.common.util.NumberParser;
+import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.ShortSellingTrendRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.ShortSellingTrendResponse;
@@ -80,15 +80,15 @@ public class ShortSellingTrendCollector {
             }
 
             BigDecimal closePrice =
-                    NumberParser.parseBigDecimal(tick.closePric()).abs();
-            BigDecimal priceChange = NumberParser.parseBigDecimal(tick.predPre());
-            BigDecimal changeRate = NumberParser.parseBigDecimal(tick.fluRt());
-            long tradingVolume = NumberParser.parseLong(tick.trdeQty());
-            long shortVolume = NumberParser.parseLong(tick.shrtsQty());
-            long cumulativeShortVolume = NumberParser.parseLong(tick.ovrShrtsQty());
-            BigDecimal shortRatio = NumberParser.parseBigDecimal(tick.trdeWght());
-            BigDecimal shortAmount = NumberParser.parseBigDecimal(tick.shrtsTrdePrica());
-            BigDecimal shortAvgPrice = NumberParser.parseBigDecimal(tick.shrtsAvgPric());
+                    KiwoomValueParser.parseBigDecimal(tick.closePric()).abs();
+            BigDecimal priceChange = KiwoomValueParser.parseBigDecimal(tick.predPre());
+            BigDecimal changeRate = KiwoomValueParser.parseBigDecimal(tick.fluRt());
+            long tradingVolume = KiwoomValueParser.parseLong(tick.trdeQty());
+            long shortVolume = KiwoomValueParser.parseLong(tick.shrtsQty());
+            long cumulativeShortVolume = KiwoomValueParser.parseLong(tick.ovrShrtsQty());
+            BigDecimal shortRatio = KiwoomValueParser.parseBigDecimal(tick.trdeWght());
+            BigDecimal shortAmount = KiwoomValueParser.parseBigDecimal(tick.shrtsTrdePrica());
+            BigDecimal shortAvgPrice = KiwoomValueParser.parseBigDecimal(tick.shrtsAvgPric());
 
             dailyRepository.save(ShortSellingDailyHistory.create(
                     stockCode,

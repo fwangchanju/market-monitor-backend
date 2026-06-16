@@ -2,7 +2,7 @@ package dev.eolmae.marketmonitor.domain.stock.collector;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.enums.Zone;
-import dev.eolmae.marketmonitor.common.util.NumberParser;
+import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.SectorInvestorNetBuyRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.SectorInvestorNetBuyResponse;
@@ -76,79 +76,79 @@ public class SectorInvestorNetBuyCollector {
         saveSnapshot(
                 marketType,
                 InvestorType.PERSONAL,
-                NumberParser.parseBigDecimal(compositeItem.indNetprps()),
+                KiwoomValueParser.parseBigDecimal(compositeItem.indNetprps()),
                 snapshotTime,
                 now);
         saveSnapshot(
                 marketType,
                 InvestorType.FOREIGNER,
-                NumberParser.parseBigDecimal(compositeItem.frgnrNetprps()),
+                KiwoomValueParser.parseBigDecimal(compositeItem.frgnrNetprps()),
                 snapshotTime,
                 now);
         saveSnapshot(
                 marketType,
                 InvestorType.INSTITUTION,
-                NumberParser.parseBigDecimal(compositeItem.orgnNetprps()),
+                KiwoomValueParser.parseBigDecimal(compositeItem.orgnNetprps()),
                 snapshotTime,
                 now);
         saveSnapshot(
                 marketType,
                 InvestorType.FINANCIAL_INVESTMENT,
-                NumberParser.parseBigDecimal(compositeItem.scNetprps()),
+                KiwoomValueParser.parseBigDecimal(compositeItem.scNetprps()),
                 snapshotTime,
                 now);
         saveSnapshot(
                 marketType,
                 InvestorType.TRUST,
-                NumberParser.parseBigDecimal(compositeItem.invtrtNetprps()),
+                KiwoomValueParser.parseBigDecimal(compositeItem.invtrtNetprps()),
                 snapshotTime,
                 now);
         saveSnapshot(
                 marketType,
                 InvestorType.PENSION_FUND,
-                NumberParser.parseBigDecimal(compositeItem.endwNetprps()),
+                KiwoomValueParser.parseBigDecimal(compositeItem.endwNetprps()),
                 snapshotTime,
                 now);
         saveSnapshot(
                 marketType,
                 InvestorType.PRIVATE_FUND,
-                NumberParser.parseBigDecimal(compositeItem.samoFundNetprps()),
+                KiwoomValueParser.parseBigDecimal(compositeItem.samoFundNetprps()),
                 snapshotTime,
                 now);
         saveSnapshot(
                 marketType,
                 InvestorType.INSURANCE,
-                NumberParser.parseBigDecimal(compositeItem.insrncNetprps()),
+                KiwoomValueParser.parseBigDecimal(compositeItem.insrncNetprps()),
                 snapshotTime,
                 now);
         saveSnapshot(
                 marketType,
                 InvestorType.BANK,
-                NumberParser.parseBigDecimal(compositeItem.bankNetprps()),
+                KiwoomValueParser.parseBigDecimal(compositeItem.bankNetprps()),
                 snapshotTime,
                 now);
         saveSnapshot(
                 marketType,
                 InvestorType.OTHER_CORP,
-                NumberParser.parseBigDecimal(compositeItem.etcCorpNetprps()),
+                KiwoomValueParser.parseBigDecimal(compositeItem.etcCorpNetprps()),
                 snapshotTime,
                 now);
         saveSnapshot(
                 marketType,
                 InvestorType.GOVERNMENT,
-                NumberParser.parseBigDecimal(compositeItem.natnNetprps()),
+                KiwoomValueParser.parseBigDecimal(compositeItem.natnNetprps()),
                 snapshotTime,
                 now);
         saveSnapshot(
                 marketType,
                 InvestorType.OTHER_FINANCE,
-                NumberParser.parseBigDecimal(compositeItem.jnsinkmNetprps()),
+                KiwoomValueParser.parseBigDecimal(compositeItem.jnsinkmNetprps()),
                 snapshotTime,
                 now);
         saveSnapshot(
                 marketType,
                 InvestorType.FOREIGN_COMPANY,
-                NumberParser.parseBigDecimal(compositeItem.nativeTrmtFrgnrNetprps()),
+                KiwoomValueParser.parseBigDecimal(compositeItem.nativeTrmtFrgnrNetprps()),
                 snapshotTime,
                 now);
 

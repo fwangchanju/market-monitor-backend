@@ -1,6 +1,6 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
-import dev.eolmae.marketmonitor.common.util.NumberParser;
+import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.DailyProgramTradeTrendRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.DailyProgramTradeTrendResponse;
@@ -252,13 +252,13 @@ public class ProgramTradeTrendCollector {
         TradeAmount result = TradeAmount.zero();
         if (krxLatest != null) {
             result = result.add(
-                    NumberParser.parseBigDecimal(krxLatest.prmBuyAmt()),
-                    NumberParser.parseBigDecimal(krxLatest.prmSellAmt()));
+                    KiwoomValueParser.parseBigDecimal(krxLatest.prmBuyAmt()),
+                    KiwoomValueParser.parseBigDecimal(krxLatest.prmSellAmt()));
         }
         if (nxtLatest != null) {
             result = result.add(
-                    NumberParser.parseBigDecimal(nxtLatest.prmBuyAmt()),
-                    NumberParser.parseBigDecimal(nxtLatest.prmSellAmt()));
+                    KiwoomValueParser.parseBigDecimal(nxtLatest.prmBuyAmt()),
+                    KiwoomValueParser.parseBigDecimal(nxtLatest.prmSellAmt()));
         }
         return result;
     }
@@ -266,7 +266,7 @@ public class ProgramTradeTrendCollector {
     private static void accumulateDaily(Map<String, TradeAmount> merged, String dt, String buyAmt, String sellAmt) {
         merged.merge(
                 dt,
-                new TradeAmount(NumberParser.parseBigDecimal(buyAmt), NumberParser.parseBigDecimal(sellAmt)),
+                new TradeAmount(KiwoomValueParser.parseBigDecimal(buyAmt), KiwoomValueParser.parseBigDecimal(sellAmt)),
                 (a, b) -> a.add(b.buy(), b.sell()));
     }
 

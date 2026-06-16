@@ -30,7 +30,10 @@ public enum ErrorCode {
     BASE_SNAPSHOT_NOT_FOUND("연산 기준 스냅샷 데이터 없음."),
 
     // Dashboard
-    RENDERER_DISABLED("렌더러가 비활성 상태입니다.");
+    RENDERER_DISABLED("렌더러가 비활성 상태입니다."),
+    SCREENSHOT_CAPTURE_FAILED("스크린샷 캡처 실패."),
+    TELEGRAM_MESSAGE_SEND_FAILED("텔레그램 메시지 발송 실패."),
+    TELEGRAM_IMAGE_SEND_FAILED("텔레그램 이미지 발송 실패.");
 
     private final String message;
 }

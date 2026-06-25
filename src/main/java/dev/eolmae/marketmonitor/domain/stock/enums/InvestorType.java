@@ -13,7 +13,5 @@ public enum InvestorType {
     OTHER_FINANCE, // 기타금융
     GOVERNMENT, // 국가
     OTHER_CORP, // 기타법인
-    FOREIGN_COMPANY, // 외국계
-    /** API 파라미터 전용 (DB 저장 금지) — FOREIGNER + FOREIGN_COMPANY 합산 조회용 */
-    FOREIGN_TOTAL
+    FOREIGN_COMPANY // 외국계
 }

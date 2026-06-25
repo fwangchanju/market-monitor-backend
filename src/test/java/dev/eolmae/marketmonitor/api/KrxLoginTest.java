@@ -1,4 +1,4 @@
-package dev.eolmae.marketmonitor.domain.dashboard;
+package dev.eolmae.marketmonitor.domain.view;
 
 import static org.junit.jupiter.api.Assertions.*;
 

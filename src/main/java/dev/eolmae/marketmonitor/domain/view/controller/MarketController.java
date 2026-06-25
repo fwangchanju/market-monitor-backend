@@ -1,13 +1,11 @@
-package dev.eolmae.marketmonitor.domain.dashboard.controller;
+package dev.eolmae.marketmonitor.domain.view.controller;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
-import dev.eolmae.marketmonitor.common.exception.BusinessException;
-import dev.eolmae.marketmonitor.common.exception.ErrorCode;
-import dev.eolmae.marketmonitor.domain.dashboard.dto.*;
-import dev.eolmae.marketmonitor.domain.dashboard.service.DashboardQueryService;
-import dev.eolmae.marketmonitor.domain.notification.service.DashboardSendService;
+import dev.eolmae.marketmonitor.domain.view.dto.*;
+import dev.eolmae.marketmonitor.domain.view.enums.IntradayInvestorQuery;
+import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
+import dev.eolmae.marketmonitor.domain.view.service.MarketQueryService;
 import dev.eolmae.marketmonitor.domain.stock.enums.AmtQtyType;
-import dev.eolmae.marketmonitor.domain.stock.enums.IntradayInvestorType;
 import dev.eolmae.marketmonitor.domain.stock.enums.IntradayRankingType;
 import dev.eolmae.marketmonitor.domain.stock.enums.ProgramRankingType;
 import lombok.RequiredArgsConstructor;
@@ -16,63 +14,55 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
 @RestController
 @RequestMapping("/api")
 @RequiredArgsConstructor
-public class DashboardController {
+public class MarketController {
 
-    private final DashboardQueryService queryService;
-    private final Optional<DashboardSendService> dashboardSendService;
+    private final MarketQueryService queryService;
 
     // ── 메인 대시보드 ─────────────────────────────────────────────────────
 
-    @GetMapping("/dashboard")
-    public DashboardResponse getDashboard() {
-        return queryService.getDashboard();
-    }
-
-    @PostMapping("/send-dashboard") // renderer.enabled=true 시 활성화
-    public SendDashboardResponse sendDashboard() {
-        DashboardSendService svc =
-                dashboardSendService.orElseThrow(() -> new BusinessException(ErrorCode.RENDERER_DISABLED));
-        return new SendDashboardResponse(svc.sendDashboard());
+    @GetMapping("/market-summary")
+    public MarketSummaryResponse getMarketSummary() {
+        return queryService.getMarketSummary();
     }
 
     // ── 장중 투자자별 매매 상위 ────────────────────────────────────────────
 
     /**
      * 장중 투자자별 매매 상위 top 10.
-     * market=ALL: KOSPI+KOSDAQ 합산, investor=FOREIGN_TOTAL: 외국인+외국계 합산.
+     * market=COMBINED: KOSPI+KOSDAQ 합산, investor=FOREIGN_COMBINED: 외국인+외국계 합산.
      * ranking=NET_SELL: netBuyAmount 절댓값 변환 후 반환.
      */
     @GetMapping("/intraday-top")
     public SnapshotResponse<IntradayInvestorSummaryItem> getIntradayTop(
-            @RequestParam(required = false) Market market,
-            @RequestParam IntradayInvestorType investor,
-            @RequestParam IntradayRankingType ranking) {
-        return queryService.getIntradayTop(market, investor, ranking);
+            @RequestParam MarketQuery market,
+            @RequestParam IntradayInvestorQuery investor,
+            @RequestParam IntradayRankingType ranking,
+            @RequestParam AmtQtyType amtQty) {
+        return queryService.getIntradayTop(market, investor, ranking, amtQty);
     }
 
     /** 상세 랭킹 (기존 호환용) */
-    @GetMapping("/intraday-rankings")
-    public SnapshotResponse<IntradayInvestorRankingItem> getIntradayRankings(
-            @RequestParam Market market,
-            @RequestParam IntradayInvestorType investor,
-            @RequestParam IntradayRankingType ranking) {
-        return queryService.getIntradayRankings(market, investor, ranking);
-    }
+    //    @GetMapping("/intraday-rankings")
+    //    public SnapshotResponse<IntradayInvestorRankingItem> getIntradayRankings(
+    //            @RequestParam Market market,
+    //            @RequestParam IntradayInvestorType investor,
+    //            @RequestParam IntradayRankingType ranking) {
+    //        return queryService.getIntradayRankings(market, investor, ranking);
+    //    }
+    // TODO 화면에서 미사용 확인됨 — 화면 점검 후 이상 없으면 서비스 레이어 메서드까지 삭제
 
     // ── 프로그램매매 상위 상세 ────────────────────────────────────────────
 
     @GetMapping("/program-trading-rankings")
     public SnapshotResponse<ProgramTradingRankingItem> getProgramTradingRankings(
             @RequestParam ProgramRankingType ranking,
-            @RequestParam(required = false) Market market,
-            @RequestParam(required = false) AmtQtyType amtQty) {
-        AmtQtyType resolvedAmtQty = amtQty != null ? amtQty : AmtQtyType.AMOUNT;
-        return queryService.getProgramTradingRankings(market, ranking, resolvedAmtQty);
+            @RequestParam MarketQuery market,
+            @RequestParam AmtQtyType amtQty) {
+        return queryService.getProgramTradingRankings(market, ranking, amtQty);
     }
 
     // ── 지수 기여도 상위 상세 ─────────────────────────────────────────────
@@ -101,20 +91,17 @@ public class DashboardController {
 
     @GetMapping("/stocks/{stockCode}/program-trading")
     public StockHistoryResponse<ProgramTradingHistoryItem> getProgramTradingHistory(
+            @PathVariable String stockCode) {
+        return queryService.getProgramTradingHistory(stockCode);
+    }
+
+    @GetMapping("/stocks/{stockCode}/program-trading/range")
+    public StockHistoryResponse<ProgramTradingHistoryItem> getProgramTradingHistoryByRange(
             @PathVariable String stockCode,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
-        return queryService.getProgramTradingHistory(stockCode, from, to);
+        return queryService.getProgramTradingHistoryByRange(stockCode, from, to);
     }
-
-    // 종목별프로그램매매추이(일별)
-    // @GetMapping("/stocks/{stockCode}/program-trading/daily")
-    // public StockHistoryResponse<ProgramTradingDailyHistoryItem> getProgramTradingDailyHistory(
-    //         @PathVariable String stockCode,
-    //         @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-    //         @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-    //     return queryService.getProgramTradingDailyHistory(stockCode, from, to);
-    // }
 
     @GetMapping("/stocks/{stockCode}/short-selling")
     public StockHistoryResponse<ShortSellingHistoryItem> getShortSellingHistory(@PathVariable String stockCode) {

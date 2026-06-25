@@ -31,7 +31,7 @@ public class IntradayInvestorRankingCollector {
     @Transactional
     public void collect(LocalDateTime snapshotTime) {
         for (Market marketType : Market.values()) {
-            for (IntradayInvestorType investorType : IntradayInvestorType.storableValues()) {
+            for (IntradayInvestorType investorType : IntradayInvestorType.values()) {
                 for (IntradayRankingType rankingType : IntradayRankingType.values()) {
                     try {
                         collectForCombination(marketType, investorType, rankingType, snapshotTime);

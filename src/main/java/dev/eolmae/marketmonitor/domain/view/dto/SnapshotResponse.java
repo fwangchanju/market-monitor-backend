@@ -1,4 +1,4 @@
-package dev.eolmae.marketmonitor.domain.dashboard.dto;
+package dev.eolmae.marketmonitor.domain.view.dto;
 
 import java.time.LocalDateTime;
 import java.util.List;

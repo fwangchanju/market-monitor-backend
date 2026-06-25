@@ -18,8 +18,8 @@ public interface ProgramTradingRankingSnapshotRepository extends JpaRepository<P
     boolean existsBySnapshotTimeAndMarketTypeAndRankingTypeAndAmtQtyType(
             LocalDateTime snapshotTime, Market marketType, ProgramRankingType rankingType, AmtQtyType amtQtyType);
 
-    List<ProgramTradingRankingSnapshot> findBySnapshotTimeAndMarketTypeAndRankingTypeAndAmtQtyTypeOrderByRankAsc(
-            LocalDateTime snapshotTime, Market marketType, ProgramRankingType rankingType, AmtQtyType amtQtyType);
+    List<ProgramTradingRankingSnapshot> findBySnapshotTimeAndMarketTypeInAndRankingTypeAndAmtQtyTypeOrderByRankAsc(
+            LocalDateTime snapshotTime, List<Market> marketTypes, ProgramRankingType rankingType, AmtQtyType amtQtyType);
 
     @Query("SELECT MAX(s.snapshotTime) FROM ProgramTradingRankingSnapshot s")
     Optional<LocalDateTime> findLatestSnapshotTime();

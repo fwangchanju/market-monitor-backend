@@ -1,9 +1,9 @@
-package dev.eolmae.marketmonitor.domain.dashboard.dto;
+package dev.eolmae.marketmonitor.domain.view.dto;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
-public record DashboardResponse(
+public record MarketSummaryResponse(
         LocalDateTime snapshotTime,
         LocalDateTime lastCollectedAt,
         String marketStatus,

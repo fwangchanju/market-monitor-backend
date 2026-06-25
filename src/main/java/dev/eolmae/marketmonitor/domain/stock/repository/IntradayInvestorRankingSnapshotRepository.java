@@ -2,6 +2,7 @@ package dev.eolmae.marketmonitor.domain.stock.repository;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.domain.stock.entity.*;
+import dev.eolmae.marketmonitor.domain.stock.enums.AmtQtyType;
 import dev.eolmae.marketmonitor.domain.stock.enums.IntradayInvestorType;
 import dev.eolmae.marketmonitor.domain.stock.enums.IntradayRankingType;
 import java.time.LocalDateTime;
@@ -21,11 +22,12 @@ public interface IntradayInvestorRankingSnapshotRepository
             IntradayRankingType rankingType);
 
     List<IntradayInvestorRankingSnapshot>
-            findBySnapshotTimeAndMarketTypeInAndInvestorTypeInAndRankingTypeOrderByRankAsc(
+            findBySnapshotTimeAndMarketTypeInAndInvestorTypeInAndRankingTypeAndAmtQtyTypeOrderByRankAsc(
                     LocalDateTime snapshotTime,
                     Collection<Market> marketTypes,
                     Collection<IntradayInvestorType> investorTypes,
-                    IntradayRankingType rankingType);
+                    IntradayRankingType rankingType,
+                    AmtQtyType amtQtyType);
 
     @Query("SELECT MAX(s.snapshotTime) FROM IntradayInvestorRankingSnapshot s")
     Optional<LocalDateTime> findLatestSnapshotTime();

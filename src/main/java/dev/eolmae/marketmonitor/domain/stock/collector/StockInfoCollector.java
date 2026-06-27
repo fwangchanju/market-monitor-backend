@@ -108,6 +108,7 @@ public class StockInfoCollector {
         log.debug("종목 정보 시장별 동기화 완료: market={}", market);
     }
 
+    /** API 응답(StockInfoResponse.StockItem) 파싱 + market 컨텍스트를 합친, DB 비교 전 임시 보관용 */
     private record FetchStockInfo(
             String stockCode, String stockName, Market market, String marketCode, Long listCount, BigDecimal lastPrice) {}
 

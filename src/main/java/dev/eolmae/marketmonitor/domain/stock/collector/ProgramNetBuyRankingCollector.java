@@ -30,43 +30,43 @@ public class ProgramNetBuyRankingCollector {
 
     @Transactional
     public void collect(LocalDateTime snapshotTime) {
-        for (Market marketType : Market.values()) {
-            for (ProgramRankingType rankingType : ProgramRankingType.values()) {
+        for (Market market : Market.values()) {
+            for (ProgramRankingType ranking : ProgramRankingType.values()) {
                 try {
-                    collectForCombination(marketType, rankingType, AmtQtyType.AMOUNT, snapshotTime);
+                    collectForCombination(market, ranking, AmtQtyType.AMOUNT, snapshotTime);
                 } catch (Exception e) {
-                    log.error("프로그램매매 랭킹 수집 실패: marketType={}, ranking={}", marketType, rankingType, e);
+                    log.error("프로그램매매 랭킹 수집 실패: market={}, ranking={}", market, ranking, e);
                 }
             }
         }
     }
 
     private void collectForCombination(
-            Market marketType, ProgramRankingType rankingType, AmtQtyType amtQtyType, LocalDateTime snapshotTime) {
+            Market market, ProgramRankingType ranking, AmtQtyType amtQty, LocalDateTime snapshotTime) {
 
         String mrktTp =
-                switch (marketType) {
+                switch (market) {
                     case KOSPI -> MrktTp.KOSPI.value;
                     case KOSDAQ -> MrktTp.KOSDAQ.value;
                 };
 
         boolean alreadyExists = rankingRepository.existsBySnapshotTimeAndMarketTypeAndRankingTypeAndAmtQtyType(
                 snapshotTime,
-                marketType,
-                rankingType,
-                amtQtyType); // TODO 매 스케줄에서 한번만 수행해서 데이터 적재하는 구조 아닌가? 이 조회로 유효성 검증하는 것처럼 보이는 행위를 하는 이유는?
+                market,
+                ranking,
+                amtQty); // TODO 매 스케줄에서 한번만 수행해서 데이터 적재하는 구조 아닌가? 이 조회로 유효성 검증하는 것처럼 보이는 행위를 하는 이유는?
         if (alreadyExists) {
             log.debug(
-                    "프로그램매매 랭킹 이미 존재, 스킵: marketType={}, ranking={}, amtQty={}, snapshotTime={}",
-                    marketType,
-                    rankingType,
-                    amtQtyType,
+                    "프로그램매매 랭킹 이미 존재, 스킵: market={}, ranking={}, amtQty={}, snapshotTime={}",
+                    market,
+                    ranking,
+                    amtQty,
                     snapshotTime);
             return;
         }
 
         var request =
-                new ProgramNetBuyRankingRequest(rankingType.code(), amtQtyType.code(), mrktTp, StexType.KRX_NXT.code());
+                new ProgramNetBuyRankingRequest(ranking.code(), amtQty.code(), mrktTp, StexType.KRX_NXT.code());
         ProgramNetBuyRankingResponse response = kiwoomApiClient.post(request, ProgramNetBuyRankingResponse.class);
 
         List<ProgramNetBuyRankingResponse.RankingItem> items = response.items() != null ? response.items() : List.of();
@@ -84,9 +84,9 @@ public class ProgramNetBuyRankingCollector {
             BigDecimal netBuyAmount = KiwoomValueParser.parseBigDecimal(item.prmNetprpsAmt());
 
             rankingRepository.save(ProgramTradingRankingSnapshot.create(
-                    marketType,
-                    amtQtyType,
-                    rankingType,
+                    market,
+                    amtQty,
+                    ranking,
                     rank++,
                     stockCode,
                     stockName,
@@ -98,9 +98,9 @@ public class ProgramNetBuyRankingCollector {
 
         log.debug(
                 "프로그램매매 랭킹 수집 완료: market={}, ranking={}, amtQty={}, count={}",
-                marketType,
-                rankingType,
-                amtQtyType,
+                market,
+                ranking,
+                amtQty,
                 rank - 1);
     }
 

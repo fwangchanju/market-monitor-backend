@@ -36,8 +36,8 @@ public class StockInfoCollector {
         Map<String, FetchStockInfo> fetchedStocks = new HashMap<>();
 
         try {
-            for (Market marketType : Market.values()) {
-                collectMarket(marketType, fetchedStocks);
+            for (Market market : Market.values()) {
+                collectMarket(market, fetchedStocks);
             }
         } catch (Exception e) {
             throw new EscalateException(ErrorCode.STOCK_INFO_SYNC_FAILED, e);
@@ -79,8 +79,8 @@ public class StockInfoCollector {
         log.info("종목 정보 동기화 완료: 조회 종목 수={}", fetchedCount);
     }
 
-    private void collectMarket(Market marketType, Map<String, FetchStockInfo> fetchedStocks) {
-        String mrktTp = MrktTp.codeOf(marketType);
+    private void collectMarket(Market market, Map<String, FetchStockInfo> fetchedStocks) {
+        String mrktTp = MrktTp.codeOf(market);
 
         var request = new StockInfoRequest(mrktTp);
         StockInfoResponse response = kiwoomApiClient.post(request, StockInfoResponse.class);
@@ -102,10 +102,10 @@ public class StockInfoCollector {
             BigDecimal lastPrice = KiwoomValueParser.parseBigDecimal(item.lastPrice());
 
             fetchedStocks.put(
-                    stockCode, new FetchStockInfo(stockCode, stockName, marketType, marketCode, listCount, lastPrice));
+                    stockCode, new FetchStockInfo(stockCode, stockName, market, marketCode, listCount, lastPrice));
         }
 
-        log.debug("종목 정보 시장별 동기화 완료: market={}", marketType);
+        log.debug("종목 정보 시장별 동기화 완료: market={}", market);
     }
 
     private record FetchStockInfo(

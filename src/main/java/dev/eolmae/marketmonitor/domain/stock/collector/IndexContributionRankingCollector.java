@@ -51,32 +51,32 @@ public class IndexContributionRankingCollector {
     public void collect(LocalDateTime snapshotTime) {
         Map<String, StockInfo> masterMap = stockInfoCacheService.getCache();
 
-        for (Market marketType : Market.values()) {
+        for (Market market : Market.values()) {
             try {
-                collectForMarket(marketType, masterMap, snapshotTime);
+                collectForMarket(market, masterMap, snapshotTime);
             } catch (Exception e) {
-                log.error("지수기여도랭킹 수집 실패: marketType={}", marketType, e);
+                log.error("지수기여도랭킹 수집 실패: market={}", market, e);
             }
         }
     }
 
-    private void collectForMarket(Market marketType, Map<String, StockInfo> masterMap, LocalDateTime snapshotTime) {
-        StockMarketCode marketCode = StockMarketCode.valueOf(marketType.name());
+    private void collectForMarket(Market market, Map<String, StockInfo> masterMap, LocalDateTime snapshotTime) {
+        StockMarketCode marketCode = StockMarketCode.valueOf(market.name());
         String mrktTp =
-                switch (marketType) {
+                switch (market) {
                     case KOSPI -> MrktTp.KOSPI.value;
                     case KOSDAQ -> MrktTp.KOSDAQ.value;
                 };
         String indsCd =
-                switch (marketType) {
+                switch (market) {
                     case KOSPI -> IndsCd.KOSPI.value;
                     case KOSDAQ -> IndsCd.KOSDAQ.value;
                 };
 
         List<IndexContributionRankingSnapshot> existing =
-                snapshotRepository.findBySnapshotTimeAndMarketTypeOrderByRankAsc(snapshotTime, marketType);
+                snapshotRepository.findBySnapshotTimeAndMarketTypeOrderByRankAsc(snapshotTime, market);
         if (!existing.isEmpty()) {
-            log.debug("지수기여도랭킹 이미 존재, 스킵: marketType={}, snapshotTime={}", marketType, snapshotTime);
+            log.debug("지수기여도랭킹 이미 존재, 스킵: market={}, snapshotTime={}", market, snapshotTime);
             return;
         }
 
@@ -84,7 +84,7 @@ public class IndexContributionRankingCollector {
         SectorPriceListResponse response = kiwoomApiClient.post(request, SectorPriceListResponse.class);
         List<SectorPriceListResponse.StockItem> items = response.items() != null ? response.items() : List.of();
 
-        BigDecimal prevIndexValue = resolvePrevIndexValue(marketType);
+        BigDecimal prevIndexValue = resolvePrevIndexValue(market);
 
         BigDecimal prevTotalMarketCap = BigDecimal.ZERO;
         for (SectorPriceListResponse.StockItem item : items) {
@@ -97,7 +97,7 @@ public class IndexContributionRankingCollector {
         }
 
         if (prevTotalMarketCap.compareTo(BigDecimal.ZERO) == 0) {
-            throw new EscalateException(ErrorCode.PREV_MARKET_CAP_ZERO, marketType.name());
+            throw new EscalateException(ErrorCode.PREV_MARKET_CAP_ZERO, market.name());
         }
 
         List<ScoredStock> scored = new ArrayList<>();
@@ -131,7 +131,7 @@ public class IndexContributionRankingCollector {
         int rank = 1;
         for (ScoredStock stock : scored.subList(0, Math.min(TOP_N, scored.size()))) {
             snapshotRepository.save(IndexContributionRankingSnapshot.create(
-                    marketType,
+                    market,
                     rank++,
                     stock.stockCode(),
                     stock.stockName(),
@@ -141,7 +141,7 @@ public class IndexContributionRankingCollector {
                     snapshotTime));
         }
 
-        log.info("지수기여도랭킹 수집 완료: marketType={}, 저장건수={}", marketType, rank - 1);
+        log.info("지수기여도랭킹 수집 완료: market={}, 저장건수={}", market, rank - 1);
     }
 
     private boolean isValidForMarket(StockInfo master, StockMarketCode marketCode) {
@@ -151,10 +151,10 @@ public class IndexContributionRankingCollector {
                 && marketCode.matches(master.getMarketCode());
     }
 
-    private BigDecimal resolvePrevIndexValue(Market marketType) {
+    private BigDecimal resolvePrevIndexValue(Market market) {
         MarketOverviewSnapshot snapshot = marketOverviewSnapshotRepository
-                .findTopByMarketTypeOrderBySnapshotTimeDesc(marketType)
-                .orElseThrow(() -> new EscalateException(ErrorCode.BASE_SNAPSHOT_NOT_FOUND, marketType.name()));
+                .findTopByMarketTypeOrderBySnapshotTimeDesc(market)
+                .orElseThrow(() -> new EscalateException(ErrorCode.BASE_SNAPSHOT_NOT_FOUND, market.name()));
         return snapshot.getIndexValue().subtract(snapshot.getChangeValue());
     }
 

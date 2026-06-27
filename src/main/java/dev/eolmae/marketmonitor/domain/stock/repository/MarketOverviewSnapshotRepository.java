@@ -10,12 +10,14 @@ import org.springframework.data.jpa.repository.Query;
 
 public interface MarketOverviewSnapshotRepository extends JpaRepository<MarketOverviewSnapshot, Long> {
 
-    Optional<MarketOverviewSnapshot> findByMarketTypeAndSnapshotTime(Market marketType, LocalDateTime snapshotTime);
+    Optional<MarketOverviewSnapshot> findByMarketTypeAndSnapshotTime(Market market, LocalDateTime snapshotTime);
 
-    List<MarketOverviewSnapshot> findBySnapshotTimeOrderByMarketTypeAsc(LocalDateTime snapshotTime);
+    Optional<MarketOverviewSnapshot> findTopByMarketTypeOrderBySnapshotTimeDesc(Market market);
 
-    Optional<MarketOverviewSnapshot> findTopByMarketTypeOrderBySnapshotTimeDesc(Market marketType);
-
-    @Query("SELECT MAX(s.snapshotTime) FROM MarketOverviewSnapshot s")
-    Optional<LocalDateTime> findLatestSnapshotTime();
+    @Query("""
+        SELECT s FROM MarketOverviewSnapshot s
+        WHERE s.snapshotTime = (SELECT MAX(s2.snapshotTime) FROM MarketOverviewSnapshot s2)
+        ORDER BY s.marketType ASC
+        """)
+    List<MarketOverviewSnapshot> findLatestOrderByMarketTypeAsc();
 }

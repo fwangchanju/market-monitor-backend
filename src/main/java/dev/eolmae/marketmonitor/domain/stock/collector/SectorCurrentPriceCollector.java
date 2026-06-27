@@ -27,23 +27,23 @@ public class SectorCurrentPriceCollector {
 
     @Transactional
     public void collect(LocalDateTime snapshotTime) {
-        for (Market marketType : Market.values()) {
+        for (Market market : Market.values()) {
             try {
-                collectForMarket(marketType, snapshotTime);
+                collectForMarket(market, snapshotTime);
             } catch (Exception e) {
-                log.error("시장종합 수집 실패: marketType={}", marketType, e);
+                log.error("시장종합 수집 실패: market={}", market, e);
             }
         }
     }
 
-    private void collectForMarket(Market marketType, LocalDateTime snapshotTime) {
+    private void collectForMarket(Market market, LocalDateTime snapshotTime) {
         String mrktTp =
-                switch (marketType) {
+                switch (market) {
                     case KOSPI -> MrktTp.KOSPI.value;
                     case KOSDAQ -> MrktTp.KOSDAQ.value;
                 };
         String indsCd =
-                switch (marketType) {
+                switch (market) {
                     case KOSPI -> IndsCd.KOSPI.value;
                     case KOSDAQ -> IndsCd.KOSDAQ.value;
                 };
@@ -65,10 +65,10 @@ public class SectorCurrentPriceCollector {
         int unchangedCount = KiwoomValueParser.parseInt(response.stdns());
 
         if (marketOverviewSnapshotRepository
-                .findByMarketTypeAndSnapshotTime(marketType, snapshotTime)
+                .findByMarketTypeAndSnapshotTime(market, snapshotTime)
                 .isEmpty()) {
             marketOverviewSnapshotRepository.save(MarketOverviewSnapshot.create(
-                    marketType,
+                    market,
                     snapshotTime,
                     now,
                     marketStatus,
@@ -83,7 +83,7 @@ public class SectorCurrentPriceCollector {
                     unchangedCount));
         }
 
-        log.debug("시장종합 수집 완료: market={}, index={}", marketType, indexValue);
+        log.debug("시장종합 수집 완료: market={}, index={}", market, indexValue);
     }
 
     private enum MrktTp {

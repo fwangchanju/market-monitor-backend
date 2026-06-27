@@ -5,8 +5,8 @@ import dev.eolmae.marketmonitor.domain.stock.enums.InvestorType;
 import java.math.BigDecimal;
 
 public record InvestorTradingSummaryItem(
-        Market marketType,
-        InvestorType investorType,
+        Market market,
+        InvestorType investor,
         BigDecimal buyAmount,
         BigDecimal sellAmount,
         BigDecimal netBuyAmount) {}

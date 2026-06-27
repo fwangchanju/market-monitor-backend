@@ -18,6 +18,7 @@ import dev.eolmae.marketmonitor.domain.view.dto.WatchStockResponse;
 import dev.eolmae.marketmonitor.domain.view.enums.IntradayInvestorQuery;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.enums.RankingType;
+import dev.eolmae.marketmonitor.domain.stock.entity.IntradayInvestorRankingSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.ProgramTradingRankingSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.entity.WatchStock;

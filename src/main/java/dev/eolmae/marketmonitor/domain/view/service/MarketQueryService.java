@@ -67,10 +67,10 @@ public class MarketQueryService {
 
     private static final int RANKING_LIMIT = 10;
 
-    private record SummaryDefaults(Market market, AmtQtyType amtQty, IntradayInvestorType investor, RankingType ranking) {}
-
     /** 메인 대시보드용 시장 종합 현황 반환 */
     public MarketSummaryResponse getMarketSummary() {
+        record SummaryDefaults(Market market, AmtQtyType amtQty, IntradayInvestorType investor, RankingType ranking) {}
+
         var summaryDefaults = new SummaryDefaults(
                 Market.KOSPI, AmtQtyType.AMOUNT, IntradayInvestorType.FOREIGNER, RankingType.NET_BUY);
 

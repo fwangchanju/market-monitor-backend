@@ -35,23 +35,23 @@ public class SectorInvestorNetBuyCollector {
 
     @Transactional
     public void collect(LocalDateTime snapshotTime) {
-        for (Market marketType : Market.values()) {
+        for (Market market : Market.values()) {
             try {
-                collectForMarket(marketType, snapshotTime);
+                collectForMarket(market, snapshotTime);
             } catch (Exception e) {
-                log.error("투자자별매매종합 수집 실패: marketType={}", marketType, e);
+                log.error("투자자별매매종합 수집 실패: market={}", market, e);
             }
         }
     }
 
-    private void collectForMarket(Market marketType, LocalDateTime snapshotTime) {
+    private void collectForMarket(Market market, LocalDateTime snapshotTime) {
         String mrktTp =
-                switch (marketType) {
+                switch (market) {
                     case KOSPI -> MrktTp.KOSPI.value;
                     case KOSDAQ -> MrktTp.KOSDAQ.value;
                 };
         String indsCd =
-                switch (marketType) {
+                switch (market) {
                     case KOSPI -> IndsCd.KOSPI.value;
                     case KOSDAQ -> IndsCd.KOSDAQ.value;
                 };
@@ -60,7 +60,7 @@ public class SectorInvestorNetBuyCollector {
         var response = kiwoomApiClient.post(request, SectorInvestorNetBuyResponse.class);
 
         if (response.indsNetprps() == null || response.indsNetprps().isEmpty()) {
-            log.warn("투자자별매매종합 응답 없음: market={}", marketType);
+            log.warn("투자자별매매종합 응답 없음: market={}", market);
             return;
         }
 
@@ -68,91 +68,91 @@ public class SectorInvestorNetBuyCollector {
                 .filter(item -> item.indsCd() != null && item.indsCd().startsWith(indsCd))
                 .findFirst()
                 .orElseThrow(() ->
-                        new IllegalStateException("투자자별매매종합 종합지수 행 없음: market=" + marketType + ", indsCd=" + indsCd));
+                        new IllegalStateException("투자자별매매종합 종합지수 행 없음: market=" + market + ", indsCd=" + indsCd));
 
         LocalDateTime now = LocalDateTime.now(Zone.KST.zoneId());
 
         // ka10051은 순매수만 제공하므로 매수/매도는 ZERO로 저장 // TODO 순매수만 제공하는데 매수/매도는 왜 저장함?
         saveSnapshot(
-                marketType,
+                market,
                 InvestorType.PERSONAL,
                 KiwoomValueParser.parseBigDecimal(compositeItem.indNetprps()),
                 snapshotTime,
                 now);
         saveSnapshot(
-                marketType,
+                market,
                 InvestorType.FOREIGNER,
                 KiwoomValueParser.parseBigDecimal(compositeItem.frgnrNetprps()),
                 snapshotTime,
                 now);
         saveSnapshot(
-                marketType,
+                market,
                 InvestorType.INSTITUTION,
                 KiwoomValueParser.parseBigDecimal(compositeItem.orgnNetprps()),
                 snapshotTime,
                 now);
         saveSnapshot(
-                marketType,
+                market,
                 InvestorType.FINANCIAL_INVESTMENT,
                 KiwoomValueParser.parseBigDecimal(compositeItem.scNetprps()),
                 snapshotTime,
                 now);
         saveSnapshot(
-                marketType,
+                market,
                 InvestorType.TRUST,
                 KiwoomValueParser.parseBigDecimal(compositeItem.invtrtNetprps()),
                 snapshotTime,
                 now);
         saveSnapshot(
-                marketType,
+                market,
                 InvestorType.PENSION_FUND,
                 KiwoomValueParser.parseBigDecimal(compositeItem.endwNetprps()),
                 snapshotTime,
                 now);
         saveSnapshot(
-                marketType,
+                market,
                 InvestorType.PRIVATE_FUND,
                 KiwoomValueParser.parseBigDecimal(compositeItem.samoFundNetprps()),
                 snapshotTime,
                 now);
         saveSnapshot(
-                marketType,
+                market,
                 InvestorType.INSURANCE,
                 KiwoomValueParser.parseBigDecimal(compositeItem.insrncNetprps()),
                 snapshotTime,
                 now);
         saveSnapshot(
-                marketType,
+                market,
                 InvestorType.BANK,
                 KiwoomValueParser.parseBigDecimal(compositeItem.bankNetprps()),
                 snapshotTime,
                 now);
         saveSnapshot(
-                marketType,
+                market,
                 InvestorType.OTHER_CORP,
                 KiwoomValueParser.parseBigDecimal(compositeItem.etcCorpNetprps()),
                 snapshotTime,
                 now);
         saveSnapshot(
-                marketType,
+                market,
                 InvestorType.GOVERNMENT,
                 KiwoomValueParser.parseBigDecimal(compositeItem.natnNetprps()),
                 snapshotTime,
                 now);
         saveSnapshot(
-                marketType,
+                market,
                 InvestorType.OTHER_FINANCE,
                 KiwoomValueParser.parseBigDecimal(compositeItem.jnsinkmNetprps()),
                 snapshotTime,
                 now);
         saveSnapshot(
-                marketType,
+                market,
                 InvestorType.FOREIGN_COMPANY,
                 KiwoomValueParser.parseBigDecimal(compositeItem.nativeTrmtFrgnrNetprps()),
                 snapshotTime,
                 now);
 
-        log.debug("투자자별매매종합 수집 완료: market={}", marketType);
+        log.debug("투자자별매매종합 수집 완료: market={}", market);
     }
 
     private enum MrktTp {
@@ -176,19 +176,19 @@ public class SectorInvestorNetBuyCollector {
     }
 
     private void saveSnapshot(
-            Market marketType,
-            InvestorType investorType,
+            Market market,
+            InvestorType investor,
             BigDecimal netBuyAmount,
             LocalDateTime snapshotTime,
             LocalDateTime now) {
 
         if (investorTradingSummarySnapshotRepository
                 .findByMarketTypeAndInvestorTypeAndAmtQtyTypeAndSnapshotTime(
-                        marketType, investorType, AmtQtyType.AMOUNT, snapshotTime)
+                        market, investor, AmtQtyType.AMOUNT, snapshotTime)
                 .isEmpty()) {
             investorTradingSummarySnapshotRepository.save(InvestorTradingSummarySnapshot.create(
-                    marketType,
-                    investorType,
+                    market,
+                    investor,
                     AmtQtyType.AMOUNT,
                     snapshotTime,
                     now,

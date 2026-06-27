@@ -5,8 +5,8 @@ import dev.eolmae.marketmonitor.domain.stock.enums.IntradayInvestorType;
 import java.math.BigDecimal;
 
 public record IntradayInvestorRankingItem(
-        Market marketType,
-        IntradayInvestorType investorType,
+        Market market,
+        IntradayInvestorType investor,
         int rank,
         String stockCode,
         String stockName,

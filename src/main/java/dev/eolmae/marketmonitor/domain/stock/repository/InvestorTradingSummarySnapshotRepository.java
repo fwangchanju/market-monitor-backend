@@ -13,11 +13,12 @@ import org.springframework.data.jpa.repository.Query;
 public interface InvestorTradingSummarySnapshotRepository extends JpaRepository<InvestorTradingSummarySnapshot, Long> {
 
     Optional<InvestorTradingSummarySnapshot> findByMarketTypeAndInvestorTypeAndAmtQtyTypeAndSnapshotTime(
-            Market marketType, InvestorType investorType, AmtQtyType amtQtyType, LocalDateTime snapshotTime);
+            Market market, InvestorType investor, AmtQtyType amtQty, LocalDateTime snapshotTime);
 
-    List<InvestorTradingSummarySnapshot> findBySnapshotTimeOrderByMarketTypeAscInvestorTypeAsc(
-            LocalDateTime snapshotTime);
-
-    @Query("SELECT MAX(s.snapshotTime) FROM InvestorTradingSummarySnapshot s")
-    Optional<LocalDateTime> findLatestSnapshotTime();
+    @Query("""
+        SELECT s FROM InvestorTradingSummarySnapshot s
+        WHERE s.snapshotTime = (SELECT MAX(s2.snapshotTime) FROM InvestorTradingSummarySnapshot s2)
+        ORDER BY s.marketType ASC, s.investorType ASC
+        """)
+    List<InvestorTradingSummarySnapshot> findLatestOrderByMarketTypeAscInvestorTypeAsc();
 }

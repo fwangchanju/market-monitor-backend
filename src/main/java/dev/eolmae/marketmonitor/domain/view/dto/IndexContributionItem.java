@@ -4,7 +4,7 @@ import dev.eolmae.marketmonitor.common.enums.Market;
 import java.math.BigDecimal;
 
 public record IndexContributionItem(
-        Market marketType,
+        Market market,
         int rank,
         String stockCode,
         String stockName,

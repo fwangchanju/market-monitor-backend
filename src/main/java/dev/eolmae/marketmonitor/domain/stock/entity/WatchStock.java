@@ -11,6 +11,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import java.util.Objects;
 import lombok.Getter;
 
 @Getter
@@ -60,5 +61,10 @@ public class WatchStock {
 
     public void updateHoldingRank(Integer holdingRank) {
         this.holdingRank = holdingRank;
+    }
+
+    public boolean isTopHoldingRank() {
+        int topHoldingRank = 1;
+        return Objects.equals(topHoldingRank, holdingRank);
     }
 }

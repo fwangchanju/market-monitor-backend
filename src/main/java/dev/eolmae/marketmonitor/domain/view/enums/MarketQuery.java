@@ -8,7 +8,7 @@ public enum MarketQuery {
     KOSDAQ,
     COMBINED;
 
-    public List<Market> convert() {
+    public List<Market> toMarkets() {
         return switch (this) {
             case COMBINED -> List.of(Market.KOSPI, Market.KOSDAQ);
             default -> List.of(Market.valueOf(name()));

@@ -11,7 +11,7 @@ public enum IntradayInvestorQuery {
     TRUST,
     FOREIGN_COMBINED;
 
-    public List<IntradayInvestorType> convert() {
+    public List<IntradayInvestorType> toInvestorTypes() {
         return switch (this) {
             case FOREIGN_COMBINED -> List.of(IntradayInvestorType.FOREIGNER, IntradayInvestorType.FOREIGN_COMPANY);
             default -> List.of(IntradayInvestorType.valueOf(name()));

@@ -30,17 +30,17 @@ public class IntradayInvestorRankingCollector {
 
     @Transactional
     public void collect(LocalDateTime snapshotTime) {
-        for (Market marketType : Market.values()) {
-            for (IntradayInvestorType investorType : IntradayInvestorType.values()) {
-                for (IntradayRankingType rankingType : IntradayRankingType.values()) {
+        for (Market market : Market.values()) {
+            for (IntradayInvestorType investor : IntradayInvestorType.values()) {
+                for (IntradayRankingType ranking : IntradayRankingType.values()) {
                     try {
-                        collectForCombination(marketType, investorType, rankingType, snapshotTime);
+                        collectForCombination(market, investor, ranking, snapshotTime);
                     } catch (Exception e) {
                         log.error(
-                                "장중투자자랭킹 수집 실패: marketType={}, investor={}, ranking={}",
-                                marketType,
-                                investorType,
-                                rankingType,
+                                "장중투자자랭킹 수집 실패: market={}, investor={}, ranking={}",
+                                market,
+                                investor,
+                                ranking,
                                 e);
                     }
                 }
@@ -49,32 +49,32 @@ public class IntradayInvestorRankingCollector {
     }
 
     private void collectForCombination(
-            Market marketType,
-            IntradayInvestorType investorType,
-            IntradayRankingType rankingType,
+            Market market,
+            IntradayInvestorType investor,
+            IntradayRankingType ranking,
             LocalDateTime snapshotTime) {
 
         String mrktTp =
-                switch (marketType) {
+                switch (market) {
                     case KOSPI -> MrktTp.KOSPI.value;
                     case KOSDAQ -> MrktTp.KOSDAQ.value;
                 };
 
         List<IntradayInvestorRankingSnapshot> existing =
                 repository.findBySnapshotTimeAndMarketTypeAndInvestorTypeAndRankingTypeOrderByRankAsc(
-                        snapshotTime, marketType, investorType, rankingType);
+                        snapshotTime, market, investor, ranking);
         if (!existing.isEmpty()) {
             log.debug(
-                    "장중투자자랭킹 이미 존재, 스킵: marketType={}, investor={}, ranking={}, snapshotTime={}",
-                    marketType,
-                    investorType,
-                    rankingType,
+                    "장중투자자랭킹 이미 존재, 스킵: market={}, investor={}, ranking={}, snapshotTime={}",
+                    market,
+                    investor,
+                    ranking,
                     snapshotTime);
             return;
         }
 
         var request = new IntradayInvestorRankingRequest(
-                rankingType.code(), mrktTp, investorType.apiCode(), AmtQtyType.AMOUNT.code());
+                ranking.code(), mrktTp, investor.apiCode(), AmtQtyType.AMOUNT.code());
         var response = kiwoomApiClient.post(request, IntradayInvestorRankingResponse.class);
 
         if (response.items() == null) {
@@ -84,9 +84,9 @@ public class IntradayInvestorRankingCollector {
         int rank = 1; // TODO 이건 왜 있는거임?
         for (IntradayInvestorRankingResponse.RankingItem item : response.items()) {
             repository.save(IntradayInvestorRankingSnapshot.create(
-                    marketType,
-                    investorType,
-                    rankingType,
+                    market,
+                    investor,
+                    ranking,
                     AmtQtyType.AMOUNT,
                     rank++,
                     item.stkCd(),
@@ -99,9 +99,9 @@ public class IntradayInvestorRankingCollector {
 
         log.debug(
                 "장중투자자랭킹 수집 완료: market={}, investor={}, ranking={}, count={}",
-                marketType,
-                investorType,
-                rankingType,
+                market,
+                investor,
+                ranking,
                 rank - 1);
     }
 

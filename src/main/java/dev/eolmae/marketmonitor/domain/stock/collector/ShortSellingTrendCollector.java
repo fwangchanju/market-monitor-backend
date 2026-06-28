@@ -1,5 +1,8 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
+import dev.eolmae.marketmonitor.common.enums.DateTimePattern;
+import dev.eolmae.marketmonitor.common.enums.Zone;
+import dev.eolmae.marketmonitor.common.util.DateParser;
 import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.ShortSellingTrendRequest;
@@ -10,10 +13,11 @@ import dev.eolmae.marketmonitor.domain.stock.service.WatchStockCacheService;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.ObjectUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,21 +30,21 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class ShortSellingTrendCollector {
 
-    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyyMMdd");
     private static final String TM_TP_DAILY = "2";
+    private static final int BACKFILL_DAYS = 60;
 
     private final KiwoomApiClient kiwoomApiClient;
-    private final ShortSellingDailyHistoryRepository dailyRepository;
+    private final ShortSellingDailyHistoryRepository shortSellingRepository;
     private final WatchStockCacheService watchStockCacheService;
 
     /** 스케줄러 호출 — 당일 확정 데이터 적재 (19:00 이후) */
     @Transactional
     public void collect(LocalDateTime snapshotTime) {
-        String todayStr = snapshotTime.toLocalDate().format(DATE_FMT);
+        LocalDate snapshotDate = snapshotTime.toLocalDate();
         List<String> stockCodes = watchStockCacheService.getCache();
         for (String stockCode : stockCodes) {
             try {
-                collectForStock(stockCode, todayStr, todayStr);
+                collectForStock(stockCode, snapshotDate);
             } catch (Exception e) {
                 log.error("공매도 수집 실패: stockCode={}", stockCode, e);
             }
@@ -49,69 +53,69 @@ public class ShortSellingTrendCollector {
 
     /** 관심종목 신규 등록 시 백필 — today-60일부터 수집, 비동기 호출 */
     @Transactional
-    public void backfill(String stockCode, LocalDateTime snapshotTime) {
-        LocalDate today = snapshotTime.toLocalDate();
-        String endDt = today.format(DATE_FMT);
-        String startDt = today.minusDays(60).format(DATE_FMT);
-        collectForStock(stockCode, startDt, endDt);
+    public void backfill(String stockCode) {
+        LocalDate today = LocalDate.now(Zone.KST.zoneId());
+        collectForStock(stockCode, today.minusDays(BACKFILL_DAYS), today);
         log.info("공매도 백필 완료: stockCode={}", stockCode);
     }
 
-    private void collectForStock(String stockCode, String startDt, String endDt) {
-        var request = new ShortSellingTrendRequest(stockCode, TM_TP_DAILY, startDt, endDt);
+    private void collectForStock(String stockCode, LocalDate to) {
+        collectForStock(stockCode, to, to);
+    }
+
+    private void collectForStock(String stockCode, LocalDate from, LocalDate to) {
+        var dateFormatter = DateTimePattern.DATE.formatter();
+        var request = new ShortSellingTrendRequest(
+                stockCode, TM_TP_DAILY, from.format(dateFormatter), to.format(dateFormatter));
         ShortSellingTrendResponse response = kiwoomApiClient.post(request, ShortSellingTrendResponse.class);
 
-        if (response.ticks() == null || response.ticks().isEmpty()) {
+        if (ObjectUtils.isEmpty(response.ticks())) {
             log.debug("공매도 데이터 없음: stockCode={}", stockCode);
             return;
         }
 
         for (ShortSellingTrendResponse.ShortTick tick : response.ticks()) {
-            if (tick.dt() == null || tick.dt().isBlank()) {
+            if (StringUtils.isBlank(tick.dt())) {
                 continue;
             }
-            LocalDate tradeDate = parseDate(tick.dt());
+            LocalDate tradeDate = DateParser.parseDate(tick.dt());
             if (tradeDate == null) {
                 continue;
             }
 
-            if (dailyRepository.existsByStockCodeAndTradeDate(stockCode, tradeDate)) {
+            if (shortSellingRepository.existsByStockCodeAndTradeDate(stockCode, tradeDate)) {
                 continue;
             }
 
-            BigDecimal closePrice =
-                    KiwoomValueParser.parseBigDecimal(tick.closePric()).abs();
-            BigDecimal priceChange = KiwoomValueParser.parseBigDecimal(tick.predPre());
-            BigDecimal changeRate = KiwoomValueParser.parseBigDecimal(tick.fluRt());
-            long tradingVolume = KiwoomValueParser.parseLong(tick.trdeQty());
-            long shortVolume = KiwoomValueParser.parseLong(tick.shrtsQty());
-            long cumulativeShortVolume = KiwoomValueParser.parseLong(tick.ovrShrtsQty());
-            BigDecimal shortRatio = KiwoomValueParser.parseBigDecimal(tick.trdeWght());
-            BigDecimal shortAmount = KiwoomValueParser.parseBigDecimal(tick.shrtsTrdePrica());
-            BigDecimal shortAvgPrice = KiwoomValueParser.parseBigDecimal(tick.shrtsAvgPric());
-
-            dailyRepository.save(ShortSellingDailyHistory.create(
-                    stockCode,
-                    tradeDate,
-                    closePrice,
-                    priceChange,
-                    changeRate,
-                    tradingVolume,
-                    shortVolume,
-                    cumulativeShortVolume,
-                    shortRatio,
-                    shortAmount,
-                    shortAvgPrice));
+            shortSellingRepository.save(toEntity(stockCode, tradeDate, tick));
         }
 
         log.debug("공매도 수집 완료: stockCode={}", stockCode);
     }
 
-    private static LocalDate parseDate(String dt) {
-        try {
-            return LocalDate.parse(dt.trim(), DATE_FMT);
-        } catch (Exception e) {
-            return null;
-        }
+    private static ShortSellingDailyHistory toEntity(
+            String stockCode, LocalDate tradeDate, ShortSellingTrendResponse.ShortTick tick) {
+        BigDecimal closePrice = KiwoomValueParser.parseBigDecimal(tick.closePric()).abs();
+        BigDecimal priceChange = KiwoomValueParser.parseBigDecimal(tick.predPre());
+        BigDecimal changeRate = KiwoomValueParser.parseBigDecimal(tick.fluRt());
+        long tradingVolume = KiwoomValueParser.parseLong(tick.trdeQty());
+        long shortVolume = KiwoomValueParser.parseLong(tick.shrtsQty());
+        long cumulativeShortVolume = KiwoomValueParser.parseLong(tick.ovrShrtsQty());
+        BigDecimal shortRatio = KiwoomValueParser.parseBigDecimal(tick.trdeWght());
+        BigDecimal shortAmount = KiwoomValueParser.parseBigDecimal(tick.shrtsTrdePrica());
+        BigDecimal shortAvgPrice = KiwoomValueParser.parseBigDecimal(tick.shrtsAvgPric());
+
+        return ShortSellingDailyHistory.create(
+                stockCode,
+                tradeDate,
+                closePrice,
+                priceChange,
+                changeRate,
+                tradingVolume,
+                shortVolume,
+                cumulativeShortVolume,
+                shortRatio,
+                shortAmount,
+                shortAvgPrice);
     }
 }

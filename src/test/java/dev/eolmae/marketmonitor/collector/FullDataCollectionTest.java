@@ -49,7 +49,10 @@ class FullDataCollectionTest {
     ProgramNetBuyRankingCollector programNetBuyRankingCollector;
 
     @Autowired
-    ProgramTradeTrendCollector programTradeTrendCollector;
+    ProgramTradeIntradayCollector programTradeIntradayCollector;
+
+    @Autowired
+    ProgramTradeDailyCollector programTradeDailyCollector;
 
     @Autowired
     ShortSellingTrendCollector shortSellingTrendCollector;

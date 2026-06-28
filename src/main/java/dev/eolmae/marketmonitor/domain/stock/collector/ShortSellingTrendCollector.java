@@ -8,6 +8,7 @@ import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.ShortSellingTrendRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.ShortSellingTrendResponse;
 import dev.eolmae.marketmonitor.domain.stock.entity.ShortSellingDailyHistory;
+import dev.eolmae.marketmonitor.domain.stock.entity.WatchStock;
 import dev.eolmae.marketmonitor.domain.stock.repository.ShortSellingDailyHistoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.WatchStockCacheService;
 import java.math.BigDecimal;
@@ -41,29 +42,30 @@ public class ShortSellingTrendCollector {
     @Transactional
     public void collect(LocalDateTime snapshotTime) {
         LocalDate snapshotDate = snapshotTime.toLocalDate();
-        List<String> stockCodes = watchStockCacheService.getCache();
-        for (String stockCode : stockCodes) {
+        List<WatchStock> watchStocks = watchStockCacheService.getCache();
+        for (WatchStock watchStock : watchStocks) {
             try {
-                collectForStock(stockCode, snapshotDate);
+                collectForStock(watchStock, snapshotDate);
             } catch (Exception e) {
-                log.error("공매도 수집 실패: stockCode={}", stockCode, e);
+                log.error("공매도 수집 실패: stockCode={}", watchStock.getStockCode(), e);
             }
         }
     }
 
     /** 관심종목 신규 등록 시 백필 — today-60일부터 수집, 비동기 호출 */
     @Transactional
-    public void backfill(String stockCode) {
+    public void backfill(WatchStock watchStock) {
         LocalDate today = LocalDate.now(Zone.KST.zoneId());
-        collectForStock(stockCode, today.minusDays(BACKFILL_DAYS), today);
-        log.info("공매도 백필 완료: stockCode={}", stockCode);
+        collectForStock(watchStock, today.minusDays(BACKFILL_DAYS), today);
+        log.info("공매도 백필 완료: stockCode={}", watchStock.getStockCode());
     }
 
-    private void collectForStock(String stockCode, LocalDate to) {
-        collectForStock(stockCode, to, to);
+    private void collectForStock(WatchStock watchStock, LocalDate to) {
+        collectForStock(watchStock, to, to);
     }
 
-    private void collectForStock(String stockCode, LocalDate from, LocalDate to) {
+    private void collectForStock(WatchStock watchStock, LocalDate from, LocalDate to) {
+        String stockCode = watchStock.getStockCode();
         var dateFormatter = DateTimePattern.DATE.formatter();
         var request = new ShortSellingTrendRequest(
                 stockCode, TM_TP_DAILY, from.format(dateFormatter), to.format(dateFormatter));

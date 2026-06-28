@@ -155,26 +155,6 @@ public class SectorInvestorNetBuyCollector {
         log.debug("투자자별매매종합 수집 완료: market={}", market);
     }
 
-    private enum MrktTp {
-        KOSPI("0"),
-        KOSDAQ("1"); // ka10051 mrkt_tp
-        final String value;
-
-        MrktTp(String value) {
-            this.value = value;
-        }
-    }
-
-    private enum IndsCd {
-        KOSPI("001"),
-        KOSDAQ("101"); // ka10051 inds_cd (응답 필터용)
-        final String value;
-
-        IndsCd(String value) {
-            this.value = value;
-        }
-    }
-
     private void saveSnapshot(
             Market market,
             InvestorType investor,
@@ -195,6 +175,26 @@ public class SectorInvestorNetBuyCollector {
                     BigDecimal.ZERO,
                     BigDecimal.ZERO,
                     netBuyAmount));
+        }
+    }
+
+    private enum MrktTp {
+        KOSPI("0"),
+        KOSDAQ("1"); // ka10051 mrkt_tp
+        final String value;
+
+        MrktTp(String value) {
+            this.value = value;
+        }
+    }
+
+    private enum IndsCd {
+        KOSPI("001"),
+        KOSDAQ("101"); // ka10051 inds_cd (응답 필터용)
+        final String value;
+
+        IndsCd(String value) {
+            this.value = value;
         }
     }
 }

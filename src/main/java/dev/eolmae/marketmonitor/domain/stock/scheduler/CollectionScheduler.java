@@ -5,7 +5,8 @@ import dev.eolmae.marketmonitor.domain.stock.collector.HoldingsSyncService;
 import dev.eolmae.marketmonitor.domain.stock.collector.IndexContributionRankingCollector;
 import dev.eolmae.marketmonitor.domain.stock.collector.IntradayInvestorRankingCollector;
 import dev.eolmae.marketmonitor.domain.stock.collector.ProgramNetBuyRankingCollector;
-import dev.eolmae.marketmonitor.domain.stock.collector.ProgramTradeTrendCollector;
+import dev.eolmae.marketmonitor.domain.stock.collector.ProgramTradeDailyCollector;
+import dev.eolmae.marketmonitor.domain.stock.collector.ProgramTradeIntradayCollector;
 import dev.eolmae.marketmonitor.domain.stock.collector.SectorCurrentPriceCollector;
 import dev.eolmae.marketmonitor.domain.stock.collector.SectorInvestorNetBuyCollector;
 import dev.eolmae.marketmonitor.domain.stock.collector.ShortSellingTrendCollector;
@@ -28,7 +29,8 @@ public class CollectionScheduler {
     private final SectorInvestorNetBuyCollector sectorInvestorNetBuyCollector;
     private final IntradayInvestorRankingCollector intradayInvestorRankingCollector;
     private final ProgramNetBuyRankingCollector programNetBuyRankingCollector;
-    private final ProgramTradeTrendCollector programTradeTrendCollector;
+    private final ProgramTradeIntradayCollector programTradeIntradayCollector;
+    private final ProgramTradeDailyCollector programTradeDailyCollector;
     private final IndexContributionRankingCollector indexContributionRankingCollector;
     private final ShortSellingTrendCollector shortSellingTrendCollector;
     private final StockInfoCollector stockInfoCollector;
@@ -48,7 +50,7 @@ public class CollectionScheduler {
         runSafely("투자자별매매종합", () -> sectorInvestorNetBuyCollector.collect(snapshotTime));
         runSafely("장중투자자랭킹", () -> intradayInvestorRankingCollector.collect(snapshotTime));
         runSafely("프로그램매매랭킹", () -> programNetBuyRankingCollector.collect(snapshotTime));
-        runSafely("프로그램매매히스토리", () -> programTradeTrendCollector.collect(snapshotTime));
+        runSafely("프로그램매매히스토리", () -> programTradeIntradayCollector.collect(snapshotTime));
         runSafely("지수기여도랭킹", () -> indexContributionRankingCollector.collect(snapshotTime));
 
         log.info("장중 시장 데이터 수집 완료: snapshotTime={}", snapshotTime);
@@ -61,7 +63,7 @@ public class CollectionScheduler {
     public void collectProgramTradingDaily() {
         LocalDate tradeDate = LocalDate.now(Zone.KST.zoneId());
         log.info("프로그램매매 일별 이력 수집 시작: tradeDate={}", tradeDate);
-        runSafely("프로그램매매일별", () -> programTradeTrendCollector.collectDaily(tradeDate));
+        runSafely("프로그램매매일별", () -> programTradeDailyCollector.collect(tradeDate));
         log.info("프로그램매매 일별 이력 수집 완료: tradeDate={}", tradeDate);
     }
 

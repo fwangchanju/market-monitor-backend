@@ -1,6 +1,7 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
 import dev.eolmae.marketmonitor.common.enums.Zone;
+import dev.eolmae.marketmonitor.domain.stock.entity.WatchStock;
 import dev.eolmae.marketmonitor.domain.stock.repository.ProgramTradingDailyHistoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.ProgramTradingHistoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.ShortSellingDailyHistoryRepository;
@@ -18,58 +19,63 @@ import org.springframework.stereotype.Service;
 public class WatchStockBackfillService {
 
     private final ShortSellingTrendCollector shortSellingTrendCollector;
-    private final ProgramTradeTrendCollector programTradeTrendCollector;
+    private final ProgramTradeIntradayCollector programTradeIntradayCollector;
+    private final ProgramTradeDailyCollector programTradeDailyCollector;
     private final ShortSellingDailyHistoryRepository shortSellingRepository;
     private final ProgramTradingDailyHistoryRepository programTradingDailyRepository;
     private final ProgramTradingHistoryRepository programTradingHistoryRepository;
 
     @Async
-    public void backfill(String stockCode) {
+    public void backfill(WatchStock watchStock) {
+        String stockCode = watchStock.getStockCode();
         LocalDateTime snapshotTime = LocalDateTime.now(Zone.KST.zoneId()).truncatedTo(ChronoUnit.HOURS);
         LocalDate yesterday = snapshotTime.toLocalDate().minusDays(1);
         log.info("관심종목 백필 시작: stockCode={}, snapshotTime={}", stockCode, snapshotTime);
 
-        backfillShortSelling(stockCode, snapshotTime, yesterday);
-        backfillProgramTradingDaily(stockCode, snapshotTime, yesterday);
-        backfillProgramTradingIntraday(stockCode, snapshotTime);
+        backfillShortSelling(watchStock, yesterday);
+        backfillProgramTradingDaily(watchStock, yesterday);
+        backfillProgramTradingIntraday(watchStock, snapshotTime);
 
         log.info("관심종목 백필 완료: stockCode={}", stockCode);
     }
 
     // 7번 공매도: 전일 데이터 없으면 60일 백필
-    private void backfillShortSelling(String stockCode, LocalDateTime snapshotTime, LocalDate yesterday) {
+    private void backfillShortSelling(WatchStock watchStock, LocalDate yesterday) {
+        String stockCode = watchStock.getStockCode();
         if (shortSellingRepository.existsByStockCodeAndTradeDate(stockCode, yesterday)) {
             log.debug("공매도 백필 스킵 (전일 데이터 있음): stockCode={}", stockCode);
             return;
         }
         try {
-            shortSellingTrendCollector.backfill(stockCode, snapshotTime);
+            shortSellingTrendCollector.backfill(watchStock);
         } catch (Exception e) {
             log.error("공매도 백필 실패: stockCode={}", stockCode, e);
         }
     }
 
     // 6번 일별: 전일 데이터 없으면 60일 백필
-    private void backfillProgramTradingDaily(String stockCode, LocalDateTime snapshotTime, LocalDate yesterday) {
+    private void backfillProgramTradingDaily(WatchStock watchStock, LocalDate yesterday) {
+        String stockCode = watchStock.getStockCode();
         if (programTradingDailyRepository.existsByStockCodeAndTradeDate(stockCode, yesterday)) {
             log.debug("프로그램매매 일별 백필 스킵 (전일 데이터 있음): stockCode={}", stockCode);
             return;
         }
         try {
-            programTradeTrendCollector.backfillDaily(stockCode, snapshotTime);
+            programTradeDailyCollector.backfill(watchStock);
         } catch (Exception e) {
             log.error("프로그램매매 일별 백필 실패: stockCode={}", stockCode, e);
         }
     }
 
     // 6번 장중: 현재 정각 스냅샷 없으면 당일 백필
-    private void backfillProgramTradingIntraday(String stockCode, LocalDateTime snapshotTime) {
+    private void backfillProgramTradingIntraday(WatchStock watchStock, LocalDateTime snapshotTime) {
+        String stockCode = watchStock.getStockCode();
         if (programTradingHistoryRepository.existsByStockCodeAndSnapshotTime(stockCode, snapshotTime)) {
             log.debug("프로그램매매 장중 백필 스킵 (현재 정각 데이터 있음): stockCode={}", stockCode);
             return;
         }
         try {
-            programTradeTrendCollector.backfillIntraday(stockCode, snapshotTime);
+            programTradeIntradayCollector.backfill(watchStock, snapshotTime);
         } catch (Exception e) {
             log.error("프로그램매매 장중 백필 실패: stockCode={}", stockCode, e);
         }

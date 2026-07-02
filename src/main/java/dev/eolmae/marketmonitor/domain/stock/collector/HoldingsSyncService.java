@@ -78,7 +78,7 @@ public class HoldingsSyncService {
             if (stockInfoCache.containsKey(stockCode)) {
                 watchStockRepository.save(WatchStock.createHolding(stockCode, holdingRank));
             } else {
-                log.warn("보유종목이 종목마스터에 없음: stockCode={}", stockCode);
+                log.warn("보유종목이 종목 기준정보에 없음: stockCode={}", stockCode);
             }
         }
 

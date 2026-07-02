@@ -6,8 +6,8 @@ import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.domain.notification.dto.TelegramMediaItem;
 import dev.eolmae.marketmonitor.domain.notification.dto.TelegramRequest;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.IntStream;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ByteArrayResource;
@@ -66,15 +66,20 @@ public class TelegramClient {
 
     public void sendMediaGroup(String chatId, List<byte[]> images) {
         try {
-            List<TelegramMediaItem> mediaList = IntStream.range(0, images.size())
-                    .mapToObj(TelegramMediaItem::photo)
-                    .toList();
+            List<TelegramMediaItem> mediaList = new ArrayList<>();
+            int index = 0;
+            for (byte[] image : images) {
+                mediaList.add(TelegramMediaItem.photo(index++));
+            }
 
             MultiValueMap<String, Object> form = new LinkedMultiValueMap<>();
             form.add("chat_id", chatId);
             form.add("media", objectMapper.writeValueAsString(mediaList));
-            IntStream.range(0, images.size())
-                    .forEach(i -> form.add("photo" + i, namedResource(images.get(i), "group_image_" + i + ".png")));
+            index = 0;
+            for (byte[] image : images) {
+                form.add("photo" + index, namedResource(image, "group_image_" + index + ".png"));
+                index++;
+            }
 
             restClient
                     .post()

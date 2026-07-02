@@ -29,7 +29,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.IntStream;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ObjectUtils;
@@ -194,18 +193,18 @@ public class IndexContributionRankingCollector {
                 .toList();
 
         // 랭킹 저장
-        IntStream.range(0, scored.size()).forEach(i -> {
-            ScoredStock stock = scored.get(i);
+        int rank = 1;
+        for (ScoredStock stock : scored) {
             indexContributionRankingSnapshotRepository.save(IndexContributionRankingSnapshot.create(
                     market,
                     snapshotTime,
-                    i + 1,
+                    rank++,
                     stock.stockCode(),
                     stock.stockName(),
                     stock.marketCode(),
                     stock.contribution().setScale(4, RoundingMode.HALF_UP),
                     stock.changeRate().setScale(4, RoundingMode.HALF_UP)));
-        });
+        }
 
         log.info("지수기여도랭킹 수집 완료: market={}, 저장건수={}", market, scored.size());
     }

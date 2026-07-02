@@ -54,11 +54,7 @@ public class IntradayInvestorRankingCollector {
             IntradayRankingType ranking,
             LocalDateTime snapshotTime) {
 
-        String mrktTp =
-                switch (market) {
-                    case KOSPI -> MrktTp.KOSPI.value;
-                    case KOSDAQ -> MrktTp.KOSDAQ.value;
-                };
+        String mrktTp = MrktTp.from(market);
 
         List<IntradayInvestorRankingSnapshot> existing =
                 repository.findBySnapshotTimeAndMarketTypeAndInvestorTypeAndRankingTypeOrderByRankAsc(
@@ -88,13 +84,13 @@ public class IntradayInvestorRankingCollector {
                     investor,
                     ranking,
                     AmtQtyType.AMOUNT,
+                    snapshotTime,
                     rank++,
                     item.stkCd(),
                     item.stkNm(),
                     KiwoomValueParser.parseBigDecimal(item.netslmt()),
                     KiwoomValueParser.parseLong(item.selQty()),
-                    KiwoomValueParser.parseLong(item.buyQty()),
-                    snapshotTime));
+                    KiwoomValueParser.parseLong(item.buyQty())));
         }
 
         log.debug(
@@ -112,6 +108,13 @@ public class IntradayInvestorRankingCollector {
 
         MrktTp(String value) {
             this.value = value;
+        }
+
+        static String from(Market market) {
+            return switch (market) {
+                case KOSPI -> KOSPI.value;
+                case KOSDAQ -> KOSDAQ.value;
+            };
         }
     }
 }

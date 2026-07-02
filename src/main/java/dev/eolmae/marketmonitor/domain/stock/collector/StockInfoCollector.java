@@ -80,7 +80,7 @@ public class StockInfoCollector {
     }
 
     private void collectMarket(Market market, Map<String, FetchStockInfo> fetchedStocks) {
-        String mrktTp = MrktTp.codeOf(market);
+        String mrktTp = MrktTp.from(market);
 
         var request = new StockInfoRequest(mrktTp);
         StockInfoResponse response = kiwoomApiClient.post(request, StockInfoResponse.class);
@@ -121,7 +121,7 @@ public class StockInfoCollector {
             this.value = value;
         }
 
-        static String codeOf(Market market) {
+        static String from(Market market) {
             return switch (market) {
                 case KOSPI -> MrktTp.KOSPI.value;
                 case KOSDAQ -> MrktTp.KOSDAQ.value;

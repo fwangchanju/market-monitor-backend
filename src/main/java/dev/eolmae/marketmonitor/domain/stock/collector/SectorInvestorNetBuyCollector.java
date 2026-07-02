@@ -45,16 +45,8 @@ public class SectorInvestorNetBuyCollector {
     }
 
     private void collectForMarket(Market market, LocalDateTime snapshotTime) {
-        String mrktTp =
-                switch (market) {
-                    case KOSPI -> MrktTp.KOSPI.value;
-                    case KOSDAQ -> MrktTp.KOSDAQ.value;
-                };
-        String indsCd =
-                switch (market) {
-                    case KOSPI -> IndsCd.KOSPI.value;
-                    case KOSDAQ -> IndsCd.KOSDAQ.value;
-                };
+        String mrktTp = MrktTp.from(market);
+        String indsCd = IndsCd.from(market);
         var request = new SectorInvestorNetBuyRequest(
                 mrktTp, AMT_QTY_TP_AMOUNT, snapshotTime.format(DATE_FMT), StexType.KRX_NXT.code());
         var response = kiwoomApiClient.post(request, SectorInvestorNetBuyResponse.class);
@@ -171,10 +163,10 @@ public class SectorInvestorNetBuyCollector {
                     investor,
                     AmtQtyType.AMOUNT,
                     snapshotTime,
-                    now,
                     BigDecimal.ZERO,
                     BigDecimal.ZERO,
-                    netBuyAmount));
+                    netBuyAmount,
+                    now));
         }
     }
 
@@ -186,6 +178,13 @@ public class SectorInvestorNetBuyCollector {
         MrktTp(String value) {
             this.value = value;
         }
+
+        static String from(Market market) {
+            return switch (market) {
+                case KOSPI -> KOSPI.value;
+                case KOSDAQ -> KOSDAQ.value;
+            };
+        }
     }
 
     private enum IndsCd {
@@ -195,6 +194,13 @@ public class SectorInvestorNetBuyCollector {
 
         IndsCd(String value) {
             this.value = value;
+        }
+
+        static String from(Market market) {
+            return switch (market) {
+                case KOSPI -> KOSPI.value;
+                case KOSDAQ -> KOSDAQ.value;
+            };
         }
     }
 }

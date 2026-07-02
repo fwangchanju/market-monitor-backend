@@ -44,11 +44,7 @@ public class ProgramNetBuyRankingCollector {
     private void collectForCombination(
             Market market, ProgramRankingType ranking, AmtQtyType amtQty, LocalDateTime snapshotTime) {
 
-        String mrktTp =
-                switch (market) {
-                    case KOSPI -> MrktTp.KOSPI.value;
-                    case KOSDAQ -> MrktTp.KOSDAQ.value;
-                };
+        String mrktTp = MrktTp.from(market);
 
         boolean alreadyExists = rankingRepository.existsBySnapshotTimeAndMarketTypeAndRankingTypeAndAmtQtyType(
                 snapshotTime,
@@ -87,13 +83,13 @@ public class ProgramNetBuyRankingCollector {
                     market,
                     amtQty,
                     ranking,
+                    snapshotTime,
                     rank++,
                     stockCode,
                     stockName,
                     buyAmount,
                     sellAmount,
-                    netBuyAmount,
-                    snapshotTime));
+                    netBuyAmount));
         }
 
         log.debug(
@@ -111,6 +107,13 @@ public class ProgramNetBuyRankingCollector {
 
         MrktTp(String value) {
             this.value = value;
+        }
+
+        static String from(Market market) {
+            return switch (market) {
+                case KOSPI -> KOSPI.value;
+                case KOSDAQ -> KOSDAQ.value;
+            };
         }
     }
 }

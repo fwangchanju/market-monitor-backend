@@ -9,8 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 
 public interface IndexContributionRankingSnapshotRepository extends JpaRepository<IndexContributionRankingSnapshot, Long> {
 
-    List<IndexContributionRankingSnapshot> findBySnapshotTimeAndMarketTypeOrderByRankAsc(
-            LocalDateTime snapshotTime, Market market);
+    boolean existsBySnapshotTimeAndMarketType(LocalDateTime snapshotTime, Market market);
 
     @Query("""
         SELECT s FROM IndexContributionRankingSnapshot s

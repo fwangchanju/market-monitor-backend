@@ -43,6 +43,9 @@ public class ProgramTradingRankingSnapshot {
     @Column(nullable = false, length = 20)
     private ProgramRankingType rankingType;
 
+    @Column(nullable = false)
+    private LocalDateTime snapshotTime;
+
     @Column(name = "rank_no", nullable = false)
     private int rank;
 
@@ -62,9 +65,6 @@ public class ProgramTradingRankingSnapshot {
     private BigDecimal programNetBuyAmount;
 
     @Column(nullable = false)
-    private LocalDateTime snapshotTime;
-
-    @Column(nullable = false)
     private LocalDateTime createdAt;
 
     protected ProgramTradingRankingSnapshot() {}
@@ -73,24 +73,24 @@ public class ProgramTradingRankingSnapshot {
             Market marketType,
             AmtQtyType amtQtyType,
             ProgramRankingType rankingType,
+            LocalDateTime snapshotTime,
             int rank,
             String stockCode,
             String stockName,
             BigDecimal programBuyAmount,
             BigDecimal programSellAmount,
-            BigDecimal programNetBuyAmount,
-            LocalDateTime snapshotTime) {
+            BigDecimal programNetBuyAmount) {
         var entity = new ProgramTradingRankingSnapshot();
         entity.marketType = marketType;
         entity.amtQtyType = amtQtyType;
         entity.rankingType = rankingType;
+        entity.snapshotTime = snapshotTime;
         entity.rank = rank;
         entity.stockCode = stockCode;
         entity.stockName = stockName;
         entity.programBuyAmount = programBuyAmount;
         entity.programSellAmount = programSellAmount;
         entity.programNetBuyAmount = programNetBuyAmount;
-        entity.snapshotTime = snapshotTime;
         entity.createdAt = LocalDateTime.now(Zone.KST.zoneId());
         return entity;
     }

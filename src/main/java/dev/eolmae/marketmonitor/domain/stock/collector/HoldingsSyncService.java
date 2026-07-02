@@ -15,7 +15,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ObjectUtils;
@@ -65,23 +64,23 @@ public class HoldingsSyncService {
                 .collect(Collectors.toMap(WatchStock::getStockCode, Function.identity()));
         Map<String, StockInfo> stockInfoCache = stockInfoCacheService.getCache();
 
-        IntStream.range(0, sortedHoldings.size()).forEach(i -> {
-            String stockCode = sortedHoldings.get(i).stockCode();
-            int holdingRank = i + 1;
+        int rank = 1;
+        for (AccountBalanceResponse.HoldingItem holding : sortedHoldings) {
+            String stockCode = holding.stockCode();
+            int holdingRank = rank++;
 
             WatchStock existing = existingHoldings.get(stockCode);
             if (existing != null) {
                 existing.updateHoldingRank(holdingRank);
-                return;
+                continue;
             }
 
             if (stockInfoCache.containsKey(stockCode)) {
                 watchStockRepository.save(WatchStock.createHolding(stockCode, holdingRank));
+            } else {
+                log.warn("보유종목이 종목 기준정보에 없음: stockCode={}", stockCode);
             }
-            else {
-                log.warn("보유종목이 종목마스터에 없음: stockCode={}", stockCode);
-            }
-        });
+        }
 
         watchStockCacheService.evict();
         log.info("보유종목 동기화 완료: 종목수={}", sortedHoldings.size());

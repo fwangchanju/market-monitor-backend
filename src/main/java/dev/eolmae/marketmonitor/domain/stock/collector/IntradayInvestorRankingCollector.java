@@ -11,7 +11,6 @@ import dev.eolmae.marketmonitor.domain.stock.enums.IntradayInvestorType;
 import dev.eolmae.marketmonitor.domain.stock.enums.IntradayRankingType;
 import dev.eolmae.marketmonitor.domain.stock.repository.IntradayInvestorRankingSnapshotRepository;
 import java.time.LocalDateTime;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -49,17 +48,11 @@ public class IntradayInvestorRankingCollector {
     }
 
     private void collectForCombination(
-            Market market,
-            IntradayInvestorType investor,
-            IntradayRankingType ranking,
-            LocalDateTime snapshotTime) {
+            Market market, IntradayInvestorType investor, IntradayRankingType ranking, LocalDateTime snapshotTime) {
 
         String mrktTp = MrktTp.from(market);
 
-        List<IntradayInvestorRankingSnapshot> existing =
-                repository.findBySnapshotTimeAndMarketTypeAndInvestorTypeAndRankingTypeOrderByRankAsc(
-                        snapshotTime, market, investor, ranking);
-        if (!existing.isEmpty()) {
+        if (repository.existsBySnapshotTimeAndMarketTypeAndInvestorTypeAndRankingType(snapshotTime, market, investor, ranking)) {
             log.debug(
                     "장중투자자랭킹 이미 존재, 스킵: market={}, investor={}, ranking={}, snapshotTime={}",
                     market,
@@ -69,15 +62,16 @@ public class IntradayInvestorRankingCollector {
             return;
         }
 
+        String amtQtyTp = AmtQtyType.AMOUNT.code(); // 금액 기준 고정
         var request = new IntradayInvestorRankingRequest(
-                ranking.code(), mrktTp, investor.apiCode(), AmtQtyType.AMOUNT.code());
+                ranking.code(), mrktTp, investor.apiCode(), amtQtyTp);
         var response = kiwoomApiClient.post(request, IntradayInvestorRankingResponse.class);
 
         if (response.items() == null) {
             return;
         }
 
-        int rank = 1; // TODO 이건 왜 있는거임?
+        int rank = 1;
         for (IntradayInvestorRankingResponse.RankingItem item : response.items()) {
             repository.save(IntradayInvestorRankingSnapshot.create(
                     market,

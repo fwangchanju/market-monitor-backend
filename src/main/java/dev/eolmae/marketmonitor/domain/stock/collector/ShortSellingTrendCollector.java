@@ -11,7 +11,6 @@ import dev.eolmae.marketmonitor.domain.stock.entity.ShortSellingDailyHistory;
 import dev.eolmae.marketmonitor.domain.stock.entity.WatchStock;
 import dev.eolmae.marketmonitor.domain.stock.repository.ShortSellingDailyHistoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.WatchStockCacheService;
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -97,27 +96,17 @@ public class ShortSellingTrendCollector {
 
     private static ShortSellingDailyHistory toEntity(
             String stockCode, LocalDate tradeDate, ShortSellingTrendResponse.ShortTick tick) {
-        BigDecimal closePrice = KiwoomValueParser.parseBigDecimal(tick.closePric()).abs();
-        BigDecimal priceChange = KiwoomValueParser.parseBigDecimal(tick.predPre());
-        BigDecimal changeRate = KiwoomValueParser.parseBigDecimal(tick.fluRt());
-        long tradingVolume = KiwoomValueParser.parseLong(tick.trdeQty());
-        long shortVolume = KiwoomValueParser.parseLong(tick.shrtsQty());
-        long cumulativeShortVolume = KiwoomValueParser.parseLong(tick.ovrShrtsQty());
-        BigDecimal shortRatio = KiwoomValueParser.parseBigDecimal(tick.trdeWght());
-        BigDecimal shortAmount = KiwoomValueParser.parseBigDecimal(tick.shrtsTrdePrica());
-        BigDecimal shortAvgPrice = KiwoomValueParser.parseBigDecimal(tick.shrtsAvgPric());
-
         return ShortSellingDailyHistory.create(
                 stockCode,
                 tradeDate,
-                closePrice,
-                priceChange,
-                changeRate,
-                tradingVolume,
-                shortVolume,
-                cumulativeShortVolume,
-                shortRatio,
-                shortAmount,
-                shortAvgPrice);
+                KiwoomValueParser.parseBigDecimal(tick.closePric()).abs(),
+                KiwoomValueParser.parseBigDecimal(tick.predPre()),
+                KiwoomValueParser.parseBigDecimal(tick.fluRt()),
+                KiwoomValueParser.parseLong(tick.trdeQty()),
+                KiwoomValueParser.parseLong(tick.shrtsQty()),
+                KiwoomValueParser.parseLong(tick.ovrShrtsQty()),
+                KiwoomValueParser.parseBigDecimal(tick.trdeWght()),
+                KiwoomValueParser.parseBigDecimal(tick.shrtsTrdePrica()),
+                KiwoomValueParser.parseBigDecimal(tick.shrtsAvgPric()));
     }
 }

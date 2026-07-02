@@ -12,11 +12,8 @@ import org.springframework.data.jpa.repository.Query;
 
 public interface IntradayInvestorRankingSnapshotRepository extends JpaRepository<IntradayInvestorRankingSnapshot, Long> {
 
-    List<IntradayInvestorRankingSnapshot> findBySnapshotTimeAndMarketTypeAndInvestorTypeAndRankingTypeOrderByRankAsc(
-            LocalDateTime snapshotTime,
-            Market market,
-            IntradayInvestorType investor,
-            IntradayRankingType ranking);
+    boolean existsBySnapshotTimeAndMarketTypeAndInvestorTypeAndRankingType(
+            LocalDateTime snapshotTime, Market market, IntradayInvestorType investor, IntradayRankingType ranking);
 
     @Query("""
         SELECT s FROM IntradayInvestorRankingSnapshot s

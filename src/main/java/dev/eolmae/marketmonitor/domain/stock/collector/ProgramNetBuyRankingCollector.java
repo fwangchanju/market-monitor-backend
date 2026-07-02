@@ -46,12 +46,7 @@ public class ProgramNetBuyRankingCollector {
 
         String mrktTp = MrktTp.from(market);
 
-        boolean alreadyExists = rankingRepository.existsBySnapshotTimeAndMarketTypeAndRankingTypeAndAmtQtyType(
-                snapshotTime,
-                market,
-                ranking,
-                amtQty); // TODO 매 스케줄에서 한번만 수행해서 데이터 적재하는 구조 아닌가? 이 조회로 유효성 검증하는 것처럼 보이는 행위를 하는 이유는?
-        if (alreadyExists) {
+        if (rankingRepository.existsBySnapshotTimeAndMarketTypeAndRankingTypeAndAmtQtyType(snapshotTime, market, ranking, amtQty)) {
             log.debug(
                     "프로그램매매 랭킹 이미 존재, 스킵: market={}, ranking={}, amtQty={}, snapshotTime={}",
                     market,

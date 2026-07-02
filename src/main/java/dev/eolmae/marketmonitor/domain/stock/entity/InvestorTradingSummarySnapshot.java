@@ -46,9 +46,6 @@ public class InvestorTradingSummarySnapshot {
     @Column(nullable = false)
     private LocalDateTime snapshotTime;
 
-    @Column(nullable = false)
-    private LocalDateTime lastCollectedAt;
-
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal buyAmount;
 
@@ -57,6 +54,9 @@ public class InvestorTradingSummarySnapshot {
 
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal netBuyAmount;
+
+    @Column(nullable = false)
+    private LocalDateTime lastCollectedAt;
 
     @Column(nullable = false)
     private LocalDateTime createdAt;
@@ -68,19 +68,19 @@ public class InvestorTradingSummarySnapshot {
             InvestorType investorType,
             AmtQtyType amtQtyType,
             LocalDateTime snapshotTime,
-            LocalDateTime lastCollectedAt,
             BigDecimal buyAmount,
             BigDecimal sellAmount,
-            BigDecimal netBuyAmount) {
+            BigDecimal netBuyAmount,
+            LocalDateTime lastCollectedAt) {
         var entity = new InvestorTradingSummarySnapshot();
         entity.marketType = marketType;
         entity.investorType = investorType;
         entity.amtQtyType = amtQtyType;
         entity.snapshotTime = snapshotTime;
-        entity.lastCollectedAt = lastCollectedAt;
         entity.buyAmount = buyAmount;
         entity.sellAmount = sellAmount;
         entity.netBuyAmount = netBuyAmount;
+        entity.lastCollectedAt = lastCollectedAt;
         entity.createdAt = LocalDateTime.now(Zone.KST.zoneId());
         return entity;
     }

@@ -36,12 +36,6 @@ public class MarketOverviewSnapshot {
     @Column(nullable = false)
     private LocalDateTime snapshotTime;
 
-    @Column(nullable = false)
-    private LocalDateTime lastCollectedAt;
-
-    @Column(nullable = false, length = 30)
-    private String marketStatus;
-
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal indexValue;
 
@@ -54,11 +48,8 @@ public class MarketOverviewSnapshot {
     @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal tradingValue;
 
-    @Column(nullable = false)
-    private int upperLimitCount;
-
-    @Column(nullable = false)
-    private int lowerLimitCount;
+    @Column(nullable = false, length = 30)
+    private String marketStatus;
 
     @Column(nullable = false)
     private int advancers;
@@ -70,6 +61,15 @@ public class MarketOverviewSnapshot {
     private int unchangedCount;
 
     @Column(nullable = false)
+    private int upperLimitCount;
+
+    @Column(nullable = false)
+    private int lowerLimitCount;
+
+    @Column(nullable = false)
+    private LocalDateTime lastCollectedAt;
+
+    @Column(nullable = false)
     private LocalDateTime createdAt;
 
     protected MarketOverviewSnapshot() {}
@@ -77,31 +77,31 @@ public class MarketOverviewSnapshot {
     public static MarketOverviewSnapshot create(
             Market marketType,
             LocalDateTime snapshotTime,
-            LocalDateTime lastCollectedAt,
-            String marketStatus,
             BigDecimal indexValue,
             BigDecimal changeValue,
             BigDecimal changeRate,
             BigDecimal tradingValue,
-            int upperLimitCount,
-            int lowerLimitCount,
+            String marketStatus,
             int advancers,
             int decliners,
-            int unchangedCount) {
+            int unchangedCount,
+            int upperLimitCount,
+            int lowerLimitCount,
+            LocalDateTime lastCollectedAt) {
         var entity = new MarketOverviewSnapshot();
         entity.marketType = marketType;
         entity.snapshotTime = snapshotTime;
-        entity.lastCollectedAt = lastCollectedAt;
-        entity.marketStatus = marketStatus;
         entity.indexValue = indexValue;
         entity.changeValue = changeValue;
         entity.changeRate = changeRate;
         entity.tradingValue = tradingValue;
-        entity.upperLimitCount = upperLimitCount;
-        entity.lowerLimitCount = lowerLimitCount;
+        entity.marketStatus = marketStatus;
         entity.advancers = advancers;
         entity.decliners = decliners;
         entity.unchangedCount = unchangedCount;
+        entity.upperLimitCount = upperLimitCount;
+        entity.lowerLimitCount = lowerLimitCount;
+        entity.lastCollectedAt = lastCollectedAt;
         entity.createdAt = LocalDateTime.now(Zone.KST.zoneId());
         return entity;
     }

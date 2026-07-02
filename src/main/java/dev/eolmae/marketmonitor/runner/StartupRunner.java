@@ -35,7 +35,7 @@ public class StartupRunner implements ApplicationRunner {
 
         // 4. 전체 watch_stock 백필 가드 확인 (비동기 — 기동 지연 최소화)
         for (WatchStock watchStock : watchStockCache) {
-            watchStockBackfillService.backfill(watchStock.getStockCode());
+            watchStockBackfillService.backfill(watchStock);
         }
         log.info("[startup] 백필 요청 완료: {}종목 (비동기 처리 중)", watchStockCache.size());
     }

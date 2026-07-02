@@ -45,16 +45,8 @@ public class SectorInvestorNetBuyCollector {
     }
 
     private void collectForMarket(Market market, LocalDateTime snapshotTime) {
-        String mrktTp =
-                switch (market) {
-                    case KOSPI -> MrktTp.KOSPI.value;
-                    case KOSDAQ -> MrktTp.KOSDAQ.value;
-                };
-        String indsCd =
-                switch (market) {
-                    case KOSPI -> IndsCd.KOSPI.value;
-                    case KOSDAQ -> IndsCd.KOSDAQ.value;
-                };
+        String mrktTp = MrktTp.from(market);
+        String indsCd = IndsCd.from(market);
         var request = new SectorInvestorNetBuyRequest(
                 mrktTp, AMT_QTY_TP_AMOUNT, snapshotTime.format(DATE_FMT), StexType.KRX_NXT.code());
         var response = kiwoomApiClient.post(request, SectorInvestorNetBuyResponse.class);
@@ -155,26 +147,6 @@ public class SectorInvestorNetBuyCollector {
         log.debug("투자자별매매종합 수집 완료: market={}", market);
     }
 
-    private enum MrktTp {
-        KOSPI("0"),
-        KOSDAQ("1"); // ka10051 mrkt_tp
-        final String value;
-
-        MrktTp(String value) {
-            this.value = value;
-        }
-    }
-
-    private enum IndsCd {
-        KOSPI("001"),
-        KOSDAQ("101"); // ka10051 inds_cd (응답 필터용)
-        final String value;
-
-        IndsCd(String value) {
-            this.value = value;
-        }
-    }
-
     private void saveSnapshot(
             Market market,
             InvestorType investor,
@@ -191,10 +163,44 @@ public class SectorInvestorNetBuyCollector {
                     investor,
                     AmtQtyType.AMOUNT,
                     snapshotTime,
-                    now,
                     BigDecimal.ZERO,
                     BigDecimal.ZERO,
-                    netBuyAmount));
+                    netBuyAmount,
+                    now));
+        }
+    }
+
+    private enum MrktTp {
+        KOSPI("0"),
+        KOSDAQ("1"); // ka10051 mrkt_tp
+        final String value;
+
+        MrktTp(String value) {
+            this.value = value;
+        }
+
+        static String from(Market market) {
+            return switch (market) {
+                case KOSPI -> KOSPI.value;
+                case KOSDAQ -> KOSDAQ.value;
+            };
+        }
+    }
+
+    private enum IndsCd {
+        KOSPI("001"),
+        KOSDAQ("101"); // ka10051 inds_cd (응답 필터용)
+        final String value;
+
+        IndsCd(String value) {
+            this.value = value;
+        }
+
+        static String from(Market market) {
+            return switch (market) {
+                case KOSPI -> KOSPI.value;
+                case KOSDAQ -> KOSDAQ.value;
+            };
         }
     }
 }

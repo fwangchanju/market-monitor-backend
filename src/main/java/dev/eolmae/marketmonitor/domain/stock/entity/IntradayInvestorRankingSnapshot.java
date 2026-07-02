@@ -55,6 +55,9 @@ public class IntradayInvestorRankingSnapshot {
     @Column(nullable = false, length = 20)
     private AmtQtyType amtQtyType;
 
+    @Column(nullable = false)
+    private LocalDateTime snapshotTime;
+
     @Column(name = "rank_no", nullable = false)
     private int rank;
 
@@ -74,9 +77,6 @@ public class IntradayInvestorRankingSnapshot {
     private long tradedVolume;
 
     @Column(nullable = false)
-    private LocalDateTime snapshotTime;
-
-    @Column(nullable = false)
     private LocalDateTime createdAt;
 
     protected IntradayInvestorRankingSnapshot() {}
@@ -86,25 +86,25 @@ public class IntradayInvestorRankingSnapshot {
             IntradayInvestorType investorType,
             IntradayRankingType rankingType,
             AmtQtyType amtQtyType,
+            LocalDateTime snapshotTime,
             int rank,
             String stockCode,
             String stockName,
             BigDecimal netBuyAmount,
             long sellVolume,
-            long tradedVolume,
-            LocalDateTime snapshotTime) {
+            long tradedVolume) {
         var entity = new IntradayInvestorRankingSnapshot();
         entity.marketType = marketType;
         entity.investorType = investorType;
         entity.rankingType = rankingType;
         entity.amtQtyType = amtQtyType;
+        entity.snapshotTime = snapshotTime;
         entity.rank = rank;
         entity.stockCode = stockCode;
         entity.stockName = stockName;
         entity.netBuyAmount = netBuyAmount;
         entity.sellVolume = sellVolume;
         entity.tradedVolume = tradedVolume;
-        entity.snapshotTime = snapshotTime;
         entity.createdAt = LocalDateTime.now(Zone.KST.zoneId());
         return entity;
     }

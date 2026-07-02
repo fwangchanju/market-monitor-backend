@@ -18,12 +18,12 @@ import lombok.Getter;
 @Getter
 @Entity
 @Table(
-        name = "index_contribution_ranking_snapshot",
+        name = "sector_price_snapshot",
         uniqueConstraints =
                 @UniqueConstraint(
-                        name = "uk_index_contribution_ranking_snapshot",
+                        name = "uk_sector_price_snapshot",
                         columnNames = {"market_type", "stock_code", "snapshot_time"}))
-public class IndexContributionRankingSnapshot {
+public class SectorPriceSnapshot {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -36,47 +36,42 @@ public class IndexContributionRankingSnapshot {
     @Column(nullable = false)
     private LocalDateTime snapshotTime;
 
-    @Column(name = "rank_no", nullable = false)
-    private int rank;
-
     @Column(nullable = false, length = 20)
     private String stockCode;
 
     @Column(nullable = false, length = 100)
     private String stockName;
 
-    @Column(length = 5)
-    private String marketCode;
+    @Column(nullable = false, precision = 19, scale = 4)
+    private BigDecimal currentPrice;
 
     @Column(nullable = false, precision = 19, scale = 4)
-    private BigDecimal contributionScore;
+    private BigDecimal changeValue;
 
     @Column(nullable = false, precision = 9, scale = 4)
-    private BigDecimal priceChangeRate;
+    private BigDecimal changeRate;
 
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
-    protected IndexContributionRankingSnapshot() {}
+    protected SectorPriceSnapshot() {}
 
-    public static IndexContributionRankingSnapshot create(
+    public static SectorPriceSnapshot create(
             Market marketType,
             LocalDateTime snapshotTime,
-            int rank,
             String stockCode,
             String stockName,
-            String marketCode,
-            BigDecimal contributionScore,
-            BigDecimal priceChangeRate) {
-        var entity = new IndexContributionRankingSnapshot();
+            BigDecimal currentPrice,
+            BigDecimal changeValue,
+            BigDecimal changeRate) {
+        var entity = new SectorPriceSnapshot();
         entity.marketType = marketType;
         entity.snapshotTime = snapshotTime;
-        entity.rank = rank;
         entity.stockCode = stockCode;
         entity.stockName = stockName;
-        entity.marketCode = marketCode;
-        entity.contributionScore = contributionScore;
-        entity.priceChangeRate = priceChangeRate;
+        entity.currentPrice = currentPrice;
+        entity.changeValue = changeValue;
+        entity.changeRate = changeRate;
         entity.createdAt = LocalDateTime.now(Zone.KST.zoneId());
         return entity;
     }

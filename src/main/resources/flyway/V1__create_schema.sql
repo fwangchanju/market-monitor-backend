@@ -27,17 +27,17 @@ CREATE TABLE market_overview_snapshot (
     id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
     market_type VARCHAR(20) NOT NULL,
     snapshot_time TIMESTAMP NOT NULL,
-    last_collected_at TIMESTAMP NOT NULL,
-    market_status VARCHAR(30) NOT NULL,
     index_value DECIMAL(19,4) NOT NULL,
     change_value DECIMAL(19,4) NOT NULL,
     change_rate DECIMAL(9,4) NOT NULL,
     trading_value DECIMAL(19,2) NOT NULL,
+    market_status VARCHAR(30) NOT NULL,
     advancers INT NOT NULL,
     decliners INT NOT NULL,
     unchanged_count INT NOT NULL,
     upper_limit_count INT NOT NULL DEFAULT 0,
     lower_limit_count INT NOT NULL DEFAULT 0,
+    last_collected_at TIMESTAMP NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_market_overview_snapshot PRIMARY KEY (id),
     CONSTRAINT uk_market_overview_snapshot UNIQUE (market_type, snapshot_time)
@@ -49,10 +49,10 @@ CREATE TABLE investor_trading_summary_snapshot (
     investor_type VARCHAR(20) NOT NULL,
     amt_qty_type VARCHAR(20) NOT NULL DEFAULT 'AMOUNT',
     snapshot_time TIMESTAMP NOT NULL,
-    last_collected_at TIMESTAMP NOT NULL,
     buy_amount DECIMAL(19,2) NOT NULL,
     sell_amount DECIMAL(19,2) NOT NULL,
     net_buy_amount DECIMAL(19,2) NOT NULL,
+    last_collected_at TIMESTAMP NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_investor_trading_summary_snapshot PRIMARY KEY (id),
     CONSTRAINT uk_investor_trading_summary_snapshot UNIQUE (market_type, investor_type, amt_qty_type, snapshot_time)
@@ -64,13 +64,13 @@ CREATE TABLE intraday_investor_ranking_snapshot (
     investor_type VARCHAR(20) NOT NULL,
     ranking_type VARCHAR(20) NOT NULL,
     amt_qty_type VARCHAR(20) NOT NULL DEFAULT 'AMOUNT',
+    snapshot_time TIMESTAMP NOT NULL,
     rank_no INT NOT NULL,
     stock_code VARCHAR(20) NOT NULL,
     stock_name VARCHAR(100) NOT NULL,
     net_buy_amount DECIMAL(19,2) NOT NULL,
     sel_qty BIGINT NOT NULL DEFAULT 0,
     traded_volume BIGINT NOT NULL,
-    snapshot_time TIMESTAMP NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_intraday_investor_ranking_snapshot PRIMARY KEY (id),
     CONSTRAINT uk_intraday_investor_ranking_snapshot UNIQUE (market_type, investor_type, ranking_type, amt_qty_type, stock_code, snapshot_time),
@@ -82,13 +82,13 @@ CREATE TABLE program_trading_ranking_snapshot (
     market_type VARCHAR(20) NOT NULL DEFAULT 'KOSPI',
     amt_qty_type VARCHAR(20) NOT NULL DEFAULT 'AMOUNT',
     ranking_type VARCHAR(20) NOT NULL,
+    snapshot_time TIMESTAMP NOT NULL,
     rank_no INT NOT NULL,
     stock_code VARCHAR(20) NOT NULL,
     stock_name VARCHAR(100) NOT NULL,
     program_buy_amount DECIMAL(19,2) NOT NULL,
     program_sell_amount DECIMAL(19,2) NOT NULL,
     program_net_buy_amount DECIMAL(19,2) NOT NULL,
-    snapshot_time TIMESTAMP NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_program_trading_ranking_snapshot PRIMARY KEY (id),
     CONSTRAINT uk_program_trading_ranking_snapshot UNIQUE (market_type, amt_qty_type, ranking_type, stock_code, snapshot_time),
@@ -143,17 +143,31 @@ CREATE TABLE short_selling_daily (
 CREATE TABLE index_contribution_ranking_snapshot (
     id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
     market_type VARCHAR(20) NOT NULL,
+    snapshot_time TIMESTAMP NOT NULL,
     rank_no INT NOT NULL,
     stock_code VARCHAR(20) NOT NULL,
     stock_name VARCHAR(100) NOT NULL,
     market_code VARCHAR(5),
     contribution_score DECIMAL(19,4) NOT NULL,
     price_change_rate DECIMAL(9,4) NOT NULL,
-    snapshot_time TIMESTAMP NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_index_contribution_ranking_snapshot PRIMARY KEY (id),
     CONSTRAINT uk_index_contribution_ranking_snapshot UNIQUE (market_type, stock_code, snapshot_time),
     CONSTRAINT fk_index_contribution_ranking_stock FOREIGN KEY (stock_code) REFERENCES stock_info (stock_code)
+);
+
+CREATE TABLE sector_price_snapshot (
+    id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
+    market_type VARCHAR(20) NOT NULL,
+    stock_code VARCHAR(20) NOT NULL,
+    stock_name VARCHAR(100) NOT NULL,
+    current_price DECIMAL(19,4) NOT NULL,
+    change_value DECIMAL(19,4) NOT NULL,
+    change_rate DECIMAL(9,4) NOT NULL,
+    snapshot_time TIMESTAMP NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_sector_price_snapshot PRIMARY KEY (id),
+    CONSTRAINT uk_sector_price_snapshot UNIQUE (market_type, stock_code, snapshot_time)
 );
 
 CREATE INDEX idx_market_overview_snapshot_time ON market_overview_snapshot (snapshot_time);
@@ -164,3 +178,4 @@ CREATE INDEX idx_program_trading_history_stock_time ON program_trading_history (
 CREATE INDEX idx_program_trading_daily_stock_date ON program_trading_daily (stock_code, trade_date DESC);
 CREATE INDEX idx_short_selling_daily_stock_date ON short_selling_daily (stock_code, trade_date DESC);
 CREATE INDEX idx_index_contribution_ranking_snapshot_time ON index_contribution_ranking_snapshot (snapshot_time);
+CREATE INDEX idx_sector_price_snapshot_time ON sector_price_snapshot (snapshot_time);

@@ -70,6 +70,7 @@ public class ProgramNetBuyRankingCollector {
         for (ProgramNetBuyRankingResponse.RankingItem item : response.items()) {
             String stockCode = StockCode.removeSuffix(item.stkCd());
             if (stockCode.isBlank()) {
+                log.warn("프로그램매매 랭킹 종목코드 없음, 스킵: market={}, ranking={}", market, ranking);
                 continue;
             }
             rankingRepository.save(toEntity(market, amtQty, ranking, snapshotTime, rank++, item));

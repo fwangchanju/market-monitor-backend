@@ -2,6 +2,7 @@ package dev.eolmae.marketmonitor.domain.stock.collector;
 
 import dev.eolmae.marketmonitor.common.enums.Zone;
 import dev.eolmae.marketmonitor.common.util.DateParser;
+import dev.eolmae.marketmonitor.common.util.Strings;
 import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.DailyProgramTradeTrendRequest;
@@ -74,15 +75,15 @@ public class ProgramTradeDailyCollector {
         Map<String, TradeAmount> merged = new HashMap<>();
 
         for (DailyProgramTradeTrendResponse.DailyTick tick : krxTicks) {
-            String dt = tick.dt() != null ? tick.dt().trim() : null;
-            if (dt == null || dt.isBlank()) {
+            String dt = Strings.trimToEmpty(tick.dt());
+            if (dt.isBlank()) {
                 continue;
             }
             accumulateDaily(merged, dt, tick.prmBuyAmt(), tick.prmSellAmt());
         }
         for (DailyProgramTradeTrendResponse.DailyTick tick : nxtTicks) {
-            String dt = tick.dt() != null ? tick.dt().trim() : null;
-            if (dt == null || dt.isBlank()) {
+            String dt = Strings.trimToEmpty(tick.dt());
+            if (dt.isBlank()) {
                 continue;
             }
             accumulateDaily(merged, dt, tick.prmBuyAmt(), tick.prmSellAmt());

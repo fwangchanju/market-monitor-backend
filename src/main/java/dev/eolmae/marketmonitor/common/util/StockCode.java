@@ -1,7 +1,5 @@
 package dev.eolmae.marketmonitor.common.util;
 
-import org.apache.commons.lang3.StringUtils;
-
 public final class StockCode {
 
     private StockCode() {}
@@ -14,6 +12,6 @@ public final class StockCode {
      * null·공백이면 빈 문자열, suffix가 없으면 trim한 전체를 반환한다.
      */
     public static String removeSuffix(String stockCode) {
-        return StringUtils.substringBefore(StringUtils.trimToEmpty(stockCode), SUFFIX_SEPARATOR);
+        return Strings.substringBefore(Strings.trimToEmpty(stockCode), SUFFIX_SEPARATOR);
     }
 }

@@ -1,14 +1,13 @@
 package dev.eolmae.marketmonitor.common.util;
 
 import java.math.BigDecimal;
-import org.apache.commons.lang3.StringUtils;
 
 public final class NumberParser {
 
     private NumberParser() {}
 
     public static BigDecimal parseBigDecimal(String value) {
-        if (StringUtils.isBlank(value)) {
+        if (value == null || value.isBlank()) {
             return BigDecimal.ZERO;
         }
         try {
@@ -19,7 +18,7 @@ public final class NumberParser {
     }
 
     public static long parseLong(String value) {
-        if (StringUtils.isBlank(value)) {
+        if (value == null || value.isBlank()) {
             return 0L;
         }
         try {
@@ -30,7 +29,7 @@ public final class NumberParser {
     }
 
     public static int parseInt(String value) {
-        if (StringUtils.isBlank(value)) {
+        if (value == null || value.isBlank()) {
             return 0;
         }
         try {

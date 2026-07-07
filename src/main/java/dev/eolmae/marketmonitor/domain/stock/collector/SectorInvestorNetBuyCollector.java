@@ -11,9 +11,11 @@ import dev.eolmae.marketmonitor.domain.stock.enums.AmtQtyType;
 import dev.eolmae.marketmonitor.domain.stock.enums.InvestorType;
 import dev.eolmae.marketmonitor.domain.stock.enums.StexType;
 import dev.eolmae.marketmonitor.domain.stock.repository.InvestorTradingSummarySnapshotRepository;
+import dev.eolmae.marketmonitor.common.enums.DateTimePattern;
+import dev.eolmae.marketmonitor.common.exception.ErrorCode;
+import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -27,7 +29,6 @@ public class SectorInvestorNetBuyCollector {
     // ka10051: 업종별투자자순매수요청
     // 업종코드 001(코스피종합)/101(코스닥) 기준으로 시장 전체 투자자별 순매수 조회
 
-    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyyMMdd");
     private static final String AMT_QTY_TP_AMOUNT = "0"; // ka10051 amt_qty_tp: 0=금액
 
     private final KiwoomApiClient kiwoomApiClient;
@@ -47,8 +48,9 @@ public class SectorInvestorNetBuyCollector {
     private void collectForMarket(Market market, LocalDateTime snapshotTime) {
         String mrktTp = MrktTp.from(market);
         String indsCd = IndsCd.from(market);
+        String stexTp = StexType.KRX_NXT.code(); // KRX+NXT 합산
         var request = new SectorInvestorNetBuyRequest(
-                mrktTp, AMT_QTY_TP_AMOUNT, snapshotTime.format(DATE_FMT), StexType.KRX_NXT.code());
+                mrktTp, AMT_QTY_TP_AMOUNT, snapshotTime.format(DateTimePattern.DATE.formatter()), stexTp);
         var response = kiwoomApiClient.post(request, SectorInvestorNetBuyResponse.class);
 
         if (response.indsNetprps() == null || response.indsNetprps().isEmpty()) {
@@ -59,90 +61,16 @@ public class SectorInvestorNetBuyCollector {
         SectorInvestorNetBuyResponse.IndsNetprps compositeItem = response.indsNetprps().stream()
                 .filter(item -> item.indsCd() != null && item.indsCd().startsWith(indsCd))
                 .findFirst()
-                .orElseThrow(() ->
-                        new IllegalStateException("투자자별매매종합 종합지수 행 없음: market=" + market + ", indsCd=" + indsCd));
+                .orElseThrow(() -> new EscalateException(ErrorCode.COMPOSITE_INDEX_ROW_NOT_FOUND, market.name()));
 
         LocalDateTime now = LocalDateTime.now(Zone.KST.zoneId());
 
-        // ka10051은 순매수만 제공하므로 매수/매도는 ZERO로 저장 // TODO 순매수만 제공하는데 매수/매도는 왜 저장함?
-        saveSnapshot(
-                market,
-                InvestorType.PERSONAL,
-                KiwoomValueParser.parseBigDecimal(compositeItem.indNetprps()),
-                snapshotTime,
-                now);
-        saveSnapshot(
-                market,
-                InvestorType.FOREIGNER,
-                KiwoomValueParser.parseBigDecimal(compositeItem.frgnrNetprps()),
-                snapshotTime,
-                now);
-        saveSnapshot(
-                market,
-                InvestorType.INSTITUTION,
-                KiwoomValueParser.parseBigDecimal(compositeItem.orgnNetprps()),
-                snapshotTime,
-                now);
-        saveSnapshot(
-                market,
-                InvestorType.FINANCIAL_INVESTMENT,
-                KiwoomValueParser.parseBigDecimal(compositeItem.scNetprps()),
-                snapshotTime,
-                now);
-        saveSnapshot(
-                market,
-                InvestorType.TRUST,
-                KiwoomValueParser.parseBigDecimal(compositeItem.invtrtNetprps()),
-                snapshotTime,
-                now);
-        saveSnapshot(
-                market,
-                InvestorType.PENSION_FUND,
-                KiwoomValueParser.parseBigDecimal(compositeItem.endwNetprps()),
-                snapshotTime,
-                now);
-        saveSnapshot(
-                market,
-                InvestorType.PRIVATE_FUND,
-                KiwoomValueParser.parseBigDecimal(compositeItem.samoFundNetprps()),
-                snapshotTime,
-                now);
-        saveSnapshot(
-                market,
-                InvestorType.INSURANCE,
-                KiwoomValueParser.parseBigDecimal(compositeItem.insrncNetprps()),
-                snapshotTime,
-                now);
-        saveSnapshot(
-                market,
-                InvestorType.BANK,
-                KiwoomValueParser.parseBigDecimal(compositeItem.bankNetprps()),
-                snapshotTime,
-                now);
-        saveSnapshot(
-                market,
-                InvestorType.OTHER_CORP,
-                KiwoomValueParser.parseBigDecimal(compositeItem.etcCorpNetprps()),
-                snapshotTime,
-                now);
-        saveSnapshot(
-                market,
-                InvestorType.GOVERNMENT,
-                KiwoomValueParser.parseBigDecimal(compositeItem.natnNetprps()),
-                snapshotTime,
-                now);
-        saveSnapshot(
-                market,
-                InvestorType.OTHER_FINANCE,
-                KiwoomValueParser.parseBigDecimal(compositeItem.jnsinkmNetprps()),
-                snapshotTime,
-                now);
-        saveSnapshot(
-                market,
-                InvestorType.FOREIGN_COMPANY,
-                KiwoomValueParser.parseBigDecimal(compositeItem.nativeTrmtFrgnrNetprps()),
-                snapshotTime,
-                now);
+        // TODO ka10051은 순매수만 제공하나 엔티티의 buyAmount/sellAmount가 nullable=false — nullable 허용 또는 순매수 전용 엔티티 분리 검토
+        // ka10051은 순매수만 제공하므로 매수/매도는 ZERO로 저장
+        for (InvestorType investor : InvestorType.values()) {
+            BigDecimal netBuyAmount = resolveNetBuy(investor, compositeItem);
+            saveSnapshot(market, investor, netBuyAmount, snapshotTime, now);
+        }
 
         log.debug("투자자별매매종합 수집 완료: market={}", market);
     }
@@ -155,19 +83,44 @@ public class SectorInvestorNetBuyCollector {
             LocalDateTime now) {
 
         if (investorTradingSummarySnapshotRepository
-                .findByMarketTypeAndInvestorTypeAndAmtQtyTypeAndSnapshotTime(
-                        market, investor, AmtQtyType.AMOUNT, snapshotTime)
-                .isEmpty()) {
-            investorTradingSummarySnapshotRepository.save(InvestorTradingSummarySnapshot.create(
-                    market,
-                    investor,
-                    AmtQtyType.AMOUNT,
-                    snapshotTime,
-                    BigDecimal.ZERO,
-                    BigDecimal.ZERO,
-                    netBuyAmount,
-                    now));
+                .existsByMarketTypeAndInvestorTypeAndAmtQtyTypeAndSnapshotTime(
+                        market, investor, AmtQtyType.AMOUNT, snapshotTime)) {
+            return;
         }
+        investorTradingSummarySnapshotRepository.save(toEntity(market, investor, netBuyAmount, snapshotTime, now));
+    }
+
+    private static InvestorTradingSummarySnapshot toEntity(
+            Market market, InvestorType investor, BigDecimal netBuyAmount,
+            LocalDateTime snapshotTime, LocalDateTime now) {
+        return InvestorTradingSummarySnapshot.create(
+                market,
+                investor,
+                AmtQtyType.AMOUNT,
+                snapshotTime,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                netBuyAmount,
+                now);
+    }
+
+    private static BigDecimal resolveNetBuy(
+            InvestorType investor, SectorInvestorNetBuyResponse.IndsNetprps item) {
+        return KiwoomValueParser.parseBigDecimal(switch (investor) {
+            case PERSONAL -> item.indNetprps();
+            case FOREIGNER -> item.frgnrNetprps();
+            case INSTITUTION -> item.orgnNetprps();
+            case FINANCIAL_INVESTMENT -> item.scNetprps();
+            case TRUST -> item.invtrtNetprps();
+            case PENSION_FUND -> item.endwNetprps();
+            case PRIVATE_FUND -> item.samoFundNetprps();
+            case INSURANCE -> item.insrncNetprps();
+            case BANK -> item.bankNetprps();
+            case OTHER_CORP -> item.etcCorpNetprps();
+            case GOVERNMENT -> item.natnNetprps();
+            case OTHER_FINANCE -> item.jnsinkmNetprps();
+            case FOREIGN_COMPANY -> item.nativeTrmtFrgnrNetprps();
+        });
     }
 
     private enum MrktTp {

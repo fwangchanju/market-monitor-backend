@@ -5,7 +5,7 @@ import dev.eolmae.marketmonitor.domain.notification.client.TelegramClient;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
+
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
@@ -21,7 +21,7 @@ public class EscalationNotifier {
     @EventListener
     public void onEscalation(EscalationEvent event) {
         String chatId = properties.developerChatId();
-        if (StringUtils.isBlank(chatId)) {
+        if (chatId == null || chatId.isBlank()) {
             return;
         }
         telegramClient.sendMessage(chatId, event.message());

@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
+import dev.eolmae.marketmonitor.common.util.Strings;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -90,13 +90,13 @@ public class StockInfoCollector {
         }
 
         for (StockInfoResponse.StockItem item : response.list()) {
-            String stockCode = StringUtils.trimToEmpty(item.code());
+            String stockCode = Strings.trimToEmpty(item.code());
             if (stockCode.isEmpty()) {
                 log.warn("종목코드 없는 항목 스킵: stockName={}", item.name());
                 continue;
             }
 
-            String stockName = StringUtils.trimToEmpty(item.name());
+            String stockName = Strings.trimToEmpty(item.name());
             String marketCode = item.marketCode();
             Long listCount = KiwoomValueParser.parseLong(item.listCount());
             BigDecimal lastPrice = KiwoomValueParser.parseBigDecimal(item.lastPrice());

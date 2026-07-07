@@ -1,15 +1,15 @@
 package dev.eolmae.marketmonitor.domain.stock.util;
 
 import dev.eolmae.marketmonitor.common.util.NumberParser;
+import dev.eolmae.marketmonitor.common.util.Strings;
 import java.math.BigDecimal;
-import org.apache.commons.lang3.StringUtils;
 
 
 public final class KiwoomValueParser {
 
     private static final String NO_DATA_MARKER = "-";
     private static final String COMMA = ",";
-    private static final String EMPTY_STRING = "";
+    private static final String EMPTY = "";
     private static final String DOUBLE_NEGATIVE_PREFIX = "--";
 
     private KiwoomValueParser() {}
@@ -23,7 +23,7 @@ public final class KiwoomValueParser {
     }
 
     public static BigDecimal parseBigDecimal(String value) {
-        String normalized = StringUtils.trimToEmpty(value).replace(COMMA, EMPTY_STRING);
+        String normalized = Strings.trimToEmpty(value).replace(COMMA, EMPTY);
         if (NO_DATA_MARKER.equals(normalized)) {
             return BigDecimal.ZERO;
         }
@@ -31,7 +31,7 @@ public final class KiwoomValueParser {
     }
 
     public static long parseLong(String value) {
-        String normalized = StringUtils.trimToEmpty(value).replace(COMMA, EMPTY_STRING);
+        String normalized = Strings.trimToEmpty(value).replace(COMMA, EMPTY);
         if (NO_DATA_MARKER.equals(normalized)) {
             return 0L;
         }
@@ -39,7 +39,7 @@ public final class KiwoomValueParser {
     }
 
     public static int parseInt(String value) {
-        String normalized = StringUtils.trimToEmpty(value).replace(COMMA, EMPTY_STRING);
+        String normalized = Strings.trimToEmpty(value).replace(COMMA, EMPTY);
         if (NO_DATA_MARKER.equals(normalized)) {
             return 0;
         }

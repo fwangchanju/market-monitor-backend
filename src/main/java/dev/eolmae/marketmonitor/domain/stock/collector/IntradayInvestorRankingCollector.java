@@ -73,18 +73,7 @@ public class IntradayInvestorRankingCollector {
 
         int rank = 1;
         for (IntradayInvestorRankingResponse.RankingItem item : response.items()) {
-            repository.save(IntradayInvestorRankingSnapshot.create(
-                    market,
-                    investor,
-                    ranking,
-                    AmtQtyType.AMOUNT,
-                    snapshotTime,
-                    rank++,
-                    item.stkCd(),
-                    item.stkNm(),
-                    KiwoomValueParser.parseBigDecimal(item.netslmt()),
-                    KiwoomValueParser.parseLong(item.selQty()),
-                    KiwoomValueParser.parseLong(item.buyQty())));
+            repository.save(toEntity(market, investor, ranking, snapshotTime, rank++, item));
         }
 
         log.debug(
@@ -93,6 +82,23 @@ public class IntradayInvestorRankingCollector {
                 investor,
                 ranking,
                 rank - 1);
+    }
+
+    private static IntradayInvestorRankingSnapshot toEntity(
+            Market market, IntradayInvestorType investor, IntradayRankingType ranking,
+            LocalDateTime snapshotTime, int rank, IntradayInvestorRankingResponse.RankingItem item) {
+        return IntradayInvestorRankingSnapshot.create(
+                market,
+                investor,
+                ranking,
+                AmtQtyType.AMOUNT,
+                snapshotTime,
+                rank,
+                item.stkCd(),
+                item.stkNm(),
+                KiwoomValueParser.parseBigDecimal(item.netslmt()),
+                KiwoomValueParser.parseLong(item.selQty()),
+                KiwoomValueParser.parseLong(item.buyQty()));
     }
 
     private enum MrktTp {

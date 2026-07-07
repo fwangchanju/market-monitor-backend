@@ -17,7 +17,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.ObjectUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,7 +41,7 @@ public class HoldingsSyncService {
         AccountBalanceResponse response =
                 kiwoomApiClient.post(AccountBalanceRequest.defaults(), AccountBalanceResponse.class);
 
-        if (ObjectUtils.isEmpty(response.holdings())) {
+        if (response.holdings() == null || response.holdings().isEmpty()) {
             log.info("보유종목 없음 — HOLDINGS 전체 삭제");
             watchStockRepository.deleteByRegisterBy(RegisterBy.HOLDINGS);
             watchStockCacheService.evict();

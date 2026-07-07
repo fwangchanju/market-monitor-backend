@@ -7,13 +7,13 @@ import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.ProgramNetBuyRankingRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.ProgramNetBuyRankingResponse;
 import dev.eolmae.marketmonitor.domain.stock.entity.ProgramTradingRankingSnapshot;
+import dev.eolmae.marketmonitor.common.util.Strings;
 import dev.eolmae.marketmonitor.domain.stock.enums.AmtQtyType;
 import dev.eolmae.marketmonitor.domain.stock.enums.ProgramRankingType;
 import dev.eolmae.marketmonitor.domain.stock.enums.StexType;
 import dev.eolmae.marketmonitor.domain.stock.repository.ProgramTradingRankingSnapshotRepository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -33,7 +33,7 @@ public class ProgramNetBuyRankingCollector {
         for (Market market : Market.values()) {
             for (ProgramRankingType ranking : ProgramRankingType.values()) {
                 try {
-                    collectForCombination(market, ranking, AmtQtyType.AMOUNT, snapshotTime);
+                    collectForCombination(market, ranking, snapshotTime);
                 } catch (Exception e) {
                     log.error("프로그램매매 랭킹 수집 실패: market={}, ranking={}", market, ranking, e);
                 }
@@ -42,9 +42,11 @@ public class ProgramNetBuyRankingCollector {
     }
 
     private void collectForCombination(
-            Market market, ProgramRankingType ranking, AmtQtyType amtQty, LocalDateTime snapshotTime) {
+            Market market, ProgramRankingType ranking, LocalDateTime snapshotTime) {
 
         String mrktTp = MrktTp.from(market);
+        AmtQtyType amtQty = AmtQtyType.AMOUNT; // 금액 기준 고정
+        String stexTp = StexType.KRX_NXT.code(); // KRX+NXT 합산
 
         if (rankingRepository.existsBySnapshotTimeAndMarketTypeAndRankingTypeAndAmtQtyType(snapshotTime, market, ranking, amtQty)) {
             log.debug(
@@ -56,35 +58,21 @@ public class ProgramNetBuyRankingCollector {
             return;
         }
 
-        var request =
-                new ProgramNetBuyRankingRequest(ranking.code(), amtQty.code(), mrktTp, StexType.KRX_NXT.code());
+        var request = new ProgramNetBuyRankingRequest(ranking.code(), amtQty.code(), mrktTp, stexTp);
         ProgramNetBuyRankingResponse response = kiwoomApiClient.post(request, ProgramNetBuyRankingResponse.class);
 
-        List<ProgramNetBuyRankingResponse.RankingItem> items = response.items() != null ? response.items() : List.of();
+        if (response.items() == null || response.items().isEmpty()) {
+            log.debug("프로그램매매 랭킹 데이터 없음: market={}, ranking={}", market, ranking);
+            return;
+        }
 
-        int rank = 1; // TODO 왜 있어야됨?
-        for (ProgramNetBuyRankingResponse.RankingItem item : items) {
+        int rank = 1;
+        for (ProgramNetBuyRankingResponse.RankingItem item : response.items()) {
             String stockCode = StockCode.removeSuffix(item.stkCd());
             if (stockCode.isBlank()) {
                 continue;
             }
-
-            String stockName = item.stkNm() != null ? item.stkNm().trim() : "";
-            BigDecimal buyAmount = KiwoomValueParser.parseBigDecimal(item.prmBuyAmt());
-            BigDecimal sellAmount = KiwoomValueParser.parseBigDecimal(item.prmSellAmt());
-            BigDecimal netBuyAmount = KiwoomValueParser.parseBigDecimal(item.prmNetprpsAmt());
-
-            rankingRepository.save(ProgramTradingRankingSnapshot.create(
-                    market,
-                    amtQty,
-                    ranking,
-                    snapshotTime,
-                    rank++,
-                    stockCode,
-                    stockName,
-                    buyAmount,
-                    sellAmount,
-                    netBuyAmount));
+            rankingRepository.save(toEntity(market, amtQty, ranking, snapshotTime, rank++, item));
         }
 
         log.debug(
@@ -93,6 +81,22 @@ public class ProgramNetBuyRankingCollector {
                 ranking,
                 amtQty,
                 rank - 1);
+    }
+
+    private static ProgramTradingRankingSnapshot toEntity(
+            Market market, AmtQtyType amtQty, ProgramRankingType ranking,
+            LocalDateTime snapshotTime, int rank, ProgramNetBuyRankingResponse.RankingItem item) {
+        return ProgramTradingRankingSnapshot.create(
+                market,
+                amtQty,
+                ranking,
+                snapshotTime,
+                rank,
+                StockCode.removeSuffix(item.stkCd()),
+                Strings.trimToEmpty(item.stkNm()),
+                KiwoomValueParser.parseBigDecimal(item.prmBuyAmt()),
+                KiwoomValueParser.parseBigDecimal(item.prmSellAmt()),
+                KiwoomValueParser.parseBigDecimal(item.prmNetprpsAmt()));
     }
 
     private enum MrktTp {

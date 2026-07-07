@@ -21,7 +21,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.ObjectUtils;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -70,8 +69,7 @@ public class ProgramTradeIntradayCollector {
         TradeAmount amounts = TradeAmount.zero();
         amounts = addIfPresent(amounts, krxTicks);
         amounts = addIfPresent(amounts, nxtTicks);
-        historyRepository.save(
-                ProgramTradingHistory.create(stockCode, snapshotTime, amounts.buy(), amounts.sell(), amounts.net()));
+        historyRepository.save(toEntity(stockCode, snapshotTime, amounts));
 
         log.debug("프로그램매매 장중이력 수집 완료: stockCode={}", stockCode);
     }
@@ -119,23 +117,26 @@ public class ProgramTradeIntradayCollector {
                 amounts = addIfPresent(amounts, krxLatest);
                 amounts = addIfPresent(amounts, nxtLatest);
                 if (amounts.hasAmount()) {
-                    historyRepository.save(ProgramTradingHistory.create(
-                            stockCode, scheduleStart, amounts.buy(), amounts.sell(), amounts.net()));
+                    historyRepository.save(toEntity(stockCode, scheduleStart, amounts));
                 }
             }
             scheduleStart = scheduleStart.plusHours(1);
         }
     }
 
+    private static ProgramTradingHistory toEntity(String stockCode, LocalDateTime snapshotTime, TradeAmount amounts) {
+        return ProgramTradingHistory.create(stockCode, snapshotTime, amounts.buy(), amounts.sell(), amounts.net());
+    }
+
     private List<HourlyProgramTradeTrendResponse.TradeTick> fetchProgramTradeTicks(String stockCode, String dateStr) {
         var request = new HourlyProgramTradeTrendRequest(stockCode, StexType.KRX.code(), dateStr);
         HourlyProgramTradeTrendResponse response = kiwoomApiClient.post(request, HourlyProgramTradeTrendResponse.class);
-        return ObjectUtils.isEmpty(response.ticks()) ? List.of() : response.ticks();
+        return response.ticks() == null || response.ticks().isEmpty() ? List.of() : response.ticks();
     }
 
     private static TradeAmount addIfPresent(
             TradeAmount tradeAmount, List<HourlyProgramTradeTrendResponse.TradeTick> ticks) {
-        return addIfPresent(tradeAmount, ObjectUtils.isEmpty(ticks) ? null : ticks.getLast());
+        return addIfPresent(tradeAmount, ticks == null || ticks.isEmpty() ? null : ticks.getLast());
     }
 
     private static TradeAmount addIfPresent(

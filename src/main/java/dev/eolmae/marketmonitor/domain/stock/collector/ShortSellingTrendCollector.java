@@ -16,8 +16,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.ObjectUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -70,13 +68,13 @@ public class ShortSellingTrendCollector {
                 stockCode, TM_TP_DAILY, from.format(dateFormatter), to.format(dateFormatter));
         ShortSellingTrendResponse response = kiwoomApiClient.post(request, ShortSellingTrendResponse.class);
 
-        if (ObjectUtils.isEmpty(response.ticks())) {
+        if (response.ticks() == null || response.ticks().isEmpty()) {
             log.debug("공매도 데이터 없음: stockCode={}", stockCode);
             return;
         }
 
         for (ShortSellingTrendResponse.ShortTick tick : response.ticks()) {
-            if (StringUtils.isBlank(tick.dt())) {
+            if (tick.dt() == null || tick.dt().isBlank()) {
                 continue;
             }
             LocalDate tradeDate = DateParser.parseDate(tick.dt());

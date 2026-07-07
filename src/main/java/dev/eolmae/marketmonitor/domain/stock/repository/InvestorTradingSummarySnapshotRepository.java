@@ -6,13 +6,12 @@ import dev.eolmae.marketmonitor.domain.stock.enums.AmtQtyType;
 import dev.eolmae.marketmonitor.domain.stock.enums.InvestorType;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
 public interface InvestorTradingSummarySnapshotRepository extends JpaRepository<InvestorTradingSummarySnapshot, Long> {
 
-    Optional<InvestorTradingSummarySnapshot> findByMarketTypeAndInvestorTypeAndAmtQtyTypeAndSnapshotTime(
+    boolean existsByMarketTypeAndInvestorTypeAndAmtQtyTypeAndSnapshotTime(
             Market market, InvestorType investor, AmtQtyType amtQty, LocalDateTime snapshotTime);
 
     @Query("""

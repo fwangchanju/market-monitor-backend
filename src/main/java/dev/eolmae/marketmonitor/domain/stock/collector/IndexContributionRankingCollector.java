@@ -31,8 +31,7 @@ import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.ObjectUtils;
-import org.apache.commons.lang3.StringUtils;
+import dev.eolmae.marketmonitor.common.util.Strings;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -88,20 +87,7 @@ public class IndexContributionRankingCollector {
         SectorCurrentPriceResponse response = kiwoomApiClient.post(request, SectorCurrentPriceResponse.class);
 
         if (!marketOverviewSnapshotRepository.existsByMarketTypeAndSnapshotTime(market, snapshotTime)) {
-            marketOverviewSnapshotRepository.save(MarketOverviewSnapshot.create(
-                    market,
-                    snapshotTime,
-                    KiwoomValueParser.parseBigDecimal(response.curPrc()).abs(),
-                    KiwoomValueParser.parseBigDecimal(response.predPre()),
-                    KiwoomValueParser.parseBigDecimal(response.fluRt()),
-                    KiwoomValueParser.parseBigDecimal(response.trdePrica()),
-                    StringUtils.trimToEmpty(response.mrktStatClsCode()),
-                    KiwoomValueParser.parseInt(response.rising()),
-                    KiwoomValueParser.parseInt(response.fall()),
-                    KiwoomValueParser.parseInt(response.stdns()),
-                    KiwoomValueParser.parseInt(response.upl()),
-                    KiwoomValueParser.parseInt(response.lst()),
-                    LocalDateTime.now(Zone.KST.zoneId())));
+            marketOverviewSnapshotRepository.save(toMarketOverviewEntity(market, snapshotTime, response));
         }
 
         BigDecimal curPrc = KiwoomValueParser.parseBigDecimal(response.curPrc()).abs();
@@ -116,20 +102,13 @@ public class IndexContributionRankingCollector {
         var request = new SectorPriceListRequest(mrktTp, indsCd, stexTp);
         SectorPriceListResponse response = kiwoomApiClient.post(request, SectorPriceListResponse.class);
 
-        if (ObjectUtils.isEmpty(response.items())) {
+        if (response.items() == null || response.items().isEmpty()) {
             return List.of();
         }
 
         if (!sectorPriceSnapshotRepository.existsByMarketTypeAndSnapshotTime(market, snapshotTime)) {
             for (SectorPriceListResponse.StockItem item : response.items()) {
-                sectorPriceSnapshotRepository.save(SectorPriceSnapshot.create(
-                        market,
-                        snapshotTime,
-                        StockCode.removeSuffix(item.stkCd()),
-                        StringUtils.trimToEmpty(item.stkNm()),
-                        KiwoomValueParser.parseBigDecimal(item.curPrc()).abs(),
-                        KiwoomValueParser.parseBigDecimal(item.predPre()),
-                        KiwoomValueParser.parseBigDecimal(item.fluRt())));
+                sectorPriceSnapshotRepository.save(toSectorPriceEntity(market, snapshotTime, item));
             }
         }
 
@@ -160,7 +139,7 @@ public class IndexContributionRankingCollector {
                     prevMarketCapitalization.add(stockInfo.getLastPrice().multiply(BigDecimal.valueOf(stockInfo.getListCount())));
             candidates.add(new StockCandidate(
                     stockCode,
-                    StringUtils.trimToEmpty(item.stkNm()),
+                    Strings.trimToEmpty(item.stkNm()),
                     stockInfo.getMarketCode(),
                     KiwoomValueParser.parseBigDecimal(item.curPrc()).abs(),
                     stockInfo.getLastPrice(),
@@ -195,18 +174,53 @@ public class IndexContributionRankingCollector {
         // 랭킹 저장
         int rank = 1;
         for (ScoredStock stock : scored) {
-            indexContributionRankingSnapshotRepository.save(IndexContributionRankingSnapshot.create(
-                    market,
-                    snapshotTime,
-                    rank++,
-                    stock.stockCode(),
-                    stock.stockName(),
-                    stock.marketCode(),
-                    stock.contribution().setScale(4, RoundingMode.HALF_UP),
-                    stock.changeRate().setScale(4, RoundingMode.HALF_UP)));
+            indexContributionRankingSnapshotRepository.save(toRankingEntity(market, snapshotTime, rank++, stock));
         }
 
         log.info("지수기여도랭킹 수집 완료: market={}, 저장건수={}", market, scored.size());
+    }
+
+    private static MarketOverviewSnapshot toMarketOverviewEntity(
+            Market market, LocalDateTime snapshotTime, SectorCurrentPriceResponse response) {
+        return MarketOverviewSnapshot.create(
+                market,
+                snapshotTime,
+                KiwoomValueParser.parseBigDecimal(response.curPrc()).abs(),
+                KiwoomValueParser.parseBigDecimal(response.predPre()),
+                KiwoomValueParser.parseBigDecimal(response.fluRt()),
+                KiwoomValueParser.parseBigDecimal(response.trdePrica()),
+                Strings.trimToEmpty(response.mrktStatClsCode()),
+                KiwoomValueParser.parseInt(response.rising()),
+                KiwoomValueParser.parseInt(response.fall()),
+                KiwoomValueParser.parseInt(response.stdns()),
+                KiwoomValueParser.parseInt(response.upl()),
+                KiwoomValueParser.parseInt(response.lst()),
+                LocalDateTime.now(Zone.KST.zoneId()));
+    }
+
+    private static SectorPriceSnapshot toSectorPriceEntity(
+            Market market, LocalDateTime snapshotTime, SectorPriceListResponse.StockItem item) {
+        return SectorPriceSnapshot.create(
+                market,
+                snapshotTime,
+                StockCode.removeSuffix(item.stkCd()),
+                Strings.trimToEmpty(item.stkNm()),
+                KiwoomValueParser.parseBigDecimal(item.curPrc()).abs(),
+                KiwoomValueParser.parseBigDecimal(item.predPre()),
+                KiwoomValueParser.parseBigDecimal(item.fluRt()));
+    }
+
+    private static IndexContributionRankingSnapshot toRankingEntity(
+            Market market, LocalDateTime snapshotTime, int rank, ScoredStock stock) {
+        return IndexContributionRankingSnapshot.create(
+                market,
+                snapshotTime,
+                rank,
+                stock.stockCode(),
+                stock.stockName(),
+                stock.marketCode(),
+                stock.contribution().setScale(4, RoundingMode.HALF_UP),
+                stock.changeRate().setScale(4, RoundingMode.HALF_UP));
     }
 
     private enum MrktTp {

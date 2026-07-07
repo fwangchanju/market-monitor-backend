@@ -4,15 +4,13 @@ import dev.eolmae.marketmonitor.common.enums.DateTimePattern;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import org.apache.commons.lang3.StringUtils;
-
 public final class DateParser {
 
     private DateParser() {}
 
     public static LocalDate parseDate(String value) {
         try {
-            return LocalDate.parse(StringUtils.trim(value), DateTimePattern.DATE.formatter());
+            return LocalDate.parse(value != null ? value.trim() : null, DateTimePattern.DATE.formatter());
         } catch (Exception e) {
             return null;
         }
@@ -20,7 +18,7 @@ public final class DateParser {
 
     public static LocalDateTime parseDateTime(String value) {
         try {
-            return LocalDateTime.parse(StringUtils.trim(value), DateTimePattern.DATETIME.formatter());
+            return LocalDateTime.parse(value != null ? value.trim() : null, DateTimePattern.DATETIME.formatter());
         } catch (Exception e) {
             return null;
         }
@@ -28,7 +26,7 @@ public final class DateParser {
 
     public static LocalTime parseTime(String value) {
         try {
-            return LocalTime.parse(StringUtils.trim(value), DateTimePattern.TIME.formatter());
+            return LocalTime.parse(value != null ? value.trim() : null, DateTimePattern.TIME.formatter());
         } catch (Exception e) {
             return null;
         }

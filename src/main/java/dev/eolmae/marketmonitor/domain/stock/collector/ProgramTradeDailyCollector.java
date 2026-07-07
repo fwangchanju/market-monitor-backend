@@ -18,7 +18,6 @@ import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -75,15 +74,15 @@ public class ProgramTradeDailyCollector {
         Map<String, TradeAmount> merged = new HashMap<>();
 
         for (DailyProgramTradeTrendResponse.DailyTick tick : krxTicks) {
-            String dt = StringUtils.trim(tick.dt());
-            if (StringUtils.isBlank(dt)) {
+            String dt = tick.dt() != null ? tick.dt().trim() : null;
+            if (dt == null || dt.isBlank()) {
                 continue;
             }
             accumulateDaily(merged, dt, tick.prmBuyAmt(), tick.prmSellAmt());
         }
         for (DailyProgramTradeTrendResponse.DailyTick tick : nxtTicks) {
-            String dt = StringUtils.trim(tick.dt());
-            if (StringUtils.isBlank(dt)) {
+            String dt = tick.dt() != null ? tick.dt().trim() : null;
+            if (dt == null || dt.isBlank()) {
                 continue;
             }
             accumulateDaily(merged, dt, tick.prmBuyAmt(), tick.prmSellAmt());
@@ -100,12 +99,14 @@ public class ProgramTradeDailyCollector {
             if (!todayOnly && dailyHistoryRepository.existsByStockCodeAndTradeDate(stockCode, date)) {
                 continue;
             }
-            TradeAmount amt = entry.getValue();
-            dailyHistoryRepository.save(
-                    ProgramTradingDailyHistory.create(stockCode, date, amt.buy(), amt.sell(), amt.net()));
+            dailyHistoryRepository.save(toEntity(stockCode, date, entry.getValue()));
         }
 
         log.debug("프로그램매매 일별이력 수집 완료: stockCode={}, todayOnly={}", stockCode, todayOnly);
+    }
+
+    private static ProgramTradingDailyHistory toEntity(String stockCode, LocalDate date, TradeAmount amt) {
+        return ProgramTradingDailyHistory.create(stockCode, date, amt.buy(), amt.sell(), amt.net());
     }
 
     private static void accumulateDaily(Map<String, TradeAmount> merged, String dt, String buyAmt, String sellAmt) {

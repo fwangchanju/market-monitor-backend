@@ -3,12 +3,21 @@ CREATE TABLE stock_info (
     stock_name VARCHAR(100) NOT NULL,
     market_type VARCHAR(20) NOT NULL,
     market_code VARCHAR(5),
+    category_name VARCHAR(50),
     list_count BIGINT,
     last_price DECIMAL(19,2),
     active BOOLEAN NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_stock_info PRIMARY KEY (stock_code)
+);
+
+CREATE TABLE stock_category (
+    stock_code VARCHAR(20) NOT NULL,
+    category_name VARCHAR(50) NOT NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_stock_category PRIMARY KEY (stock_code),
+    CONSTRAINT fk_stock_category_stock FOREIGN KEY (stock_code) REFERENCES stock_info (stock_code)
 );
 
 CREATE TABLE watch_stock (

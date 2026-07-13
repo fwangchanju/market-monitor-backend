@@ -60,7 +60,12 @@ public class StockInfoCollector {
             }
 
             existing.update(
-                    fetched.stockName(), fetched.market(), fetched.marketCode(), fetched.listCount(), fetched.lastPrice());
+                    fetched.stockName(),
+                    fetched.market(),
+                    fetched.marketCode(),
+                    fetched.categoryName(),
+                    fetched.listCount(),
+                    fetched.lastPrice());
         }
 
         // DB에 없던 신규 종목
@@ -70,6 +75,7 @@ public class StockInfoCollector {
                         fetched.stockName(),
                         fetched.market(),
                         fetched.marketCode(),
+                        fetched.categoryName(),
                         fetched.listCount(),
                         fetched.lastPrice()))
                 .toList();
@@ -96,13 +102,16 @@ public class StockInfoCollector {
                 continue;
             }
 
-            String stockName = Strings.trimToEmpty(item.name());
-            String marketCode = item.marketCode();
-            Long listCount = KiwoomValueParser.parseLong(item.listCount());
-            BigDecimal lastPrice = KiwoomValueParser.parseBigDecimal(item.lastPrice());
-
             fetchedStocks.put(
-                    stockCode, new FetchStockInfo(stockCode, stockName, market, marketCode, listCount, lastPrice));
+                    stockCode,
+                    new FetchStockInfo(
+                            stockCode,
+                            Strings.trimToEmpty(item.name()),
+                            market,
+                            item.marketCode(),
+                            Strings.trimToEmpty(item.upName()),
+                            KiwoomValueParser.parseLong(item.listCount()),
+                            KiwoomValueParser.parseBigDecimal(item.lastPrice())));
         }
 
         log.debug("종목 정보 시장별 동기화 완료: market={}", market);
@@ -110,7 +119,13 @@ public class StockInfoCollector {
 
     /** API 응답(StockInfoResponse.StockItem) 파싱 + market 컨텍스트를 합친, DB 비교 전 임시 보관용 */
     private record FetchStockInfo(
-            String stockCode, String stockName, Market market, String marketCode, Long listCount, BigDecimal lastPrice) {}
+            String stockCode,
+            String stockName,
+            Market market,
+            String marketCode,
+            String categoryName,
+            Long listCount,
+            BigDecimal lastPrice) {}
 
     private enum MrktTp {
         KOSPI("0"),

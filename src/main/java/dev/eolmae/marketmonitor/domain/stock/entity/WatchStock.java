@@ -23,7 +23,7 @@ public class WatchStock {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "stock_code", nullable = false)
+    @Column(name = "stock_code", nullable = false, length = 20)
     private String stockCode;
 
     @Column(nullable = false)

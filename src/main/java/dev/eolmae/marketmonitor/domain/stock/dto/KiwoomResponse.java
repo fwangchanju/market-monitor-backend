@@ -9,4 +9,8 @@ public interface KiwoomResponse {
 
     @JsonProperty("return_msg")
     String returnMsg();
+
+    default KiwoomResponse mergeNext(KiwoomResponse next) {
+        return next;
+    }
 }

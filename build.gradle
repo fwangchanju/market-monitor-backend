@@ -52,7 +52,6 @@ dependencies {
 
 	// caffeine
 	implementation 'com.github.ben-manes.caffeine:caffeine'
-	implementation 'com.google.guava:guava:33.4.8-jre'
 
 	// commons-lang3
 	implementation 'org.apache.commons:commons-lang3'

@@ -1,6 +1,5 @@
 package dev.eolmae.marketmonitor.domain.stock.client;
 
-import com.google.common.util.concurrent.RateLimiter;
 import dev.eolmae.marketmonitor.common.exception.BusinessException;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.domain.stock.dto.KiwoomRequest;
@@ -9,6 +8,7 @@ import dev.eolmae.marketmonitor.domain.stock.dto.KiwoomResponseHeader;
 import dev.eolmae.marketmonitor.domain.stock.exception.KiwoomRateLimitException;
 import dev.eolmae.marketmonitor.domain.stock.properties.KiwoomProperties;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -30,12 +30,14 @@ public class KiwoomApiClient {
     private static final String BASE_URL = "https://api.kiwoom.com";
     public static final String SUCCESS_CODE = "0";
 
+    // 초당 5회 제한 대응 — 크레딧 저장 없이 매 호출 최소 간격 고정(버스트 방지)
+    private static final long MIN_FETCH_INTERVAL = TimeUnit.MILLISECONDS.toNanos(200);
+
     private final KiwoomProperties properties;
     private final KiwoomTokenManager tokenManager;
     private final RestClient restClient;
 
-    @SuppressWarnings("UnstableApiUsage")
-    private final RateLimiter rateLimiter;
+    private long lastFetchNanos = 0;
 
     /**
      * 타입 안전 API 호출. request DTO가 직렬화되어 요청 바디로 전송되고, 응답은 dataClass 타입으로 역직렬화된다.
@@ -73,11 +75,23 @@ public class KiwoomApiClient {
         return fetchPage(request, dataClass, null);
     }
 
-    @SuppressWarnings("UnstableApiUsage")
     private <T extends KiwoomResponse> PageResult<T> fetchPage(KiwoomRequest request, Class<T> dataClass, String nextKey) {
-        rateLimiter.acquire();
+        acquire();
         ResponseEntity<T> entity = fetch(request, dataClass, nextKey);
         return toPageResult(request, entity);
+    }
+
+    // 이전 fetch로부터 MIN_FETCH_INTERVAL만큼 안 지났으면 그 차이만큼 대기 후 진행
+    private synchronized void acquire() {
+        long waitNanos = MIN_FETCH_INTERVAL - (System.nanoTime() - lastFetchNanos);
+        if (waitNanos > 0) {
+            try {
+                TimeUnit.NANOSECONDS.sleep(waitNanos);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+        lastFetchNanos = System.nanoTime();
     }
 
     private <T> ResponseEntity<T> fetch(KiwoomRequest request, Class<T> dataClass, String nextKey) {

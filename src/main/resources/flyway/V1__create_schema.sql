@@ -3,6 +3,7 @@ CREATE TABLE stock_info (
     stock_name VARCHAR(100) NOT NULL,
     market_type VARCHAR(20) NOT NULL,
     market_code VARCHAR(5),
+    up_name VARCHAR(50),
     list_count BIGINT,
     last_price DECIMAL(19,2),
     active BOOLEAN NOT NULL,

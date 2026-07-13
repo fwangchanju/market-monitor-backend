@@ -17,6 +17,7 @@ public record StockInfoResponse(
             @JsonProperty("code") String code,
             @JsonProperty("name") String name,
             @JsonProperty("marketCode") String marketCode,
+            @JsonProperty("upName") String upName,
             @JsonProperty("listCount") String listCount,
             @JsonProperty("lastPrice") String lastPrice) {}
 }

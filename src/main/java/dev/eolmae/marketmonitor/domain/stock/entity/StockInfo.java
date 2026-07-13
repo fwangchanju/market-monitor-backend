@@ -31,6 +31,9 @@ public class StockInfo {
     @Column(length = 5)
     private String marketCode;
 
+    @Column(length = 50)
+    private String upName;
+
     @Column
     private Long listCount;
 
@@ -53,6 +56,7 @@ public class StockInfo {
             String stockName,
             Market marketType,
             String marketCode,
+            String upName,
             Long listCount,
             BigDecimal lastPrice) {
         var entity = new StockInfo();
@@ -60,6 +64,7 @@ public class StockInfo {
         entity.stockName = stockName;
         entity.marketType = marketType;
         entity.marketCode = marketCode;
+        entity.upName = upName;
         entity.listCount = listCount;
         entity.lastPrice = lastPrice;
         entity.active = true;
@@ -68,10 +73,12 @@ public class StockInfo {
         return entity;
     }
 
-    public void update(String stockName, Market marketType, String marketCode, Long listCount, BigDecimal lastPrice) {
+    public void update(
+            String stockName, Market marketType, String marketCode, String upName, Long listCount, BigDecimal lastPrice) {
         this.stockName = stockName;
         this.marketType = marketType;
         this.marketCode = marketCode;
+        this.upName = upName;
         this.listCount = listCount;
         this.lastPrice = lastPrice;
         this.active = true;

@@ -63,7 +63,7 @@ public class StockInfoCollector {
                     fetched.stockName(),
                     fetched.market(),
                     fetched.marketCode(),
-                    fetched.upName(),
+                    fetched.categoryName(),
                     fetched.listCount(),
                     fetched.lastPrice());
         }
@@ -75,7 +75,7 @@ public class StockInfoCollector {
                         fetched.stockName(),
                         fetched.market(),
                         fetched.marketCode(),
-                        fetched.upName(),
+                        fetched.categoryName(),
                         fetched.listCount(),
                         fetched.lastPrice()))
                 .toList();
@@ -104,13 +104,13 @@ public class StockInfoCollector {
 
             String stockName = Strings.trimToEmpty(item.name());
             String marketCode = item.marketCode();
-            String upName = Strings.trimToEmpty(item.upName());
+            String categoryName = Strings.trimToEmpty(item.upName());
             Long listCount = KiwoomValueParser.parseLong(item.listCount());
             BigDecimal lastPrice = KiwoomValueParser.parseBigDecimal(item.lastPrice());
 
             fetchedStocks.put(
                     stockCode,
-                    new FetchStockInfo(stockCode, stockName, market, marketCode, upName, listCount, lastPrice));
+                    new FetchStockInfo(stockCode, stockName, market, marketCode, categoryName, listCount, lastPrice));
         }
 
         log.debug("종목 정보 시장별 동기화 완료: market={}", market);
@@ -122,7 +122,7 @@ public class StockInfoCollector {
             String stockName,
             Market market,
             String marketCode,
-            String upName,
+            String categoryName,
             Long listCount,
             BigDecimal lastPrice) {}
 

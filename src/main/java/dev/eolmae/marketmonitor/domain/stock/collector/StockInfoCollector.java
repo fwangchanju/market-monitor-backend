@@ -102,15 +102,16 @@ public class StockInfoCollector {
                 continue;
             }
 
-            String stockName = Strings.trimToEmpty(item.name());
-            String marketCode = item.marketCode();
-            String categoryName = Strings.trimToEmpty(item.upName());
-            Long listCount = KiwoomValueParser.parseLong(item.listCount());
-            BigDecimal lastPrice = KiwoomValueParser.parseBigDecimal(item.lastPrice());
-
             fetchedStocks.put(
                     stockCode,
-                    new FetchStockInfo(stockCode, stockName, market, marketCode, categoryName, listCount, lastPrice));
+                    new FetchStockInfo(
+                            stockCode,
+                            Strings.trimToEmpty(item.name()),
+                            market,
+                            item.marketCode(),
+                            Strings.trimToEmpty(item.upName()),
+                            KiwoomValueParser.parseLong(item.listCount()),
+                            KiwoomValueParser.parseBigDecimal(item.lastPrice())));
         }
 
         log.debug("종목 정보 시장별 동기화 완료: market={}", market);

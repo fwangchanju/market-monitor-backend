@@ -7,6 +7,7 @@ import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.enums.RankingType;
 import dev.eolmae.marketmonitor.domain.view.service.MarketQueryService;
 import dev.eolmae.marketmonitor.domain.stock.enums.AmtQtyType;
+import dev.eolmae.marketmonitor.domain.stock.service.StockCategoryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
@@ -20,6 +21,7 @@ import java.util.List;
 public class MarketController {
 
     private final MarketQueryService marketQueryService;
+    private final StockCategoryService stockCategoryService;
 
     // ── 메인 대시보드 ─────────────────────────────────────────────────────
 
@@ -105,5 +107,10 @@ public class MarketController {
     @GetMapping("/stocks/{stockCode}/short-selling")
     public StockHistoryResponse<ShortSellingHistoryItem> getShortSellingHistory(@PathVariable String stockCode) {
         return marketQueryService.getShortSellingHistory(stockCode);
+    }
+
+    @PatchMapping("/stocks/{stockCode}/category")
+    public void reassignCategory(@PathVariable String stockCode, @RequestBody StockCategoryRequest request) {
+        stockCategoryService.reassign(stockCode, request.categoryName());
     }
 }

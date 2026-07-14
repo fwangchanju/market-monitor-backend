@@ -37,6 +37,11 @@ public class MarketMapExcludedStock {
         return entity;
     }
 
+    public void activate() {
+        this.isActive = true;
+        this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
+    }
+
     public void deactivate() {
         this.isActive = false;
         this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());

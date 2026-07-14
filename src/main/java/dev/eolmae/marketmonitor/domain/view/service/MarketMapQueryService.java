@@ -38,9 +38,11 @@ public class MarketMapQueryService {
 
     /** 마켓맵: 카테고리별로 묶은 종목 시가총액(박스 크기용)/등락률(색상용) 반환 */
     public SnapshotResponse<MarketMapCategoryGroup> getMarketMap(Market market, boolean isExclude) {
-        LocalDateTime snapshotTime =
-                sectorPriceSnapshotRepository.findMaxSnapshotTimeByMarketType(market).orElse(null);
-        if (snapshotTime == null) {
+        LocalDateTime latestSnapshotTime = sectorPriceSnapshotRepository
+                .findFirstByMarketTypeOrderBySnapshotTimeDesc(market)
+                .map(SectorPriceSnapshot::getSnapshotTime)
+                .orElse(null);
+        if (latestSnapshotTime == null) {
             return SnapshotResponse.empty();
         }
 
@@ -48,7 +50,7 @@ public class MarketMapQueryService {
         Map<String, StockCategory> categoryMap = stockCategoryRepository.findAll().stream()
                 .collect(Collectors.toMap(StockCategory::getStockCode, Function.identity()));
         Map<String, SectorPriceSnapshot> priceMap = sectorPriceSnapshotRepository
-                .findByMarketTypeAndSnapshotTime(market, snapshotTime)
+                .findByMarketTypeAndSnapshotTime(market, latestSnapshotTime)
                 .stream()
                 .collect(Collectors.toMap(SectorPriceSnapshot::getStockCode, Function.identity()));
 
@@ -61,7 +63,7 @@ public class MarketMapQueryService {
                 .map(entry -> new MarketMapCategoryGroup(entry.getKey(), entry.getValue()))
                 .toList();
 
-        return new SnapshotResponse<>(snapshotTime, groups);
+        return new SnapshotResponse<>(latestSnapshotTime, groups);
     }
 
     private List<StockInfo> filterCandidates(Market market, boolean isExclude) {

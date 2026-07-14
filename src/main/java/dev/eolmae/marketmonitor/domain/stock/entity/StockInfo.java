@@ -34,7 +34,7 @@ public class StockInfo {
     @Column(length = 50)
     private String categoryName;
 
-    @Column
+    @Column(nullable = false)
     private Long listCount;
 
     @Column(precision = 19, scale = 2)

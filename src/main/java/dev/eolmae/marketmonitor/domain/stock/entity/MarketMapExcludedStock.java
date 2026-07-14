@@ -10,15 +10,15 @@ import lombok.Getter;
 
 @Getter
 @Entity
-@Table(name = "stock_category")
-public class StockCategory {
+@Table(name = "market_map_excluded_stock")
+public class MarketMapExcludedStock {
 
     @Id
     @Column(length = 20)
     private String stockCode;
 
-    @Column(nullable = false, length = 50)
-    private String categoryName;
+    @Column(nullable = false)
+    private boolean isActive;
 
     @Column(nullable = false)
     private LocalDateTime createdAt;
@@ -26,19 +26,19 @@ public class StockCategory {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
-    protected StockCategory() {}
+    protected MarketMapExcludedStock() {}
 
-    public static StockCategory create(String stockCode, String categoryName) {
-        var entity = new StockCategory();
+    public static MarketMapExcludedStock create(String stockCode) {
+        var entity = new MarketMapExcludedStock();
         entity.stockCode = stockCode;
-        entity.categoryName = categoryName;
+        entity.isActive = true;
         entity.createdAt = LocalDateTime.now(Zone.KST.zoneId());
         entity.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
         return entity;
     }
 
-    public void update(String categoryName) {
-        this.categoryName = categoryName;
+    public void deactivate() {
+        this.isActive = false;
         this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
     }
 }

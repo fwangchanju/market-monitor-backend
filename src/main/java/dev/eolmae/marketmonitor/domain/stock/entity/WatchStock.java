@@ -39,6 +39,9 @@ public class WatchStock {
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
+    @Column(nullable = false)
+    private LocalDateTime updatedAt;
+
     protected WatchStock() {}
 
     private static WatchStock create(String stockCode, RegisterBy registerBy, Integer holdingRank) {
@@ -48,6 +51,7 @@ public class WatchStock {
         entity.registerBy = registerBy;
         entity.holdingRank = holdingRank;
         entity.createdAt = LocalDateTime.now(Zone.KST.zoneId());
+        entity.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
         return entity;
     }
 
@@ -61,6 +65,7 @@ public class WatchStock {
 
     public void updateHoldingRank(Integer holdingRank) {
         this.holdingRank = holdingRank;
+        this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
     }
 
     public boolean isTopHoldingRank() {

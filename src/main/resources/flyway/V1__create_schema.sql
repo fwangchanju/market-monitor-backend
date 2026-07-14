@@ -4,7 +4,7 @@ CREATE TABLE stock_info (
     market_type VARCHAR(20) NOT NULL,
     market_code VARCHAR(5),
     category_name VARCHAR(50),
-    list_count BIGINT,
+    list_count BIGINT NOT NULL,
     last_price DECIMAL(19,2),
     active BOOLEAN NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -15,9 +15,19 @@ CREATE TABLE stock_info (
 CREATE TABLE stock_category (
     stock_code VARCHAR(20) NOT NULL,
     category_name VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_stock_category PRIMARY KEY (stock_code),
     CONSTRAINT fk_stock_category_stock FOREIGN KEY (stock_code) REFERENCES stock_info (stock_code)
+);
+
+CREATE TABLE market_map_excluded_stock (
+    stock_code VARCHAR(20) NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_market_map_excluded_stock PRIMARY KEY (stock_code),
+    CONSTRAINT fk_market_map_excluded_stock_stock FOREIGN KEY (stock_code) REFERENCES stock_info (stock_code)
 );
 
 CREATE TABLE watch_stock (
@@ -27,6 +37,7 @@ CREATE TABLE watch_stock (
     register_by VARCHAR(20) NOT NULL,
     holding_rank INT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_watch_stock PRIMARY KEY (id),
     CONSTRAINT uk_watch_stock_stock UNIQUE (stock_code),
     CONSTRAINT fk_watch_stock_stock FOREIGN KEY (stock_code) REFERENCES stock_info (stock_code)

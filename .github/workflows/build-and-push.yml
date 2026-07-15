@@ -3,7 +3,7 @@ name: Build & Push Docker Images
 on:
   push:
     branches:
-      - auto-build
+      - 'release/**'
   workflow_dispatch:
     inputs:
       target:
@@ -13,7 +13,7 @@ on:
         type: choice
         options:
           - app
-          - front
+          - nginx
           - renderer
           - all
 
@@ -49,12 +49,12 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push front image
-        if: github.event_name == 'push' || inputs.target == 'front' || inputs.target == 'all'
+      - name: Build and push nginx image
+        if: github.event_name == 'push' || inputs.target == 'nginx' || inputs.target == 'all'
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: containers/front/Dockerfile
+          file: containers/nginx/Dockerfile
           push: true
           tags: ghcr.io/fwangchanju/market-monitor-nginx:latest
           cache-from: type=gha
@@ -81,7 +81,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           envs: CR_PAT
           script: |
-            DEPLOY_DIR=~/app/private-stock-monitoring/deploy
+            DEPLOY_DIR=~/app/market-monitor-backend/deploy
             TARGET="${{ inputs.target }}"
             EVENT="${{ github.event_name }}"
 
@@ -89,8 +89,8 @@ jobs:
               bash "$DEPLOY_DIR/deploy.sh"
             elif [ "$TARGET" = "app" ]; then
               bash "$DEPLOY_DIR/deploy-app.sh"
-            elif [ "$TARGET" = "front" ]; then
-              bash "$DEPLOY_DIR/deploy-front.sh"
+            elif [ "$TARGET" = "nginx" ]; then
+              bash "$DEPLOY_DIR/deploy-nginx.sh"
             elif [ "$TARGET" = "renderer" ]; then
               bash "$DEPLOY_DIR/deploy-renderer.sh"
             fi

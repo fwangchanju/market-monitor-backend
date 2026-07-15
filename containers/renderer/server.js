@@ -54,5 +54,5 @@ app.post('/capture', async (req, res) => {
 })
 
 app.listen(PORT, () => {
-  console.log(`psms-renderer 시작 — port ${PORT}, dashboard: ${DASHBOARD_URL}`)
+  console.log(`market-monitor-renderer 시작 — port ${PORT}, dashboard: ${DASHBOARD_URL}`)
 })

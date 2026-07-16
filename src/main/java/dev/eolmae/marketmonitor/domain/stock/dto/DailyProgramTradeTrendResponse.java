@@ -2,6 +2,7 @@ package dev.eolmae.marketmonitor.domain.stock.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.ArrayList;
 import java.util.List;
 
 // ka90013: 종목일별프로그램매매추이요청
@@ -29,4 +30,11 @@ public record DailyProgramTradeTrendResponse(
             @JsonProperty("prm_netprps_qty") String prmNetprpsQty,
             @JsonProperty("prm_netprps_qty_irds") String prmNetprpsQtyIrds,
             @JsonProperty("stex_tp") String stexTp) {}
+
+    @Override
+    public DailyProgramTradeTrendResponse mergeNext(KiwoomResponse next) {
+        List<DailyTick> mergedTicks = new ArrayList<>(ticks);
+        mergedTicks.addAll(((DailyProgramTradeTrendResponse) next).ticks);
+        return new DailyProgramTradeTrendResponse(returnCode, returnMsg, mergedTicks);
+    }
 }

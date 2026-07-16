@@ -2,6 +2,7 @@ package dev.eolmae.marketmonitor.domain.stock.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.ArrayList;
 import java.util.List;
 
 // ka90003: 프로그램순매수상위50요청
@@ -25,4 +26,11 @@ public record ProgramNetBuyRankingResponse(
             @JsonProperty("prm_sell_amt") String prmSellAmt,
             @JsonProperty("prm_buy_amt") String prmBuyAmt,
             @JsonProperty("prm_netprps_amt") String prmNetprpsAmt) {}
+
+    @Override
+    public ProgramNetBuyRankingResponse mergeNext(KiwoomResponse next) {
+        List<RankingItem> mergedItems = new ArrayList<>(items);
+        mergedItems.addAll(((ProgramNetBuyRankingResponse) next).items);
+        return new ProgramNetBuyRankingResponse(returnCode, returnMsg, mergedItems);
+    }
 }

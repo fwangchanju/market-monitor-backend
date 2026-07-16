@@ -2,6 +2,7 @@ package dev.eolmae.marketmonitor.domain.stock.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.ArrayList;
 import java.util.List;
 
 // ka10014: 공매도추이요청
@@ -25,4 +26,11 @@ public record ShortSellingTrendResponse(
             @JsonProperty("trde_wght") String trdeWght,
             @JsonProperty("shrts_trde_prica") String shrtsTrdePrica,
             @JsonProperty("shrts_avg_pric") String shrtsAvgPric) {}
+
+    @Override
+    public ShortSellingTrendResponse mergeNext(KiwoomResponse next) {
+        List<ShortTick> mergedTicks = new ArrayList<>(ticks);
+        mergedTicks.addAll(((ShortSellingTrendResponse) next).ticks);
+        return new ShortSellingTrendResponse(returnCode, returnMsg, mergedTicks);
+    }
 }

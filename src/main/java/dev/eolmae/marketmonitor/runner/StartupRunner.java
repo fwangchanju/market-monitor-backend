@@ -1,9 +1,9 @@
 package dev.eolmae.marketmonitor.runner;
 
 import dev.eolmae.marketmonitor.domain.stock.collector.HoldingsSyncService;
-import dev.eolmae.marketmonitor.domain.stock.collector.WatchStockBackfillService;
 import dev.eolmae.marketmonitor.domain.stock.entity.WatchStock;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
+import dev.eolmae.marketmonitor.domain.stock.service.WatchStockBackfillService;
 import dev.eolmae.marketmonitor.domain.stock.service.WatchStockCacheService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;

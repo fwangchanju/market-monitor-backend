@@ -55,12 +55,12 @@ public class ProgramTradeDailyCollector {
 
     private void collectForStock(WatchStock watchStock) {
         String stockCode = watchStock.getStockCode();
-        String stexTypeCode = StexType.KRX.code();
-        var krxRequest = new DailyProgramTradeTrendRequest(stockCode, stexTypeCode);
+        String stexTp = StexType.KRX.code();
+        var krxRequest = new DailyProgramTradeTrendRequest(stockCode, stexTp);
         DailyProgramTradeTrendResponse krxResponse =
                 kiwoomApiClient.post(krxRequest, DailyProgramTradeTrendResponse.class);
 
-        var nxtRequest = new DailyProgramTradeTrendRequest(stockCode + "_NX", stexTypeCode);
+        var nxtRequest = new DailyProgramTradeTrendRequest(stockCode + "_NX", stexTp);
         DailyProgramTradeTrendResponse nxtResponse =
                 kiwoomApiClient.post(nxtRequest, DailyProgramTradeTrendResponse.class);
 

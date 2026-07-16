@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-NGINX_COMPOSE_FILE="$HOME/infra/nginx/docker-compose.yml"
+NGINX_COMPOSE_FILE="$(dirname "$0")/nginx-docker-compose.yml"
 
 echo "=== [nginx] Logging in to GHCR ==="
 echo "$CR_PAT" | docker login ghcr.io -u fwangchanju --password-stdin

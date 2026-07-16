@@ -39,7 +39,7 @@ services:
     container_name: market-monitor-renderer
     restart: always
     environment:
-      - DASHBOARD_URL=http://nginx
+      - DASHBOARD_URL=http://market-monitor-nginx
       - DASHBOARD_USER=${DASHBOARD_USER}
       - DASHBOARD_PASS=${DASHBOARD_PASS}
     expose:

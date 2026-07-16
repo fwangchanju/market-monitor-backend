@@ -2,7 +2,7 @@
 set -e
 
 COMPOSE_FILE="$(dirname "$0")/docker-compose.yml"
-ENV_FILE="$HOME/env/market-monitor-backend.env"
+ENV_FILE="$HOME/env/market-monitor.env"
 
 echo "=== [renderer] Logging in to GHCR ==="
 echo "$CR_PAT" | docker login ghcr.io -u fwangchanju --password-stdin

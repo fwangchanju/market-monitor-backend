@@ -75,6 +75,25 @@ public class SectorInvestorNetBuyCollector {
         log.debug("투자자별매매종합 수집 완료: market={}", market);
     }
 
+    private static BigDecimal resolveNetBuy(
+            InvestorType investor, SectorInvestorNetBuyResponse.IndsNetprps item) {
+        return KiwoomValueParser.parseBigDecimal(switch (investor) {
+            case PERSONAL -> item.indNetprps();
+            case FOREIGNER -> item.frgnrNetprps();
+            case INSTITUTION -> item.orgnNetprps();
+            case FINANCIAL_INVESTMENT -> item.scNetprps();
+            case TRUST -> item.invtrtNetprps();
+            case PENSION_FUND -> item.endwNetprps();
+            case PRIVATE_FUND -> item.samoFundNetprps();
+            case INSURANCE -> item.insrncNetprps();
+            case BANK -> item.bankNetprps();
+            case OTHER_CORP -> item.etcCorpNetprps();
+            case GOVERNMENT -> item.natnNetprps();
+            case OTHER_FINANCE -> item.jnsinkmNetprps();
+            case FOREIGN_COMPANY -> item.nativeTrmtFrgnrNetprps();
+        });
+    }
+
     private void saveSnapshot(
             Market market,
             InvestorType investor,
@@ -102,25 +121,6 @@ public class SectorInvestorNetBuyCollector {
                 BigDecimal.ZERO,
                 netBuyAmount,
                 now);
-    }
-
-    private static BigDecimal resolveNetBuy(
-            InvestorType investor, SectorInvestorNetBuyResponse.IndsNetprps item) {
-        return KiwoomValueParser.parseBigDecimal(switch (investor) {
-            case PERSONAL -> item.indNetprps();
-            case FOREIGNER -> item.frgnrNetprps();
-            case INSTITUTION -> item.orgnNetprps();
-            case FINANCIAL_INVESTMENT -> item.scNetprps();
-            case TRUST -> item.invtrtNetprps();
-            case PENSION_FUND -> item.endwNetprps();
-            case PRIVATE_FUND -> item.samoFundNetprps();
-            case INSURANCE -> item.insrncNetprps();
-            case BANK -> item.bankNetprps();
-            case OTHER_CORP -> item.etcCorpNetprps();
-            case GOVERNMENT -> item.natnNetprps();
-            case OTHER_FINANCE -> item.jnsinkmNetprps();
-            case FOREIGN_COMPANY -> item.nativeTrmtFrgnrNetprps();
-        });
     }
 
     private enum MrktTp {

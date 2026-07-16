@@ -95,6 +95,24 @@ public class IndexContributionRankingCollector {
         return curPrc.subtract(predPre);
     }
 
+    private static MarketOverviewSnapshot toMarketOverviewEntity(
+            Market market, LocalDateTime snapshotTime, SectorCurrentPriceResponse response) {
+        return MarketOverviewSnapshot.create(
+                market,
+                snapshotTime,
+                KiwoomValueParser.parseBigDecimal(response.curPrc()).abs(),
+                KiwoomValueParser.parseBigDecimal(response.predPre()),
+                KiwoomValueParser.parseBigDecimal(response.fluRt()),
+                KiwoomValueParser.parseBigDecimal(response.trdePrica()),
+                Strings.trimToEmpty(response.mrktStatClsCode()),
+                KiwoomValueParser.parseInt(response.rising()),
+                KiwoomValueParser.parseInt(response.fall()),
+                KiwoomValueParser.parseInt(response.stdns()),
+                KiwoomValueParser.parseInt(response.upl()),
+                KiwoomValueParser.parseInt(response.lst()),
+                LocalDateTime.now(Zone.KST.zoneId()));
+    }
+
     private List<SectorPriceListResponse.StockItem> collectSectorPrice(
             Market market, String mrktTp, String indsCd, LocalDateTime snapshotTime) {
 
@@ -113,6 +131,18 @@ public class IndexContributionRankingCollector {
         }
 
         return response.items();
+    }
+
+    private static SectorPriceSnapshot toSectorPriceEntity(
+            Market market, LocalDateTime snapshotTime, SectorPriceListResponse.StockItem item) {
+        return SectorPriceSnapshot.create(
+                market,
+                snapshotTime,
+                StockCode.removeSuffix(item.stkCd()),
+                Strings.trimToEmpty(item.stkNm()),
+                KiwoomValueParser.parseBigDecimal(item.curPrc()).abs(),
+                KiwoomValueParser.parseBigDecimal(item.predPre()),
+                KiwoomValueParser.parseBigDecimal(item.fluRt()));
     }
 
     private void computeAndSaveRanking(
@@ -180,36 +210,6 @@ public class IndexContributionRankingCollector {
         log.info("지수기여도랭킹 수집 완료: market={}, 저장건수={}", market, scored.size());
     }
 
-    private static MarketOverviewSnapshot toMarketOverviewEntity(
-            Market market, LocalDateTime snapshotTime, SectorCurrentPriceResponse response) {
-        return MarketOverviewSnapshot.create(
-                market,
-                snapshotTime,
-                KiwoomValueParser.parseBigDecimal(response.curPrc()).abs(),
-                KiwoomValueParser.parseBigDecimal(response.predPre()),
-                KiwoomValueParser.parseBigDecimal(response.fluRt()),
-                KiwoomValueParser.parseBigDecimal(response.trdePrica()),
-                Strings.trimToEmpty(response.mrktStatClsCode()),
-                KiwoomValueParser.parseInt(response.rising()),
-                KiwoomValueParser.parseInt(response.fall()),
-                KiwoomValueParser.parseInt(response.stdns()),
-                KiwoomValueParser.parseInt(response.upl()),
-                KiwoomValueParser.parseInt(response.lst()),
-                LocalDateTime.now(Zone.KST.zoneId()));
-    }
-
-    private static SectorPriceSnapshot toSectorPriceEntity(
-            Market market, LocalDateTime snapshotTime, SectorPriceListResponse.StockItem item) {
-        return SectorPriceSnapshot.create(
-                market,
-                snapshotTime,
-                StockCode.removeSuffix(item.stkCd()),
-                Strings.trimToEmpty(item.stkNm()),
-                KiwoomValueParser.parseBigDecimal(item.curPrc()).abs(),
-                KiwoomValueParser.parseBigDecimal(item.predPre()),
-                KiwoomValueParser.parseBigDecimal(item.fluRt()));
-    }
-
     private static IndexContributionRankingSnapshot toRankingEntity(
             Market market, LocalDateTime snapshotTime, int rank, ScoredStock stock) {
         return IndexContributionRankingSnapshot.create(
@@ -222,6 +222,13 @@ public class IndexContributionRankingCollector {
                 stock.contribution().setScale(4, RoundingMode.HALF_UP),
                 stock.changeRate().setScale(4, RoundingMode.HALF_UP));
     }
+
+    private record StockCandidate(
+            String stockCode, String stockName, String marketCode,
+            BigDecimal curPrice, BigDecimal prevPrice, BigDecimal listCount) {}
+
+    private record ScoredStock(
+            String stockCode, String stockName, String marketCode, BigDecimal contribution, BigDecimal changeRate) {}
 
     private enum MrktTp {
         KOSPI("0"),
@@ -256,11 +263,4 @@ public class IndexContributionRankingCollector {
             };
         }
     }
-
-    private record StockCandidate(
-            String stockCode, String stockName, String marketCode,
-            BigDecimal curPrice, BigDecimal prevPrice, BigDecimal listCount) {}
-
-    private record ScoredStock(
-            String stockCode, String stockName, String marketCode, BigDecimal contribution, BigDecimal changeRate) {}
 }

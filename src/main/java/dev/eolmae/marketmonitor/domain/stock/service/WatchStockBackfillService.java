@@ -11,6 +11,8 @@ import dev.eolmae.marketmonitor.domain.stock.repository.ShortSellingDailyHistory
 import dev.eolmae.marketmonitor.domain.stock.util.CollectionChecker;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.temporal.ChronoUnit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -22,6 +24,9 @@ import org.springframework.stereotype.Service;
 public class WatchStockBackfillService {
 
     private static final int INTRADAY_BACKFILL_TRADING_DAYS = 3;
+    private static final LocalTime SHORT_SELLING_SCHEDULE_TIME = LocalTime.of(20, 30);
+    private static final LocalTime PROGRAM_TRADING_DAILY_SCHEDULE_TIME = LocalTime.of(21, 0);
+    private static final LocalTime MARKET_CLOSE = LocalTime.of(20, 0);
 
     private final ShortSellingTrendCollector shortSellingTrendCollector;
     private final ProgramTradeIntradayCollector programTradeIntradayCollector;
@@ -42,42 +47,37 @@ public class WatchStockBackfillService {
         log.info("관심종목 백필 완료: stockCode={}", stockCode);
     }
 
-    /** from이 주말이면 직전 거래일인(휴무는 고려하지 않고) 금요일로 반환. */
-    private LocalDate previousTradingDay(LocalDate from) {
-        return switch (from.getDayOfWeek()) {
-            case MONDAY -> from.minusDays(3);
-            case SUNDAY -> from.minusDays(2);
-            default -> from.minusDays(1);
-        };
+    /** scheduleTime 기준 오늘 수집이 이미 끝났으면 오늘을, 아니면 직전 거래일을 반환. */
+    private LocalDate targetTradeDate(LocalTime scheduleTime) {
+        LocalDate today = LocalDate.now(Zone.KST.zoneId());
+        LocalDateTime now = LocalDateTime.now(Zone.KST.zoneId());
+        boolean todayAlreadyCollected =
+                CollectionChecker.isWeekday(today) && now.isAfter(LocalDateTime.of(today, scheduleTime));
+        return todayAlreadyCollected ? today : CollectionChecker.previousTradingDay(today);
     }
 
-    // 공매도: 직전 거래일 데이터 없으면 60일 백필
+    // 공매도 (20:30 스케줄): 대상일 데이터 없으면 60일 백필
     private void backfillShortSelling(WatchStock watchStock) {
         String stockCode = watchStock.getStockCode();
-        LocalDate previousTradingDay = previousTradingDay(LocalDate.now(Zone.KST.zoneId()));
-        if (shortSellingRepository.existsByStockCodeAndTradeDate(stockCode, previousTradingDay)) {
-            log.debug(
-                    "공매도 백필 스킵 (직전 거래일 데이터 있음): stockCode={}, previousTradingDay={}",
-                    stockCode,
-                    previousTradingDay);
+        LocalDate targetTradeDate = targetTradeDate(SHORT_SELLING_SCHEDULE_TIME);
+        if (shortSellingRepository.existsByStockCodeAndTradeDate(stockCode, targetTradeDate)) {
+            log.debug("공매도 백필 스킵 (대상일 데이터 있음): stockCode={}, targetTradeDate={}", stockCode, targetTradeDate);
             return;
         }
         try {
-            shortSellingTrendCollector.backfill(watchStock);
+            shortSellingTrendCollector.backfill(watchStock, targetTradeDate);
         } catch (Exception e) {
             log.error("공매도 백필 실패: stockCode={}", stockCode, e);
         }
     }
 
-    // 일별: 직전 거래일 데이터 없으면 60일 백필
+    // 일별 (21:00 스케줄): 대상일 데이터 없으면 60일 백필
     private void backfillProgramTradingDaily(WatchStock watchStock) {
         String stockCode = watchStock.getStockCode();
-        LocalDate previousTradingDay = previousTradingDay(LocalDate.now(Zone.KST.zoneId()));
-        if (programTradingDailyRepository.existsByStockCodeAndTradeDate(stockCode, previousTradingDay)) {
+        LocalDate targetTradeDate = targetTradeDate(PROGRAM_TRADING_DAILY_SCHEDULE_TIME);
+        if (programTradingDailyRepository.existsByStockCodeAndTradeDate(stockCode, targetTradeDate)) {
             log.debug(
-                    "프로그램매매 일별 백필 스킵 (직전 거래일 데이터 있음): stockCode={}, previousTradingDay={}",
-                    stockCode,
-                    previousTradingDay);
+                    "프로그램매매 일별 백필 스킵 (대상일 데이터 있음): stockCode={}, targetTradeDate={}", stockCode, targetTradeDate);
             return;
         }
         try {
@@ -102,7 +102,7 @@ public class WatchStockBackfillService {
 
     private void backfillProgramTradingIntradayForDate(WatchStock watchStock, LocalDate date) {
         String stockCode = watchStock.getStockCode();
-        LocalDateTime latestSnapshotHour = CollectionChecker.latestSnapshotHour(date);
+        LocalDateTime latestSnapshotHour = latestSnapshotHour(date);
         if (programTradingHistoryRepository.existsByStockCodeAndSnapshotTime(stockCode, latestSnapshotHour)) {
             log.debug("프로그램매매 장중 백필 스킵 (해당일 최신 스냅샷 있음): stockCode={}, date={}", stockCode, date);
             return;
@@ -112,5 +112,16 @@ public class WatchStockBackfillService {
         } catch (Exception e) {
             log.error("프로그램매매 장중 백필 실패: stockCode={}, date={}", stockCode, date, e);
         }
+    }
+
+    /** date가 오늘보다 과거면 무조건 마감(20시) 시각, 오늘이면 현재 정각과 마감 중 이른 쪽을 반환. */
+    private LocalDateTime latestSnapshotHour(LocalDate date) {
+        LocalDateTime close = LocalDateTime.of(date, MARKET_CLOSE);
+        LocalDateTime now = LocalDateTime.now(Zone.KST.zoneId());
+        if (date.isBefore(now.toLocalDate())) {
+            return close;
+        }
+        LocalDateTime currentHour = now.truncatedTo(ChronoUnit.HOURS);
+        return currentHour.isBefore(close) ? currentHour : close;
     }
 }

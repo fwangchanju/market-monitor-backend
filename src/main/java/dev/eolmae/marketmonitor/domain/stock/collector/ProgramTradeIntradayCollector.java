@@ -14,9 +14,12 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayDeque;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +34,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 @RequiredArgsConstructor
 public class ProgramTradeIntradayCollector {
+
+    private static final DateTimeFormatter TIME_FORMATTER = DateTimePattern.TIME.formatter();
 
     private final KiwoomApiClient kiwoomApiClient;
     private final ProgramTradingHistoryRepository historyRepository;
@@ -49,6 +54,50 @@ public class ProgramTradeIntradayCollector {
         }
     }
 
+    /**
+     * 백필용 — ka90008 tm 필드로 당일 과거 정각 스냅샷 역산 적재. WatchStockBackfillService에서 가드 통과 후 호출.
+     * 09:00 스냅샷 = tm < 090000 인 KRX+NXT 최신 틱 합산.
+     * 범위: 08:00 ~ snapshotTime(현재 정각).
+     */
+    @Transactional
+    public void backfill(WatchStock watchStock, LocalDateTime snapshotTime) {
+        String stockCode = watchStock.getStockCode();
+        String dateStr = snapshotTime.format(DateTimePattern.DATE.formatter());
+
+        Queue<HourlyProgramTradeTrendResponse.TradeTick> krxQueue = sortedQueue(fetchProgramTradeTicks(stockCode, dateStr));
+        Queue<HourlyProgramTradeTrendResponse.TradeTick> nxtQueue =
+                sortedQueue(fetchProgramTradeTicks(stockCode + "_NX", dateStr));
+
+        LocalDate snapshotDate = snapshotTime.toLocalDate();
+        LocalDateTime snapshotHour = snapshotTime.truncatedTo(ChronoUnit.HOURS);
+
+        Set<LocalDateTime> existingSnapshots =
+                Set.copyOf(historyRepository.findSnapshotTimesByStockCodeAndDate(stockCode, snapshotDate));
+
+        HourlyProgramTradeTrendResponse.TradeTick krxTick = null;
+        HourlyProgramTradeTrendResponse.TradeTick nxtTick = null;
+
+        LocalDateTime scheduleStart = LocalDateTime.of(snapshotDate, LocalTime.of(8, 0));
+        while (!scheduleStart.isAfter(snapshotHour)) {
+            LocalTime boundary = scheduleStart.toLocalTime();
+
+            while (hasEarlierTick(krxQueue, boundary)) {
+                krxTick = krxQueue.poll();
+            }
+            while (hasEarlierTick(nxtQueue, boundary)) {
+                nxtTick = nxtQueue.poll();
+            }
+
+            if (!existingSnapshots.contains(scheduleStart)) {
+                TradeAmount amounts = combine(krxTick, nxtTick);
+                if (amounts.hasAmount()) {
+                    historyRepository.save(toEntity(stockCode, scheduleStart, amounts));
+                }
+            }
+            scheduleStart = scheduleStart.plusHours(1);
+        }
+    }
+
     private void collectForStock(WatchStock watchStock, LocalDateTime snapshotTime) {
         String stockCode = watchStock.getStockCode();
         if (historyRepository.existsByStockCodeAndSnapshotTime(stockCode, snapshotTime)) {
@@ -58,74 +107,22 @@ public class ProgramTradeIntradayCollector {
 
         String dateStr = snapshotTime.format(DateTimePattern.DATE.formatter());
 
-        List<HourlyProgramTradeTrendResponse.TradeTick> krxTicks = fetchProgramTradeTicks(stockCode, dateStr);
-        List<HourlyProgramTradeTrendResponse.TradeTick> nxtTicks = fetchProgramTradeTicks(stockCode + "_NX", dateStr);
+        HourlyProgramTradeTrendResponse.TradeTick krxTick = fetchLatestTick(stockCode, dateStr);
+        HourlyProgramTradeTrendResponse.TradeTick nxtTick = fetchLatestTick(stockCode + "_NX", dateStr);
 
-        if (krxTicks.isEmpty() && nxtTicks.isEmpty()) {
+        if (krxTick == null && nxtTick == null) {
             log.debug("프로그램매매 장중이력 없음: stockCode={}", stockCode);
             return;
         }
 
-        TradeAmount amounts = TradeAmount.zero();
-        amounts = addIfPresent(amounts, krxTicks);
-        amounts = addIfPresent(amounts, nxtTicks);
-        historyRepository.save(toEntity(stockCode, snapshotTime, amounts));
+        historyRepository.save(toEntity(stockCode, snapshotTime, combine(krxTick, nxtTick)));
 
         log.debug("프로그램매매 장중이력 수집 완료: stockCode={}", stockCode);
     }
 
-    /**
-     * 백필용 — ka90008 tm 필드로 당일 과거 정각 스냅샷 역산 적재. WatchStockBackfillService에서 가드 통과 후 호출.
-     * 09:00 스냅샷 = tm < 090000 인 KRX+NXT 최신 틱 합산.
-     * 범위: 08:00 ~ snapshotTime(현재 정각).
-     */
-    @Transactional
-    public void backfill(WatchStock watchStock, LocalDateTime snapshotTime) {
-        String stockCode = watchStock.getStockCode();
-        var timeFormatter = DateTimePattern.TIME.formatter();
-        String dateStr = snapshotTime.format(DateTimePattern.DATE.formatter());
-
-        List<HourlyProgramTradeTrendResponse.TradeTick> krxTicks = fetchProgramTradeTicks(stockCode, dateStr);
-        List<HourlyProgramTradeTrendResponse.TradeTick> nxtTicks = fetchProgramTradeTicks(stockCode + "_NX", dateStr);
-
-        LocalDate snapshotDate = snapshotTime.toLocalDate();
-        LocalDateTime snapshotHour = snapshotTime.truncatedTo(ChronoUnit.HOURS);
-
-        Set<String> existingSnapshots = historyRepository
-                .findSnapshotTimesByStockCodeAndDate(stockCode, snapshotDate).stream()
-                .map(t -> t.format(timeFormatter))
-                .collect(Collectors.toSet());
-
-        LocalDateTime scheduleStart = LocalDateTime.of(snapshotDate, LocalTime.of(8, 0));
-        while (!scheduleStart.isAfter(snapshotHour)) {
-            LocalTime boundary = scheduleStart.toLocalTime();
-            if (!existingSnapshots.contains(scheduleStart.format(timeFormatter))) {
-
-                HourlyProgramTradeTrendResponse.TradeTick krxLatest = krxTicks.stream()
-                        .filter(t -> t.tm() != null
-                                && LocalTime.parse(t.tm(), timeFormatter).isBefore(boundary))
-                        .max(Comparator.comparing(t -> LocalTime.parse(t.tm(), timeFormatter)))
-                        .orElse(null);
-
-                HourlyProgramTradeTrendResponse.TradeTick nxtLatest = nxtTicks.stream()
-                        .filter(t -> t.tm() != null
-                                && LocalTime.parse(t.tm(), timeFormatter).isBefore(boundary))
-                        .max(Comparator.comparing(t -> LocalTime.parse(t.tm(), timeFormatter)))
-                        .orElse(null);
-
-                TradeAmount amounts = TradeAmount.zero();
-                amounts = addIfPresent(amounts, krxLatest);
-                amounts = addIfPresent(amounts, nxtLatest);
-                if (amounts.hasAmount()) {
-                    historyRepository.save(toEntity(stockCode, scheduleStart, amounts));
-                }
-            }
-            scheduleStart = scheduleStart.plusHours(1);
-        }
-    }
-
-    private static ProgramTradingHistory toEntity(String stockCode, LocalDateTime snapshotTime, TradeAmount amounts) {
-        return ProgramTradingHistory.create(stockCode, snapshotTime, amounts.buy(), amounts.sell(), amounts.net());
+    private HourlyProgramTradeTrendResponse.TradeTick fetchLatestTick(String stockCode, String dateStr) {
+        List<HourlyProgramTradeTrendResponse.TradeTick> ticks = fetchProgramTradeTicks(stockCode, dateStr);
+        return ticks.isEmpty() ? null : ticks.getLast();
     }
 
     private List<HourlyProgramTradeTrendResponse.TradeTick> fetchProgramTradeTicks(String stockCode, String dateStr) {
@@ -134,18 +131,25 @@ public class ProgramTradeIntradayCollector {
         return response.ticks() == null || response.ticks().isEmpty() ? List.of() : response.ticks();
     }
 
-    private static TradeAmount addIfPresent(
-            TradeAmount tradeAmount, List<HourlyProgramTradeTrendResponse.TradeTick> ticks) {
-        return addIfPresent(tradeAmount, ticks == null || ticks.isEmpty() ? null : ticks.getLast());
+    private static TradeAmount combine(
+            HourlyProgramTradeTrendResponse.TradeTick krxTick, HourlyProgramTradeTrendResponse.TradeTick nxtTick) {
+        return TradeAmount.from(krxTick).add(TradeAmount.from(nxtTick));
     }
 
-    private static TradeAmount addIfPresent(
-            TradeAmount tradeAmount, HourlyProgramTradeTrendResponse.TradeTick tick) {
-        if (tick == null) {
-            return tradeAmount;
-        }
-        return tradeAmount.add(
-                KiwoomValueParser.parseBigDecimal(tick.prmBuyAmt()), KiwoomValueParser.parseBigDecimal(tick.prmSellAmt()));
+    private static ProgramTradingHistory toEntity(String stockCode, LocalDateTime snapshotTime, TradeAmount amounts) {
+        return ProgramTradingHistory.create(stockCode, snapshotTime, amounts.buy(), amounts.sell(), amounts.net());
+    }
+
+    private static Queue<HourlyProgramTradeTrendResponse.TradeTick> sortedQueue(
+            List<HourlyProgramTradeTrendResponse.TradeTick> ticks) {
+        return ticks.stream()
+                .filter(t -> t.tm() != null)
+                .sorted(Comparator.comparing(HourlyProgramTradeTrendResponse.TradeTick::tm))
+                .collect(Collectors.toCollection(ArrayDeque::new));
+    }
+
+    private static boolean hasEarlierTick(Queue<HourlyProgramTradeTrendResponse.TradeTick> queue, LocalTime boundary) {
+        return !queue.isEmpty() && LocalTime.parse(queue.peek().tm(), TIME_FORMATTER).isBefore(boundary);
     }
 
     private record TradeAmount(BigDecimal buy, BigDecimal sell) {
@@ -153,8 +157,17 @@ public class ProgramTradeIntradayCollector {
             return new TradeAmount(BigDecimal.ZERO, BigDecimal.ZERO);
         }
 
-        TradeAmount add(BigDecimal b, BigDecimal s) {
-            return new TradeAmount(buy.add(b), sell.add(s));
+        static TradeAmount from(HourlyProgramTradeTrendResponse.TradeTick tick) {
+            if (tick == null) {
+                return zero();
+            }
+            return new TradeAmount(
+                    KiwoomValueParser.parseBigDecimal(tick.prmBuyAmt()),
+                    KiwoomValueParser.parseBigDecimal(tick.prmSellAmt()));
+        }
+
+        TradeAmount add(TradeAmount other) {
+            return new TradeAmount(buy.add(other.buy), sell.add(other.sell));
         }
 
         BigDecimal net() {
@@ -162,7 +175,7 @@ public class ProgramTradeIntradayCollector {
         }
 
         boolean hasAmount() {
-            return !equals(zero());
+            return buy.signum() != 0 || sell.signum() != 0;
         }
     }
 }

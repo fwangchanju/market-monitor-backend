@@ -1,6 +1,5 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
-import dev.eolmae.marketmonitor.common.enums.Zone;
 import dev.eolmae.marketmonitor.common.util.DateParser;
 import dev.eolmae.marketmonitor.common.util.Strings;
 import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
@@ -25,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 // ka90013: 종목일별프로그램매매추이
 // 각 틱은 해당 날짜의 일별 합계 → KRX[date] + NXT[date] 합산 저장
 // 순매수금액은 prm_netprps_amt 미사용 (-- 파싱 오류) → buy - sell 직접 계산
+// 날짜 파라미터가 없는 API라 매번 서버가 주는 범위를 그대로 받아 이미 없는 날짜만 저장
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -34,36 +34,33 @@ public class ProgramTradeDailyCollector {
     private final ProgramTradingDailyHistoryRepository dailyHistoryRepository;
     private final WatchStockCacheService watchStockCacheService;
 
-    /** 스케줄러 호출 — 당일 일별 데이터만 적재 */
+    /** 스케줄러 호출 */
     @Transactional
-    public void collect(LocalDate tradeDate) {
+    public void collect() {
         List<WatchStock> watchStocks = watchStockCacheService.getCache();
         for (WatchStock watchStock : watchStocks) {
             try {
-                collectForStock(watchStock, tradeDate, true);
+                collectForStock(watchStock);
             } catch (Exception e) {
                 log.error("프로그램매매 일별이력 수집 실패: stockCode={}", watchStock.getStockCode(), e);
             }
         }
     }
 
+    /** 관심종목 신규 등록 시 백필 */
     @Transactional
     public void backfill(WatchStock watchStock) {
-        LocalDate today = LocalDate.now(Zone.KST.zoneId());
-        collectForStock(watchStock, today, false);
+        collectForStock(watchStock);
     }
 
-    private void collectForStock(WatchStock watchStock, LocalDate targetDate, boolean todayOnly) {
+    private void collectForStock(WatchStock watchStock) {
         String stockCode = watchStock.getStockCode();
-        if (todayOnly && dailyHistoryRepository.existsByStockCodeAndTradeDate(stockCode, targetDate)) {
-            log.debug("프로그램매매 일별이력 이미 존재, 스킵: stockCode={}, tradeDate={}", stockCode, targetDate);
-            return;
-        }
-        var krxRequest = new DailyProgramTradeTrendRequest(stockCode, StexType.KRX.code());
+        String stexTypeCode = StexType.KRX.code();
+        var krxRequest = new DailyProgramTradeTrendRequest(stockCode, stexTypeCode);
         DailyProgramTradeTrendResponse krxResponse =
                 kiwoomApiClient.post(krxRequest, DailyProgramTradeTrendResponse.class);
 
-        var nxtRequest = new DailyProgramTradeTrendRequest(stockCode + "_NX", StexType.KRX.code());
+        var nxtRequest = new DailyProgramTradeTrendRequest(stockCode + "_NX", stexTypeCode);
         DailyProgramTradeTrendResponse nxtResponse =
                 kiwoomApiClient.post(nxtRequest, DailyProgramTradeTrendResponse.class);
 
@@ -94,20 +91,13 @@ public class ProgramTradeDailyCollector {
             if (date == null) {
                 continue;
             }
-            if (todayOnly && !date.equals(targetDate)) {
-                continue;
-            }
-            if (!todayOnly && dailyHistoryRepository.existsByStockCodeAndTradeDate(stockCode, date)) {
+            if (dailyHistoryRepository.existsByStockCodeAndTradeDate(stockCode, date)) {
                 continue;
             }
             dailyHistoryRepository.save(toEntity(stockCode, date, entry.getValue()));
         }
 
-        log.debug("프로그램매매 일별이력 수집 완료: stockCode={}, todayOnly={}", stockCode, todayOnly);
-    }
-
-    private static ProgramTradingDailyHistory toEntity(String stockCode, LocalDate date, TradeAmount amt) {
-        return ProgramTradingDailyHistory.create(stockCode, date, amt.buy(), amt.sell(), amt.net());
+        log.debug("프로그램매매 일별이력 수집 완료: stockCode={}", stockCode);
     }
 
     private static void accumulateDaily(Map<String, TradeAmount> merged, String dt, String buyAmt, String sellAmt) {
@@ -117,11 +107,11 @@ public class ProgramTradeDailyCollector {
                 (a, b) -> a.add(b.buy(), b.sell()));
     }
 
-    private record TradeAmount(BigDecimal buy, BigDecimal sell) {
-        static TradeAmount zero() {
-            return new TradeAmount(BigDecimal.ZERO, BigDecimal.ZERO);
-        }
+    private static ProgramTradingDailyHistory toEntity(String stockCode, LocalDate date, TradeAmount amt) {
+        return ProgramTradingDailyHistory.create(stockCode, date, amt.buy(), amt.sell(), amt.net());
+    }
 
+    private record TradeAmount(BigDecimal buy, BigDecimal sell) {
         TradeAmount add(BigDecimal b, BigDecimal s) {
             return new TradeAmount(buy.add(b), sell.add(s));
         }

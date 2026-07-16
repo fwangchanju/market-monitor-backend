@@ -10,7 +10,6 @@ import dev.eolmae.marketmonitor.domain.stock.collector.ProgramTradeIntradayColle
 import dev.eolmae.marketmonitor.domain.stock.collector.SectorInvestorNetBuyCollector;
 import dev.eolmae.marketmonitor.domain.stock.collector.ShortSellingTrendCollector;
 import dev.eolmae.marketmonitor.domain.stock.collector.StockInfoCollector;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import lombok.RequiredArgsConstructor;
@@ -58,10 +57,9 @@ public class CollectionScheduler {
      */
     @Scheduled(cron = "0 0 21 * * MON-FRI", zone = KST_ZONE_ID)
     public void collectProgramTradingDaily() {
-        LocalDate tradeDate = LocalDate.now(Zone.KST.zoneId());
-        log.info("프로그램매매 일별 이력 수집 시작: tradeDate={}", tradeDate);
-        runSafely("프로그램매매일별", () -> programTradeDailyCollector.collect(tradeDate));
-        log.info("프로그램매매 일별 이력 수집 완료: tradeDate={}", tradeDate);
+        log.info("프로그램매매 일별 이력 수집 시작");
+        runSafely("프로그램매매일별", programTradeDailyCollector::collect);
+        log.info("프로그램매매 일별 이력 수집 완료");
     }
 
     /**

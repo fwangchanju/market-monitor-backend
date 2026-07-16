@@ -2,6 +2,7 @@ package dev.eolmae.marketmonitor.common.util;
 
 import java.math.BigDecimal;
 
+// 문자열을 BigDecimal/long/int로 파싱, 실패하거나 빈 값이면 0(류) 반환
 public final class NumberParser {
 
     private NumberParser() {}

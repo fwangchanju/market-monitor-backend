@@ -1,7 +1,6 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
 import dev.eolmae.marketmonitor.common.enums.DateTimePattern;
-import dev.eolmae.marketmonitor.common.enums.Zone;
 import dev.eolmae.marketmonitor.common.util.DateParser;
 import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
@@ -21,8 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 // ka10014: 공매도추이요청
 // ka10014는 장 종료 후 확정되는 일별 데이터만 제공 — 장중 실시간 없음
-// 스케줄러: 19:00 1회, strt_dt=today → short_selling_daily 적재
-// 백필: strt_dt=today-60 → short_selling_daily 전체 적재
+// 스케줄러: 20:30 1회, strt_dt=end_dt=당일 → short_selling_daily 적재
+// 백필: strt_dt=to-60, end_dt=to → short_selling_daily 전체 적재 (to는 WatchStockBackfillService가 결정)
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -49,11 +48,10 @@ public class ShortSellingTrendCollector {
         }
     }
 
-    /** 관심종목 신규 등록 시 백필 — today-60일부터 수집, 비동기 호출 */
+    /** 관심종목 신규 등록 시 백필 — to일 기준 to-60일부터 수집, 비동기 호출 */
     @Transactional
-    public void backfill(WatchStock watchStock) {
-        LocalDate today = LocalDate.now(Zone.KST.zoneId());
-        collectForStock(watchStock, today.minusDays(BACKFILL_DAYS), today);
+    public void backfill(WatchStock watchStock, LocalDate to) {
+        collectForStock(watchStock, to.minusDays(BACKFILL_DAYS), to);
         log.info("공매도 백필 완료: stockCode={}", watchStock.getStockCode());
     }
 
@@ -74,9 +72,6 @@ public class ShortSellingTrendCollector {
         }
 
         for (ShortSellingTrendResponse.ShortTick tick : response.ticks()) {
-            if (tick.dt() == null || tick.dt().isBlank()) {
-                continue;
-            }
             LocalDate tradeDate = DateParser.parseDate(tick.dt());
             if (tradeDate == null) {
                 continue;

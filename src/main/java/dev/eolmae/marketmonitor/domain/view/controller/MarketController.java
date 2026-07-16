@@ -7,6 +7,7 @@ import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.enums.RankingType;
 import dev.eolmae.marketmonitor.domain.view.service.MarketQueryService;
 import dev.eolmae.marketmonitor.domain.stock.enums.AmtQtyType;
+import dev.eolmae.marketmonitor.domain.stock.service.WatchStockService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
@@ -20,6 +21,7 @@ import java.util.List;
 public class MarketController {
 
     private final MarketQueryService marketQueryService;
+    private final WatchStockService watchStockService;
 
     // ── 메인 대시보드 ─────────────────────────────────────────────────────
 
@@ -84,6 +86,16 @@ public class MarketController {
     @GetMapping("/watch-stocks")
     public List<WatchStockResponse> getWatchStocks() {
         return marketQueryService.getWatchStocks();
+    }
+
+    @PostMapping("/watch-stocks/{stockCode}")
+    public void registerWatchStock(@PathVariable String stockCode) {
+        watchStockService.register(stockCode);
+    }
+
+    @DeleteMapping("/watch-stocks/{stockCode}")
+    public void unregisterWatchStock(@PathVariable String stockCode) {
+        watchStockService.unregister(stockCode);
     }
 
     // ── 종목별 이력 ───────────────────────────────────────────────────────

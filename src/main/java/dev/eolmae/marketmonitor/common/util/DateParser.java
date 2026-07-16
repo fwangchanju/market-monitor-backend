@@ -7,6 +7,7 @@ import java.time.LocalTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+// 문자열을 LocalDate/LocalDateTime/LocalTime으로 파싱, 실패 시 예외 대신 null 반환
 public final class DateParser {
 
     private static final Logger log = LoggerFactory.getLogger(DateParser.class);

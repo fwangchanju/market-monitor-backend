@@ -9,6 +9,7 @@ import dev.eolmae.marketmonitor.domain.stock.entity.WatchStock;
 import dev.eolmae.marketmonitor.domain.stock.enums.RegisterBy;
 import dev.eolmae.marketmonitor.domain.stock.repository.WatchStockRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
+import dev.eolmae.marketmonitor.domain.stock.service.WatchStockBackfillService;
 import dev.eolmae.marketmonitor.domain.stock.service.WatchStockCacheService;
 
 import java.util.List;
@@ -29,6 +30,7 @@ public class HoldingsSyncService {
     private final StockInfoCacheService stockInfoCacheService;
     private final WatchStockRepository watchStockRepository;
     private final WatchStockCacheService watchStockCacheService;
+    private final WatchStockBackfillService watchStockBackfillService;
 
     /**
      * kt00018 보유종목 동기화.
@@ -75,7 +77,8 @@ public class HoldingsSyncService {
             }
 
             if (stockInfoCache.containsKey(stockCode)) {
-                watchStockRepository.save(WatchStock.createHolding(stockCode, holdingRank));
+                WatchStock saved = watchStockRepository.save(WatchStock.createHolding(stockCode, holdingRank));
+                watchStockBackfillService.backfill(saved);
             } else {
                 log.warn("보유종목이 종목 기준정보에 없음: stockCode={}", stockCode);
             }

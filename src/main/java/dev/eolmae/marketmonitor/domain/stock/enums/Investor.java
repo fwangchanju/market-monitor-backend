@@ -1,6 +1,6 @@
 package dev.eolmae.marketmonitor.domain.stock.enums;
 
-public enum InvestorType {
+public enum Investor {
     PERSONAL, // 개인
     FOREIGNER, // 외국인
     INSTITUTION, // 기관계

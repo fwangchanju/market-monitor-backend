@@ -2,8 +2,8 @@ package dev.eolmae.marketmonitor.domain.stock.entity;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.enums.Zone;
-import dev.eolmae.marketmonitor.domain.stock.enums.AmtQtyType;
-import dev.eolmae.marketmonitor.domain.stock.enums.InvestorType;
+import dev.eolmae.marketmonitor.domain.stock.enums.AmtQty;
+import dev.eolmae.marketmonitor.domain.stock.enums.Investor;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -37,11 +37,11 @@ public class InvestorTradingSummarySnapshot {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private InvestorType investorType;
+    private Investor investor;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private AmtQtyType amtQtyType;
+    private AmtQty amtQty;
 
     @Column(nullable = false)
     private LocalDateTime snapshotTime;
@@ -65,8 +65,8 @@ public class InvestorTradingSummarySnapshot {
 
     public static InvestorTradingSummarySnapshot create(
             Market marketType,
-            InvestorType investorType,
-            AmtQtyType amtQtyType,
+            Investor investor,
+            AmtQty amtQty,
             LocalDateTime snapshotTime,
             BigDecimal buyAmount,
             BigDecimal sellAmount,
@@ -74,8 +74,8 @@ public class InvestorTradingSummarySnapshot {
             LocalDateTime lastCollectedAt) {
         var entity = new InvestorTradingSummarySnapshot();
         entity.marketType = marketType;
-        entity.investorType = investorType;
-        entity.amtQtyType = amtQtyType;
+        entity.investor = investor;
+        entity.amtQty = amtQty;
         entity.snapshotTime = snapshotTime;
         entity.buyAmount = buyAmount;
         entity.sellAmount = sellAmount;

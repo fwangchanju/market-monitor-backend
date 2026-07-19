@@ -6,7 +6,7 @@ import dev.eolmae.marketmonitor.domain.view.enums.IntradayInvestorQuery;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.enums.RankingType;
 import dev.eolmae.marketmonitor.domain.view.service.MarketQueryService;
-import dev.eolmae.marketmonitor.domain.stock.enums.AmtQtyType;
+import dev.eolmae.marketmonitor.domain.stock.enums.AmtQty;
 import dev.eolmae.marketmonitor.domain.stock.service.WatchStockService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -42,7 +42,7 @@ public class MarketController {
             @RequestParam MarketQuery market,
             @RequestParam IntradayInvestorQuery investor,
             @RequestParam RankingType ranking,
-            @RequestParam AmtQtyType amtQty) {
+            @RequestParam AmtQty amtQty) {
         return marketQueryService.getIntradayTop(market, investor, ranking, amtQty);
     }
 
@@ -50,8 +50,8 @@ public class MarketController {
     //    @GetMapping("/intraday-rankings")
     //    public SnapshotResponse<IntradayInvestorRankingItem> getIntradayRankings(
     //            @RequestParam Market market,
-    //            @RequestParam IntradayInvestorType investor,
-    //            @RequestParam IntradayRankingType ranking) {
+    //            @RequestParam IntradayInvestor investor,
+    //            @RequestParam IntradayRanking ranking) {
     //        return marketQueryService.getIntradayRankings(market, investor, ranking);
     //    }
     // TODO 화면에서 미사용 확인됨 — 화면 점검 후 이상 없으면 서비스 레이어 메서드까지 삭제
@@ -62,7 +62,7 @@ public class MarketController {
     public SnapshotResponse<ProgramTradingRankingItem> getProgramTradingRankings(
             @RequestParam MarketQuery market,
             @RequestParam RankingType ranking,
-            @RequestParam AmtQtyType amtQty) {
+            @RequestParam AmtQty amtQty) {
         return marketQueryService.getProgramTradingRankings(market, ranking, amtQty);
     }
 

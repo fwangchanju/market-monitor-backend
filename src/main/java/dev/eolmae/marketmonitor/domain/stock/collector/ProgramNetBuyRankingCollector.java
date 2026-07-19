@@ -8,8 +8,8 @@ import dev.eolmae.marketmonitor.domain.stock.dto.ProgramNetBuyRankingRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.ProgramNetBuyRankingResponse;
 import dev.eolmae.marketmonitor.domain.stock.entity.ProgramTradingRankingSnapshot;
 import dev.eolmae.marketmonitor.common.util.Strings;
-import dev.eolmae.marketmonitor.domain.stock.enums.AmtQtyType;
-import dev.eolmae.marketmonitor.domain.stock.enums.ProgramRankingType;
+import dev.eolmae.marketmonitor.domain.stock.enums.AmtQty;
+import dev.eolmae.marketmonitor.domain.stock.enums.ProgramRanking;
 import dev.eolmae.marketmonitor.domain.stock.enums.StexType;
 import dev.eolmae.marketmonitor.domain.stock.repository.ProgramTradingRankingSnapshotRepository;
 import java.math.BigDecimal;
@@ -31,7 +31,7 @@ public class ProgramNetBuyRankingCollector {
     @Transactional
     public void collect(LocalDateTime snapshotTime) {
         for (Market market : Market.values()) {
-            for (ProgramRankingType ranking : ProgramRankingType.values()) {
+            for (ProgramRanking ranking : ProgramRanking.values()) {
                 try {
                     collectForCombination(market, ranking, snapshotTime);
                 } catch (Exception e) {
@@ -42,13 +42,13 @@ public class ProgramNetBuyRankingCollector {
     }
 
     private void collectForCombination(
-            Market market, ProgramRankingType ranking, LocalDateTime snapshotTime) {
+            Market market, ProgramRanking ranking, LocalDateTime snapshotTime) {
 
         String mrktTp = MrktTp.from(market);
-        AmtQtyType amtQty = AmtQtyType.AMOUNT; // 금액 기준 고정
+        AmtQty amtQty = AmtQty.AMOUNT; // 금액 기준 고정
         String stexTp = StexType.KRX_NXT.code(); // KRX+NXT 합산
 
-        if (rankingRepository.existsBySnapshotTimeAndMarketTypeAndRankingTypeAndAmtQtyType(snapshotTime, market, ranking, amtQty)) {
+        if (rankingRepository.existsBySnapshotTimeAndMarketTypeAndRankingTypeAndAmtQty(snapshotTime, market, ranking, amtQty)) {
             log.debug(
                     "프로그램매매 랭킹 이미 존재, 스킵: market={}, ranking={}, amtQty={}, snapshotTime={}",
                     market,
@@ -85,7 +85,7 @@ public class ProgramNetBuyRankingCollector {
     }
 
     private static ProgramTradingRankingSnapshot toEntity(
-            Market market, AmtQtyType amtQty, ProgramRankingType ranking,
+            Market market, AmtQty amtQty, ProgramRanking ranking,
             LocalDateTime snapshotTime, int rank, ProgramNetBuyRankingResponse.RankingItem item) {
         return ProgramTradingRankingSnapshot.create(
                 market,

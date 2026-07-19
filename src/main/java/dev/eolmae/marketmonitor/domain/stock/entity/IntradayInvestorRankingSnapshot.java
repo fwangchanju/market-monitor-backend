@@ -2,9 +2,9 @@ package dev.eolmae.marketmonitor.domain.stock.entity;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.enums.Zone;
-import dev.eolmae.marketmonitor.domain.stock.enums.AmtQtyType;
-import dev.eolmae.marketmonitor.domain.stock.enums.IntradayInvestorType;
-import dev.eolmae.marketmonitor.domain.stock.enums.IntradayRankingType;
+import dev.eolmae.marketmonitor.domain.stock.enums.AmtQty;
+import dev.eolmae.marketmonitor.domain.stock.enums.IntradayInvestor;
+import dev.eolmae.marketmonitor.domain.stock.enums.IntradayRanking;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -45,15 +45,15 @@ public class IntradayInvestorRankingSnapshot {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private IntradayInvestorType investorType;
+    private IntradayInvestor investor;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private IntradayRankingType rankingType;
+    private IntradayRanking rankingType;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private AmtQtyType amtQtyType;
+    private AmtQty amtQty;
 
     @Column(nullable = false)
     private LocalDateTime snapshotTime;
@@ -83,9 +83,9 @@ public class IntradayInvestorRankingSnapshot {
 
     public static IntradayInvestorRankingSnapshot create(
             Market marketType,
-            IntradayInvestorType investorType,
-            IntradayRankingType rankingType,
-            AmtQtyType amtQtyType,
+            IntradayInvestor investor,
+            IntradayRanking rankingType,
+            AmtQty amtQty,
             LocalDateTime snapshotTime,
             int rank,
             String stockCode,
@@ -95,9 +95,9 @@ public class IntradayInvestorRankingSnapshot {
             long tradedVolume) {
         var entity = new IntradayInvestorRankingSnapshot();
         entity.marketType = marketType;
-        entity.investorType = investorType;
+        entity.investor = investor;
         entity.rankingType = rankingType;
-        entity.amtQtyType = amtQtyType;
+        entity.amtQty = amtQty;
         entity.snapshotTime = snapshotTime;
         entity.rank = rank;
         entity.stockCode = stockCode;

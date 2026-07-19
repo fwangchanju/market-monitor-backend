@@ -25,10 +25,10 @@ import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.ProgramTradingRankingSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.entity.WatchStock;
-import dev.eolmae.marketmonitor.domain.stock.enums.AmtQtyType;
-import dev.eolmae.marketmonitor.domain.stock.enums.IntradayInvestorType;
-import dev.eolmae.marketmonitor.domain.stock.enums.IntradayRankingType;
-import dev.eolmae.marketmonitor.domain.stock.enums.ProgramRankingType;
+import dev.eolmae.marketmonitor.domain.stock.enums.AmtQty;
+import dev.eolmae.marketmonitor.domain.stock.enums.IntradayInvestor;
+import dev.eolmae.marketmonitor.domain.stock.enums.IntradayRanking;
+import dev.eolmae.marketmonitor.domain.stock.enums.ProgramRanking;
 import dev.eolmae.marketmonitor.domain.stock.repository.IndexContributionRankingSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.IntradayInvestorRankingSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.InvestorTradingSummarySnapshotRepository;
@@ -73,10 +73,10 @@ public class MarketQueryService {
 
     /** 메인 대시보드용 시장 종합 현황 반환 */
     public MarketSummaryResponse getMarketSummary() {
-        record SummaryDefaults(Market market, AmtQtyType amtQty, IntradayInvestorType investor, RankingType ranking) {}
+        record SummaryDefaults(Market market, AmtQty amtQty, IntradayInvestor investor, RankingType ranking) {}
 
         var summaryDefaults = new SummaryDefaults(
-                Market.KOSPI, AmtQtyType.AMOUNT, IntradayInvestorType.FOREIGNER, RankingType.NET_BUY);
+                Market.KOSPI, AmtQty.AMOUNT, IntradayInvestor.FOREIGNER, RankingType.NET_BUY);
 
         return new MarketSummaryResponse(
                 getMarketOverviews(),
@@ -134,7 +134,7 @@ public class MarketQueryService {
             return SnapshotResponse.empty();
         }
 
-        var snapshots = investorTradingSummarySnapshotRepository.findBySnapshotTimeOrderByMarketTypeAscInvestorTypeAsc(
+        var snapshots = investorTradingSummarySnapshotRepository.findBySnapshotTimeOrderByMarketTypeAscInvestorAsc(
                 latestSnapshotTime);
 
         return new SnapshotResponse<>(
@@ -142,7 +142,7 @@ public class MarketQueryService {
                 snapshots.stream()
                         .map(item -> new InvestorTradingSummaryItem(
                                 item.getMarketType(),
-                                item.getInvestorType(),
+                                item.getInvestor(),
                                 item.getBuyAmount(),
                                 item.getSellAmount(),
                                 item.getNetBuyAmount()))
@@ -150,16 +150,16 @@ public class MarketQueryService {
     }
 
     private SnapshotResponse<IntradayInvestorRankingItem> getIntradaySummaryHighlights(
-            Market market, IntradayInvestorType investor, RankingType ranking, AmtQtyType amtQty) {
+            Market market, IntradayInvestor investor, RankingType ranking, AmtQty amtQty) {
         return getIntradaySummaryHighlights(
-                List.of(market), List.of(investor), IntradayRankingType.from(ranking), amtQty);
+                List.of(market), List.of(investor), IntradayRanking.from(ranking), amtQty);
     }
 
     /** 대시보드 요약: KOSPI 기준 외국인 순매수 상위 (대표 조합) */
     private SnapshotResponse<IntradayInvestorRankingItem> getIntradaySummaryHighlights(
-            List<Market> markets, List<IntradayInvestorType> investors, IntradayRankingType ranking, AmtQtyType amtQty) {
+            List<Market> markets, List<IntradayInvestor> investors, IntradayRanking ranking, AmtQty amtQty) {
         LocalDateTime latestSnapshotTime = intradayInvestorRankingSnapshotRepository
-                .findFirstByMarketTypeInAndInvestorTypeInAndRankingTypeAndAmtQtyTypeOrderBySnapshotTimeDesc(
+                .findFirstByMarketTypeInAndInvestorInAndRankingTypeAndAmtQtyOrderBySnapshotTimeDesc(
                         markets, investors, ranking, amtQty)
                 .map(IntradayInvestorRankingSnapshot::getSnapshotTime)
                 .orElse(null);
@@ -168,7 +168,7 @@ public class MarketQueryService {
         }
 
         var snapshots = intradayInvestorRankingSnapshotRepository
-                .findByMarketTypeInAndInvestorTypeInAndRankingTypeAndAmtQtyTypeAndSnapshotTimeOrderByRankAsc(
+                .findByMarketTypeInAndInvestorInAndRankingTypeAndAmtQtyAndSnapshotTimeOrderByRankAsc(
                         markets, investors, ranking, amtQty, latestSnapshotTime);
 
         return new SnapshotResponse<>(
@@ -176,7 +176,7 @@ public class MarketQueryService {
                 snapshots.stream()
                         .map(item -> new IntradayInvestorRankingItem(
                                 item.getMarketType(),
-                                item.getInvestorType(),
+                                item.getInvestor(),
                                 item.getRank(),
                                 item.getStockCode(),
                                 item.getStockName(),
@@ -187,7 +187,7 @@ public class MarketQueryService {
 
     // TODO 화면에서 미사용 확인됨 (컨트롤러 #3과 동일) — 화면 점검 후 이상 없으면 삭제
     //    public SnapshotResponse<IntradayInvestorRankingItem> getIntradayRankings(
-    //            Market marketType, IntradayInvestorType investorType, IntradayRankingType rankingType) {
+    //            Market marketType, IntradayInvestor investor, IntradayRanking rankingType) {
     //        var snapshotTime = intradayInvestorRankingSnapshotRepository
     //                .findLatestSnapshotTime()
     //                .orElse(null);
@@ -196,13 +196,13 @@ public class MarketQueryService {
     //        }
     //
     //        var items = intradayInvestorRankingSnapshotRepository
-    //                .findBySnapshotTimeAndMarketTypeAndInvestorTypeAndRankingTypeOrderByRankAsc(
-    //                        snapshotTime, marketType, investorType, rankingType)
+    //                .findBySnapshotTimeAndMarketTypeAndInvestorAndRankingTypeOrderByRankAsc(
+    //                        snapshotTime, marketType, investor, rankingType)
     //                .stream()
     //                .limit(10)
     //                .map(item -> new IntradayInvestorRankingItem(
     //                        item.getMarketType(),
-    //                        item.getInvestorType(),
+    //                        item.getInvestor(),
     //                        item.getRank(),
     //                        item.getStockCode(),
     //                        item.getStockName(),
@@ -214,20 +214,20 @@ public class MarketQueryService {
     //    }
 
     public SnapshotResponse<ProgramTradingRankingItem> getProgramTradingRankings(
-            MarketQuery market, RankingType ranking, AmtQtyType amtQty) {
-        return getProgramTradingRankings(market.toMarkets(), ProgramRankingType.from(ranking), amtQty);
+            MarketQuery market, RankingType ranking, AmtQty amtQty) {
+        return getProgramTradingRankings(market.toMarkets(), ProgramRanking.from(ranking), amtQty);
     }
 
     private SnapshotResponse<ProgramTradingRankingItem> getProgramTradingRankings(
-            Market market, RankingType ranking, AmtQtyType amtQty) {
-        return getProgramTradingRankings(List.of(market), ProgramRankingType.from(ranking), amtQty);
+            Market market, RankingType ranking, AmtQty amtQty) {
+        return getProgramTradingRankings(List.of(market), ProgramRanking.from(ranking), amtQty);
     }
 
     /** 프로그램매매 순매수/순매도 상위 top 10 반환 */
     private SnapshotResponse<ProgramTradingRankingItem> getProgramTradingRankings(
-            List<Market> markets, ProgramRankingType ranking, AmtQtyType amtQty) {
+            List<Market> markets, ProgramRanking ranking, AmtQty amtQty) {
         LocalDateTime latestSnapshotTime = programTradingRankingSnapshotRepository
-                .findFirstByMarketTypeInAndRankingTypeAndAmtQtyTypeOrderBySnapshotTimeDesc(markets, ranking, amtQty)
+                .findFirstByMarketTypeInAndRankingTypeAndAmtQtyOrderBySnapshotTimeDesc(markets, ranking, amtQty)
                 .map(ProgramTradingRankingSnapshot::getSnapshotTime)
                 .orElse(null);
         if (latestSnapshotTime == null) {
@@ -235,7 +235,7 @@ public class MarketQueryService {
         }
 
         var snapshots = programTradingRankingSnapshotRepository
-                .findByMarketTypeInAndRankingTypeAndAmtQtyTypeAndSnapshotTimeOrderByRankAsc(
+                .findByMarketTypeInAndRankingTypeAndAmtQtyAndSnapshotTimeOrderByRankAsc(
                         markets, ranking, amtQty, latestSnapshotTime);
 
         // market=COMBINED(KOSPI+KOSDAQ)면 마켓별 rank를 합쳐 netBuyAmount 기준으로 다시 정렬
@@ -361,18 +361,18 @@ public class MarketQueryService {
     }
 
     public SnapshotResponse<IntradayInvestorSummaryItem> getIntradayTop(
-            MarketQuery market, IntradayInvestorQuery investor, RankingType ranking, AmtQtyType amtQty) {
+            MarketQuery market, IntradayInvestorQuery investor, RankingType ranking, AmtQty amtQty) {
         return getIntradayTop(
-                market.toMarkets(), investor.toInvestorTypes(), IntradayRankingType.from(ranking), amtQty);
+                market.toMarkets(), investor.toInvestors(), IntradayRanking.from(ranking), amtQty);
     }
 
     /** 장중 투자자별 매매 상위 top 10 반환 */
     private SnapshotResponse<IntradayInvestorSummaryItem> getIntradayTop(
-            List<Market> markets, List<IntradayInvestorType> investors, IntradayRankingType ranking, AmtQtyType amtQty) {
+            List<Market> markets, List<IntradayInvestor> investors, IntradayRanking ranking, AmtQty amtQty) {
         record StockNet(String stockCode, String stockName, BigDecimal netAmount) {}
 
         LocalDateTime latestSnapshotTime = intradayInvestorRankingSnapshotRepository
-                .findFirstByMarketTypeInAndInvestorTypeInAndRankingTypeAndAmtQtyTypeOrderBySnapshotTimeDesc(
+                .findFirstByMarketTypeInAndInvestorInAndRankingTypeAndAmtQtyOrderBySnapshotTimeDesc(
                         markets, investors, ranking, amtQty)
                 .map(IntradayInvestorRankingSnapshot::getSnapshotTime)
                 .orElse(null);
@@ -381,7 +381,7 @@ public class MarketQueryService {
         }
 
         List<IntradayInvestorRankingSnapshot> snapshots = intradayInvestorRankingSnapshotRepository
-                .findByMarketTypeInAndInvestorTypeInAndRankingTypeAndAmtQtyTypeAndSnapshotTimeOrderByRankAsc(
+                .findByMarketTypeInAndInvestorInAndRankingTypeAndAmtQtyAndSnapshotTimeOrderByRankAsc(
                         markets, investors, ranking, amtQty, latestSnapshotTime);
 
         // investor=FOREIGN_COMBINED(외국인+외국계)처럼 같은 stockCode가 여러 row로 들어올 때 stockCode 기준 합산

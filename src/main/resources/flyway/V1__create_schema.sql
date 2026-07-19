@@ -66,8 +66,8 @@ CREATE TABLE market_overview_snapshot (
 CREATE TABLE investor_trading_summary_snapshot (
     id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
     market_type VARCHAR(20) NOT NULL,
-    investor_type VARCHAR(20) NOT NULL,
-    amt_qty_type VARCHAR(20) NOT NULL DEFAULT 'AMOUNT',
+    investor VARCHAR(20) NOT NULL,
+    amt_qty VARCHAR(20) NOT NULL DEFAULT 'AMOUNT',
     snapshot_time TIMESTAMP NOT NULL,
     buy_amount DECIMAL(19,2) NOT NULL,
     sell_amount DECIMAL(19,2) NOT NULL,
@@ -75,15 +75,15 @@ CREATE TABLE investor_trading_summary_snapshot (
     last_collected_at TIMESTAMP NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_investor_trading_summary_snapshot PRIMARY KEY (id),
-    CONSTRAINT uk_investor_trading_summary_snapshot UNIQUE (market_type, investor_type, amt_qty_type, snapshot_time)
+    CONSTRAINT uk_investor_trading_summary_snapshot UNIQUE (market_type, investor, amt_qty, snapshot_time)
 );
 
 CREATE TABLE intraday_investor_ranking_snapshot (
     id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
     market_type VARCHAR(20) NOT NULL,
-    investor_type VARCHAR(20) NOT NULL,
+    investor VARCHAR(20) NOT NULL,
     ranking_type VARCHAR(20) NOT NULL,
-    amt_qty_type VARCHAR(20) NOT NULL DEFAULT 'AMOUNT',
+    amt_qty VARCHAR(20) NOT NULL DEFAULT 'AMOUNT',
     snapshot_time TIMESTAMP NOT NULL,
     rank_no INT NOT NULL,
     stock_code VARCHAR(20) NOT NULL,
@@ -93,14 +93,14 @@ CREATE TABLE intraday_investor_ranking_snapshot (
     traded_volume BIGINT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_intraday_investor_ranking_snapshot PRIMARY KEY (id),
-    CONSTRAINT uk_intraday_investor_ranking_snapshot UNIQUE (market_type, investor_type, ranking_type, amt_qty_type, stock_code, snapshot_time),
+    CONSTRAINT uk_intraday_investor_ranking_snapshot UNIQUE (market_type, investor, ranking_type, amt_qty, stock_code, snapshot_time),
     CONSTRAINT fk_intraday_investor_ranking_stock FOREIGN KEY (stock_code) REFERENCES stock_info (stock_code)
 );
 
 CREATE TABLE program_trading_ranking_snapshot (
     id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
     market_type VARCHAR(20) NOT NULL DEFAULT 'KOSPI',
-    amt_qty_type VARCHAR(20) NOT NULL DEFAULT 'AMOUNT',
+    amt_qty VARCHAR(20) NOT NULL DEFAULT 'AMOUNT',
     ranking_type VARCHAR(20) NOT NULL,
     snapshot_time TIMESTAMP NOT NULL,
     rank_no INT NOT NULL,
@@ -111,7 +111,7 @@ CREATE TABLE program_trading_ranking_snapshot (
     program_net_buy_amount DECIMAL(19,2) NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_program_trading_ranking_snapshot PRIMARY KEY (id),
-    CONSTRAINT uk_program_trading_ranking_snapshot UNIQUE (market_type, amt_qty_type, ranking_type, stock_code, snapshot_time),
+    CONSTRAINT uk_program_trading_ranking_snapshot UNIQUE (market_type, amt_qty, ranking_type, stock_code, snapshot_time),
     CONSTRAINT fk_program_trading_ranking_stock FOREIGN KEY (stock_code) REFERENCES stock_info (stock_code)
 );
 

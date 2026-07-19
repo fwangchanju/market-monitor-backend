@@ -2,13 +2,13 @@ package dev.eolmae.marketmonitor.domain.stock.enums;
 
 import dev.eolmae.marketmonitor.domain.view.enums.RankingType;
 
-public enum IntradayRankingType implements NetAmountRanking {
+public enum IntradayRanking implements NetAmountRanking {
     NET_BUY("1"), // ka10065 trde_tp
     NET_SELL("2");
 
     private final String code;
 
-    IntradayRankingType(String code) {
+    IntradayRanking(String code) {
         this.code = code;
     }
 
@@ -21,7 +21,7 @@ public enum IntradayRankingType implements NetAmountRanking {
         return this == NET_SELL;
     }
 
-    public static IntradayRankingType from(RankingType type) {
+    public static IntradayRanking from(RankingType type) {
         return type.isSell() ? NET_SELL : NET_BUY;
     }
 }

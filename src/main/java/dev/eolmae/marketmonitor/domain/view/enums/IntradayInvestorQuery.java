@@ -1,6 +1,6 @@
 package dev.eolmae.marketmonitor.domain.view.enums;
 
-import dev.eolmae.marketmonitor.domain.stock.enums.IntradayInvestorType;
+import dev.eolmae.marketmonitor.domain.stock.enums.IntradayInvestor;
 import java.util.List;
 
 public enum IntradayInvestorQuery {
@@ -11,10 +11,10 @@ public enum IntradayInvestorQuery {
     TRUST,
     FOREIGN_COMBINED;
 
-    public List<IntradayInvestorType> toInvestorTypes() {
+    public List<IntradayInvestor> toInvestors() {
         return switch (this) {
-            case FOREIGN_COMBINED -> List.of(IntradayInvestorType.FOREIGNER, IntradayInvestorType.FOREIGN_COMPANY);
-            default -> List.of(IntradayInvestorType.valueOf(name()));
+            case FOREIGN_COMBINED -> List.of(IntradayInvestor.FOREIGNER, IntradayInvestor.FOREIGN_COMPANY);
+            default -> List.of(IntradayInvestor.valueOf(name()));
         };
     }
 }

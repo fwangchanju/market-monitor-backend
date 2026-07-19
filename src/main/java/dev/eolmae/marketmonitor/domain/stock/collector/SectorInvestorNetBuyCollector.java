@@ -7,8 +7,8 @@ import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.SectorInvestorNetBuyRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.SectorInvestorNetBuyResponse;
 import dev.eolmae.marketmonitor.domain.stock.entity.InvestorTradingSummarySnapshot;
-import dev.eolmae.marketmonitor.domain.stock.enums.AmtQtyType;
-import dev.eolmae.marketmonitor.domain.stock.enums.InvestorType;
+import dev.eolmae.marketmonitor.domain.stock.enums.AmtQty;
+import dev.eolmae.marketmonitor.domain.stock.enums.Investor;
 import dev.eolmae.marketmonitor.domain.stock.enums.StexType;
 import dev.eolmae.marketmonitor.domain.stock.repository.InvestorTradingSummarySnapshotRepository;
 import dev.eolmae.marketmonitor.common.enums.DateTimePattern;
@@ -67,7 +67,7 @@ public class SectorInvestorNetBuyCollector {
 
         // TODO ka10051은 순매수만 제공하나 엔티티의 buyAmount/sellAmount가 nullable=false — nullable 허용 또는 순매수 전용 엔티티 분리 검토
         // ka10051은 순매수만 제공하므로 매수/매도는 ZERO로 저장
-        for (InvestorType investor : InvestorType.values()) {
+        for (Investor investor : Investor.values()) {
             BigDecimal netBuyAmount = resolveNetBuy(investor, compositeItem);
             saveSnapshot(market, investor, netBuyAmount, snapshotTime, now);
         }
@@ -76,7 +76,7 @@ public class SectorInvestorNetBuyCollector {
     }
 
     private static BigDecimal resolveNetBuy(
-            InvestorType investor, SectorInvestorNetBuyResponse.IndsNetprps item) {
+            Investor investor, SectorInvestorNetBuyResponse.IndsNetprps item) {
         return KiwoomValueParser.parseBigDecimal(switch (investor) {
             case PERSONAL -> item.indNetprps();
             case FOREIGNER -> item.frgnrNetprps();
@@ -96,26 +96,26 @@ public class SectorInvestorNetBuyCollector {
 
     private void saveSnapshot(
             Market market,
-            InvestorType investor,
+            Investor investor,
             BigDecimal netBuyAmount,
             LocalDateTime snapshotTime,
             LocalDateTime now) {
 
         if (investorTradingSummarySnapshotRepository
-                .existsByMarketTypeAndInvestorTypeAndAmtQtyTypeAndSnapshotTime(
-                        market, investor, AmtQtyType.AMOUNT, snapshotTime)) {
+                .existsByMarketTypeAndInvestorAndAmtQtyAndSnapshotTime(
+                        market, investor, AmtQty.AMOUNT, snapshotTime)) {
             return;
         }
         investorTradingSummarySnapshotRepository.save(toEntity(market, investor, netBuyAmount, snapshotTime, now));
     }
 
     private static InvestorTradingSummarySnapshot toEntity(
-            Market market, InvestorType investor, BigDecimal netBuyAmount,
+            Market market, Investor investor, BigDecimal netBuyAmount,
             LocalDateTime snapshotTime, LocalDateTime now) {
         return InvestorTradingSummarySnapshot.create(
                 market,
                 investor,
-                AmtQtyType.AMOUNT,
+                AmtQty.AMOUNT,
                 snapshotTime,
                 BigDecimal.ZERO,
                 BigDecimal.ZERO,

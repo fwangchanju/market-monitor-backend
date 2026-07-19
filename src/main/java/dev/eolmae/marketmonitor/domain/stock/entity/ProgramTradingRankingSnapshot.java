@@ -2,8 +2,8 @@ package dev.eolmae.marketmonitor.domain.stock.entity;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.enums.Zone;
-import dev.eolmae.marketmonitor.domain.stock.enums.AmtQtyType;
-import dev.eolmae.marketmonitor.domain.stock.enums.ProgramRankingType;
+import dev.eolmae.marketmonitor.domain.stock.enums.AmtQty;
+import dev.eolmae.marketmonitor.domain.stock.enums.ProgramRanking;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -37,11 +37,11 @@ public class ProgramTradingRankingSnapshot {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private AmtQtyType amtQtyType;
+    private AmtQty amtQty;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private ProgramRankingType rankingType;
+    private ProgramRanking rankingType;
 
     @Column(nullable = false)
     private LocalDateTime snapshotTime;
@@ -71,8 +71,8 @@ public class ProgramTradingRankingSnapshot {
 
     public static ProgramTradingRankingSnapshot create(
             Market marketType,
-            AmtQtyType amtQtyType,
-            ProgramRankingType rankingType,
+            AmtQty amtQty,
+            ProgramRanking rankingType,
             LocalDateTime snapshotTime,
             int rank,
             String stockCode,
@@ -82,7 +82,7 @@ public class ProgramTradingRankingSnapshot {
             BigDecimal programNetBuyAmount) {
         var entity = new ProgramTradingRankingSnapshot();
         entity.marketType = marketType;
-        entity.amtQtyType = amtQtyType;
+        entity.amtQty = amtQty;
         entity.rankingType = rankingType;
         entity.snapshotTime = snapshotTime;
         entity.rank = rank;

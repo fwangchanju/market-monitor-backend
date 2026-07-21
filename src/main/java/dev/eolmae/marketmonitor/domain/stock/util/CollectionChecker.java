@@ -34,4 +34,12 @@ public final class CollectionChecker {
             default -> from.minusDays(1);
         };
     }
+
+    /** from에서 거래일 기준 days일 전 반환(휴무는 고려하지 않음). */
+    public static LocalDate previousTradingDay(LocalDate from, int days) {
+        for (int i = 0; i < days; i++) {
+            from = previousTradingDay(from);
+        }
+        return from;
+    }
 }

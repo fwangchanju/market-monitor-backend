@@ -1,7 +1,6 @@
 package dev.eolmae.marketmonitor.domain.view.service;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
-import dev.eolmae.marketmonitor.common.enums.Zone;
 import dev.eolmae.marketmonitor.domain.stock.entity.IndexContributionRankingSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.IntradayInvestorRankingSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.InvestorTradingSummarySnapshot;
@@ -25,7 +24,6 @@ import dev.eolmae.marketmonitor.domain.stock.repository.ShortSellingDailyHistory
 import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketmonitor.domain.stock.service.WatchStockCacheService;
-import dev.eolmae.marketmonitor.domain.stock.util.CollectionChecker;
 import dev.eolmae.marketmonitor.domain.view.dto.IndexContributionItem;
 import dev.eolmae.marketmonitor.domain.view.dto.IntradayInvestorSummaryItem;
 import dev.eolmae.marketmonitor.domain.view.dto.InvestorTradingSummaryItem;
@@ -45,7 +43,6 @@ import dev.eolmae.marketmonitor.domain.view.enums.RankingType;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -297,11 +294,17 @@ public class MarketQueryService {
                 .toList();
     }
 
-    /** 종목별 최근 프로그램매매 이력 반환 — 장 시작 직후에도 데이터가 너무 적지 않도록 최근 2거래일을 더해 반환 */
+    /** 종목별 프로그램매매 이력 최신 20건 반환 */
     public StockHistoryResponse<ProgramTradingHistoryItem> getProgramTradingHistory(String stockCode) {
-        LocalDate today = LocalDate.now(Zone.KST.zoneId());
-        LocalDate from = CollectionChecker.previousTradingDay(CollectionChecker.previousTradingDay(today));
-        return getProgramTradingHistoryByRange(stockCode, from.atStartOfDay(), today.atTime(LocalTime.MAX));
+        return new StockHistoryResponse<>(
+                stockCode,
+                programTradingHistoryRepository.findRecentByStockCode(stockCode).stream()
+                        .map(item -> new ProgramTradingHistoryItem(
+                                item.getSnapshotTime(),
+                                item.getProgramBuyAmount(),
+                                item.getProgramSellAmount(),
+                                item.getProgramNetBuyAmount()))
+                        .toList());
     }
 
     /** 종목별 기간별 프로그램매매 이력 반환 */

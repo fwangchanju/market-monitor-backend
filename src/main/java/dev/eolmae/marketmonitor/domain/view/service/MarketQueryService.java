@@ -351,7 +351,7 @@ public class MarketQueryService {
                         .toList());
     }
 
-    /** 공매도 추이 최신 10건 반환 */
+    /** 공매도 추이 최신 20건 반환 */
     public StockHistoryResponse<ShortSellingHistoryItem> getShortSellingHistory(String stockCode) {
         return new StockHistoryResponse<>(
                 stockCode,

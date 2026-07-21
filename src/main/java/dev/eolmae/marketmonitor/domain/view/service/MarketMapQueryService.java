@@ -49,10 +49,9 @@ public class MarketMapQueryService {
         List<StockInfo> candidates = filterCandidates(market, isExclude);
         Map<String, StockCategory> categoryMap = stockCategoryRepository.findAll().stream()
                 .collect(Collectors.toMap(StockCategory::getStockCode, Function.identity()));
-        Map<String, SectorPriceSnapshot> priceMap = sectorPriceSnapshotRepository
-                .findByMarketTypeAndSnapshotTime(market, latestSnapshotTime)
-                .stream()
-                .collect(Collectors.toMap(SectorPriceSnapshot::getStockCode, Function.identity()));
+        Map<String, SectorPriceSnapshot> priceMap =
+                sectorPriceSnapshotRepository.findByMarketTypeAndSnapshotTime(market, latestSnapshotTime).stream()
+                        .collect(Collectors.toMap(SectorPriceSnapshot::getStockCode, Function.identity()));
 
         Map<String, List<MarketMapItem>> grouped = candidates.stream()
                 .collect(Collectors.groupingBy(

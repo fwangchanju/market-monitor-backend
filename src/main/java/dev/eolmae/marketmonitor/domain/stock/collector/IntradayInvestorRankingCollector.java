@@ -1,7 +1,6 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
-import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.IntradayInvestorRankingRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.IntradayInvestorRankingResponse;
@@ -10,6 +9,7 @@ import dev.eolmae.marketmonitor.domain.stock.enums.AmtQty;
 import dev.eolmae.marketmonitor.domain.stock.enums.IntradayInvestor;
 import dev.eolmae.marketmonitor.domain.stock.enums.IntradayRanking;
 import dev.eolmae.marketmonitor.domain.stock.repository.IntradayInvestorRankingSnapshotRepository;
+import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,12 +35,7 @@ public class IntradayInvestorRankingCollector {
                     try {
                         collectForCombination(market, investor, ranking, snapshotTime);
                     } catch (Exception e) {
-                        log.error(
-                                "장중투자자랭킹 수집 실패: market={}, investor={}, ranking={}",
-                                market,
-                                investor,
-                                ranking,
-                                e);
+                        log.error("장중투자자랭킹 수집 실패: market={}, investor={}, ranking={}", market, investor, ranking, e);
                     }
                 }
             }
@@ -52,7 +47,8 @@ public class IntradayInvestorRankingCollector {
 
         String mrktTp = MrktTp.from(market);
 
-        if (repository.existsBySnapshotTimeAndMarketTypeAndInvestorAndRankingType(snapshotTime, market, investor, ranking)) {
+        if (repository.existsBySnapshotTimeAndMarketTypeAndInvestorAndRankingType(
+                snapshotTime, market, investor, ranking)) {
             log.debug(
                     "장중투자자랭킹 이미 존재, 스킵: market={}, investor={}, ranking={}, snapshotTime={}",
                     market,
@@ -63,8 +59,7 @@ public class IntradayInvestorRankingCollector {
         }
 
         String amtQtyTp = AmtQty.AMOUNT.code(); // 금액 기준 고정
-        var request = new IntradayInvestorRankingRequest(
-                ranking.code(), mrktTp, investor.apiCode(), amtQtyTp);
+        var request = new IntradayInvestorRankingRequest(ranking.code(), mrktTp, investor.apiCode(), amtQtyTp);
         var response = kiwoomApiClient.post(request, IntradayInvestorRankingResponse.class);
 
         if (response.items() == null) {
@@ -76,17 +71,16 @@ public class IntradayInvestorRankingCollector {
             repository.save(toEntity(market, investor, ranking, snapshotTime, rank++, item));
         }
 
-        log.debug(
-                "장중투자자랭킹 수집 완료: market={}, investor={}, ranking={}, count={}",
-                market,
-                investor,
-                ranking,
-                rank - 1);
+        log.debug("장중투자자랭킹 수집 완료: market={}, investor={}, ranking={}, count={}", market, investor, ranking, rank - 1);
     }
 
     private static IntradayInvestorRankingSnapshot toEntity(
-            Market market, IntradayInvestor investor, IntradayRanking ranking,
-            LocalDateTime snapshotTime, int rank, IntradayInvestorRankingResponse.RankingItem item) {
+            Market market,
+            IntradayInvestor investor,
+            IntradayRanking ranking,
+            LocalDateTime snapshotTime,
+            int rank,
+            IntradayInvestorRankingResponse.RankingItem item) {
         return IntradayInvestorRankingSnapshot.create(
                 market,
                 investor,

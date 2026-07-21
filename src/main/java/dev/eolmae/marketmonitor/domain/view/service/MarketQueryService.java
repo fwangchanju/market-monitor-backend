@@ -1,27 +1,11 @@
 package dev.eolmae.marketmonitor.domain.view.service;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
-import dev.eolmae.marketmonitor.domain.view.dto.MarketSummaryResponse;
-import dev.eolmae.marketmonitor.domain.view.dto.IndexContributionItem;
-import dev.eolmae.marketmonitor.domain.view.dto.IntradayInvestorRankingItem;
-import dev.eolmae.marketmonitor.domain.view.dto.IntradayInvestorSummaryItem;
-import dev.eolmae.marketmonitor.domain.view.dto.InvestorTradingSummaryItem;
-import dev.eolmae.marketmonitor.domain.view.dto.MarketOverviewItem;
-import dev.eolmae.marketmonitor.domain.view.dto.ProgramTradingDailyHistoryItem;
-import dev.eolmae.marketmonitor.domain.view.dto.ProgramTradingHistoryItem;
-import dev.eolmae.marketmonitor.domain.view.dto.ProgramTradingRankingItem;
-import dev.eolmae.marketmonitor.domain.view.dto.ShortSellingHistoryItem;
-import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
-import dev.eolmae.marketmonitor.domain.view.dto.StockHistoryResponse;
-import dev.eolmae.marketmonitor.domain.view.dto.StockResponse;
-import dev.eolmae.marketmonitor.domain.view.dto.WatchStockResponse;
-import dev.eolmae.marketmonitor.domain.view.enums.IntradayInvestorQuery;
-import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
-import dev.eolmae.marketmonitor.domain.view.enums.RankingType;
 import dev.eolmae.marketmonitor.domain.stock.entity.IndexContributionRankingSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.IntradayInvestorRankingSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.InvestorTradingSummarySnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
+import dev.eolmae.marketmonitor.domain.stock.entity.ProgramTradingDailyHistory;
 import dev.eolmae.marketmonitor.domain.stock.entity.ProgramTradingRankingSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.entity.WatchStock;
@@ -40,10 +24,25 @@ import dev.eolmae.marketmonitor.domain.stock.repository.ShortSellingDailyHistory
 import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketmonitor.domain.stock.service.WatchStockCacheService;
+import dev.eolmae.marketmonitor.domain.view.dto.IndexContributionItem;
+import dev.eolmae.marketmonitor.domain.view.dto.IntradayInvestorSummaryItem;
+import dev.eolmae.marketmonitor.domain.view.dto.InvestorTradingSummaryItem;
+import dev.eolmae.marketmonitor.domain.view.dto.MarketOverviewItem;
+import dev.eolmae.marketmonitor.domain.view.dto.MarketSummaryResponse;
+import dev.eolmae.marketmonitor.domain.view.dto.ProgramTradingDailyHistoryItem;
+import dev.eolmae.marketmonitor.domain.view.dto.ProgramTradingHistoryItem;
+import dev.eolmae.marketmonitor.domain.view.dto.ProgramTradingRankingItem;
+import dev.eolmae.marketmonitor.domain.view.dto.ShortSellingHistoryItem;
+import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
+import dev.eolmae.marketmonitor.domain.view.dto.StockHistoryResponse;
+import dev.eolmae.marketmonitor.domain.view.dto.StockResponse;
+import dev.eolmae.marketmonitor.domain.view.dto.WatchStockResponse;
+import dev.eolmae.marketmonitor.domain.view.enums.IntradayInvestorQuery;
+import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
+import dev.eolmae.marketmonitor.domain.view.enums.RankingType;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -71,26 +70,53 @@ public class MarketQueryService {
 
     private static final int RANKING_LIMIT = 10;
 
-    /** 메인 대시보드용 시장 종합 현황 반환 */
+    /** 메인 대시보드용 시장 종합 현황 반환 — HTS에서 화면 여러 개를 오가며 보던 표 7개를 한 화면에 모은 것 */
     public MarketSummaryResponse getMarketSummary() {
         record SummaryDefaults(Market market, AmtQty amtQty, IntradayInvestor investor, RankingType ranking) {}
 
-        var summaryDefaults = new SummaryDefaults(
-                Market.KOSPI, AmtQty.AMOUNT, IntradayInvestor.FOREIGNER, RankingType.NET_BUY);
+        var summaryDefaults =
+                new SummaryDefaults(Market.KOSPI, AmtQty.AMOUNT, IntradayInvestor.FOREIGNER, RankingType.NET_BUY);
 
         return new MarketSummaryResponse(
                 getMarketOverviews(),
                 getInvestorTradingSummaries(),
-                getIntradaySummaryHighlights(
-                        summaryDefaults.market(),
-                        summaryDefaults.investor(),
-                        summaryDefaults.ranking(),
+                getIntradayTop(
+                        List.of(summaryDefaults.market()),
+                        List.of(summaryDefaults.investor()),
+                        IntradayRanking.from(summaryDefaults.ranking()),
                         summaryDefaults.amtQty()),
                 getProgramTradingRankings(
-                        summaryDefaults.market(),
-                        summaryDefaults.ranking(),
-                        summaryDefaults.amtQty()),
-                getIndexContribution(summaryDefaults.market()));
+                        summaryDefaults.market(), summaryDefaults.ranking(), summaryDefaults.amtQty()),
+                getIndexContribution(summaryDefaults.market()),
+                getMainShortSellingHistory(),
+                getMainProgramTradingHistory());
+    }
+
+    /** 관심종목 중 대표 종목의 공매도 추이 반환 — 대표 종목 없으면 빈 값 */
+    private StockHistoryResponse<ShortSellingHistoryItem> getMainShortSellingHistory() {
+        String mainStockCode = findMainStockCode();
+        if (mainStockCode == null) {
+            return StockHistoryResponse.empty();
+        }
+        return getShortSellingHistory(mainStockCode);
+    }
+
+    /** 관심종목 중 대표 종목의 프로그램매매 추이(장중) 반환 — 대표 종목 없으면 빈 값 */
+    private StockHistoryResponse<ProgramTradingHistoryItem> getMainProgramTradingHistory() {
+        String mainStockCode = findMainStockCode();
+        if (mainStockCode == null) {
+            return StockHistoryResponse.empty();
+        }
+        return getProgramTradingHistory(mainStockCode);
+    }
+
+    /** 관심종목 중 대표 종목 코드 반환 — 등록된 게 없으면 null */
+    private String findMainStockCode() {
+        return getWatchStocks().stream()
+                .filter(WatchStockResponse::isMain)
+                .map(WatchStockResponse::stockCode)
+                .findFirst()
+                .orElse(null);
     }
 
     /** 대시보드 요약: 시장 종합 현황 (지수/등락/상하한가) */
@@ -149,42 +175,6 @@ public class MarketQueryService {
                         .toList());
     }
 
-    private SnapshotResponse<IntradayInvestorRankingItem> getIntradaySummaryHighlights(
-            Market market, IntradayInvestor investor, RankingType ranking, AmtQty amtQty) {
-        return getIntradaySummaryHighlights(
-                List.of(market), List.of(investor), IntradayRanking.from(ranking), amtQty);
-    }
-
-    /** 대시보드 요약: KOSPI 기준 외국인 순매수 상위 (대표 조합) */
-    private SnapshotResponse<IntradayInvestorRankingItem> getIntradaySummaryHighlights(
-            List<Market> markets, List<IntradayInvestor> investors, IntradayRanking ranking, AmtQty amtQty) {
-        LocalDateTime latestSnapshotTime = intradayInvestorRankingSnapshotRepository
-                .findFirstByMarketTypeInAndInvestorInAndRankingTypeAndAmtQtyOrderBySnapshotTimeDesc(
-                        markets, investors, ranking, amtQty)
-                .map(IntradayInvestorRankingSnapshot::getSnapshotTime)
-                .orElse(null);
-        if (latestSnapshotTime == null) {
-            return SnapshotResponse.empty();
-        }
-
-        var snapshots = intradayInvestorRankingSnapshotRepository
-                .findByMarketTypeInAndInvestorInAndRankingTypeAndAmtQtyAndSnapshotTimeOrderByRankAsc(
-                        markets, investors, ranking, amtQty, latestSnapshotTime);
-
-        return new SnapshotResponse<>(
-                latestSnapshotTime,
-                snapshots.stream()
-                        .map(item -> new IntradayInvestorRankingItem(
-                                item.getMarketType(),
-                                item.getInvestor(),
-                                item.getRank(),
-                                item.getStockCode(),
-                                item.getStockName(),
-                                item.getNetBuyAmount(),
-                                item.getTradedVolume()))
-                        .toList());
-    }
-
     // TODO 화면에서 미사용 확인됨 (컨트롤러 #3과 동일) — 화면 점검 후 이상 없으면 삭제
     //    public SnapshotResponse<IntradayInvestorRankingItem> getIntradayRankings(
     //            Market marketType, IntradayInvestor investor, IntradayRanking rankingType) {
@@ -234,9 +224,10 @@ public class MarketQueryService {
             return SnapshotResponse.empty();
         }
 
-        var snapshots = programTradingRankingSnapshotRepository
-                .findByMarketTypeInAndRankingTypeAndAmtQtyAndSnapshotTimeOrderByRankAsc(
-                        markets, ranking, amtQty, latestSnapshotTime);
+        var snapshots =
+                programTradingRankingSnapshotRepository
+                        .findByMarketTypeInAndRankingTypeAndAmtQtyAndSnapshotTimeOrderByRankAsc(
+                                markets, ranking, amtQty, latestSnapshotTime);
 
         // market=COMBINED(KOSPI+KOSDAQ)면 마켓별 rank를 합쳐 netBuyAmount 기준으로 다시 정렬
         var sorted = snapshots.stream()
@@ -297,15 +288,23 @@ public class MarketQueryService {
                             ws.getStockCode(),
                             stockInfo.getStockName(),
                             stockInfo.getMarketType(),
-                            isPrimaryRegistered ? ws.isPrimary() : ws.isTopHoldingRank());
+                            isPrimaryRegistered ? ws.isPrimary() : ws.isTopHoldingRank(),
+                            ws.getRegisterBy());
                 })
                 .toList();
     }
 
-    /** 종목별 당일 프로그램매매 이력 반환 */
+    /** 종목별 프로그램매매 이력 최신 20건 반환 */
     public StockHistoryResponse<ProgramTradingHistoryItem> getProgramTradingHistory(String stockCode) {
-        return getProgramTradingHistoryByRange(
-                stockCode, LocalDate.now().atStartOfDay(), LocalDate.now().atTime(LocalTime.MAX));
+        return new StockHistoryResponse<>(
+                stockCode,
+                programTradingHistoryRepository.findRecentByStockCode(stockCode).stream()
+                        .map(item -> new ProgramTradingHistoryItem(
+                                item.getSnapshotTime(),
+                                item.getProgramBuyAmount(),
+                                item.getProgramSellAmount(),
+                                item.getProgramNetBuyAmount()))
+                        .toList());
     }
 
     /** 종목별 기간별 프로그램매매 이력 반환 */
@@ -324,14 +323,26 @@ public class MarketQueryService {
                         .toList());
     }
 
-    /** 일별 데이터는 계속 수집 중이나, 별도 대시보드 화면이 필요 없어 컨트롤러 엔드포인트는 아직 없음 */
-    public StockHistoryResponse<ProgramTradingDailyHistoryItem> getProgramTradingDailyHistory(
+    /** 종목별 프로그램매매 이력(일별) 최신 20건 반환 */
+    public StockHistoryResponse<ProgramTradingDailyHistoryItem> getProgramTradingDailyHistory(String stockCode) {
+        return toProgramTradingDailyHistoryResponse(
+                stockCode, programTradingDailyHistoryRepository.findRecentByStockCode(stockCode));
+    }
+
+    /** 종목별 기간별 프로그램매매 이력(일별) 반환 */
+    public StockHistoryResponse<ProgramTradingDailyHistoryItem> getProgramTradingDailyHistoryByRange(
             String stockCode, LocalDate from, LocalDate to) {
+        return toProgramTradingDailyHistoryResponse(
+                stockCode,
+                programTradingDailyHistoryRepository.findByStockCodeAndTradeDateBetweenOrderByTradeDateDesc(
+                        stockCode, from, to));
+    }
+
+    private StockHistoryResponse<ProgramTradingDailyHistoryItem> toProgramTradingDailyHistoryResponse(
+            String stockCode, List<ProgramTradingDailyHistory> history) {
         return new StockHistoryResponse<>(
                 stockCode,
-                programTradingDailyHistoryRepository
-                        .findByStockCodeAndTradeDateBetweenOrderByTradeDateDesc(stockCode, from, to)
-                        .stream()
+                history.stream()
                         .map(item -> new ProgramTradingDailyHistoryItem(
                                 item.getTradeDate(),
                                 item.getProgramBuyAmount(),
@@ -340,12 +351,11 @@ public class MarketQueryService {
                         .toList());
     }
 
-    /** 공매도 추이 최신 10건 반환 */
+    /** 공매도 추이 최신 20건 반환 */
     public StockHistoryResponse<ShortSellingHistoryItem> getShortSellingHistory(String stockCode) {
         return new StockHistoryResponse<>(
                 stockCode,
-                shortSellingDailyHistoryRepository.findByStockCodeOrderByTradeDateDesc(stockCode).stream()
-                        .limit(RANKING_LIMIT)
+                shortSellingDailyHistoryRepository.findRecentByStockCode(stockCode).stream()
                         .map(item -> new ShortSellingHistoryItem(
                                 item.getTradeDate(),
                                 item.getClosePrice(),
@@ -362,8 +372,7 @@ public class MarketQueryService {
 
     public SnapshotResponse<IntradayInvestorSummaryItem> getIntradayTop(
             MarketQuery market, IntradayInvestorQuery investor, RankingType ranking, AmtQty amtQty) {
-        return getIntradayTop(
-                market.toMarkets(), investor.toInvestors(), IntradayRanking.from(ranking), amtQty);
+        return getIntradayTop(market.toMarkets(), investor.toInvestors(), IntradayRanking.from(ranking), amtQty);
     }
 
     /** 장중 투자자별 매매 상위 top 10 반환 */
@@ -380,9 +389,10 @@ public class MarketQueryService {
             return SnapshotResponse.empty();
         }
 
-        List<IntradayInvestorRankingSnapshot> snapshots = intradayInvestorRankingSnapshotRepository
-                .findByMarketTypeInAndInvestorInAndRankingTypeAndAmtQtyAndSnapshotTimeOrderByRankAsc(
-                        markets, investors, ranking, amtQty, latestSnapshotTime);
+        List<IntradayInvestorRankingSnapshot> snapshots =
+                intradayInvestorRankingSnapshotRepository
+                        .findByMarketTypeInAndInvestorInAndRankingTypeAndAmtQtyAndSnapshotTimeOrderByRankAsc(
+                                markets, investors, ranking, amtQty, latestSnapshotTime);
 
         // investor=FOREIGN_COMBINED(외국인+외국계)처럼 같은 stockCode가 여러 row로 들어올 때 stockCode 기준 합산
         Map<String, BigDecimal> netByStock = new HashMap<>();
@@ -400,8 +410,8 @@ public class MarketQueryService {
         List<IntradayInvestorSummaryItem> items = netList.stream()
                 .sorted(Comparator.comparing(StockNet::netAmount, ranking.valueComparator()))
                 .limit(RANKING_LIMIT)
-                .map(s -> new IntradayInvestorSummaryItem(
-                        s.stockCode(), s.stockName(), ranking.normalize(s.netAmount())))
+                .map(s ->
+                        new IntradayInvestorSummaryItem(s.stockCode(), s.stockName(), ranking.normalize(s.netAmount())))
                 .toList();
 
         return new SnapshotResponse<>(latestSnapshotTime, items);

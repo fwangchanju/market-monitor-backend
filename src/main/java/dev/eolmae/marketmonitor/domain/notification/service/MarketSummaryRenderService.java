@@ -11,7 +11,7 @@ import org.springframework.stereotype.Service;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class MarketSummarySendService {
+public class MarketSummaryRenderService {
 
     private final ScreenshotClient screenshotClient;
     private final TelegramClient telegramClient;

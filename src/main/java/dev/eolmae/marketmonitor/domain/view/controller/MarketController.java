@@ -1,19 +1,19 @@
 package dev.eolmae.marketmonitor.domain.view.controller;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
+import dev.eolmae.marketmonitor.domain.stock.enums.AmtQty;
+import dev.eolmae.marketmonitor.domain.stock.service.WatchStockService;
 import dev.eolmae.marketmonitor.domain.view.dto.*;
 import dev.eolmae.marketmonitor.domain.view.enums.IntradayInvestorQuery;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.enums.RankingType;
 import dev.eolmae.marketmonitor.domain.view.service.MarketQueryService;
-import dev.eolmae.marketmonitor.domain.stock.enums.AmtQty;
-import dev.eolmae.marketmonitor.domain.stock.service.WatchStockService;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
-
-import java.time.LocalDateTime;
-import java.util.List;
 
 @RestController
 @RequestMapping("/api")
@@ -60,9 +60,7 @@ public class MarketController {
 
     @GetMapping("/program-trading-rankings")
     public SnapshotResponse<ProgramTradingRankingItem> getProgramTradingRankings(
-            @RequestParam MarketQuery market,
-            @RequestParam RankingType ranking,
-            @RequestParam AmtQty amtQty) {
+            @RequestParam MarketQuery market, @RequestParam RankingType ranking, @RequestParam AmtQty amtQty) {
         return marketQueryService.getProgramTradingRankings(market, ranking, amtQty);
     }
 
@@ -101,8 +99,7 @@ public class MarketController {
     // ── 종목별 이력 ───────────────────────────────────────────────────────
 
     @GetMapping("/stocks/{stockCode}/program-trading")
-    public StockHistoryResponse<ProgramTradingHistoryItem> getProgramTradingHistory(
-            @PathVariable String stockCode) {
+    public StockHistoryResponse<ProgramTradingHistoryItem> getProgramTradingHistory(@PathVariable String stockCode) {
         return marketQueryService.getProgramTradingHistory(stockCode);
     }
 
@@ -112,6 +109,20 @@ public class MarketController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
         return marketQueryService.getProgramTradingHistoryByRange(stockCode, from, to);
+    }
+
+    @GetMapping("/stocks/{stockCode}/program-trading/daily")
+    public StockHistoryResponse<ProgramTradingDailyHistoryItem> getProgramTradingDailyHistory(
+            @PathVariable String stockCode) {
+        return marketQueryService.getProgramTradingDailyHistory(stockCode);
+    }
+
+    @GetMapping("/stocks/{stockCode}/program-trading/daily/range")
+    public StockHistoryResponse<ProgramTradingDailyHistoryItem> getProgramTradingDailyHistoryByRange(
+            @PathVariable String stockCode,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return marketQueryService.getProgramTradingDailyHistoryByRange(stockCode, from, to);
     }
 
     @GetMapping("/stocks/{stockCode}/short-selling")

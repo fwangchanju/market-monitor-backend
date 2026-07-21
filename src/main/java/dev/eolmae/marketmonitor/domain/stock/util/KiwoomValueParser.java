@@ -4,7 +4,6 @@ import dev.eolmae.marketmonitor.common.util.NumberParser;
 import dev.eolmae.marketmonitor.common.util.Strings;
 import java.math.BigDecimal;
 
-
 // 키움 API 응답의 숫자 필드(콤마, "-" 무데이터 마커, 이중 음수 부호 등) 정규화 후 파싱
 public final class KiwoomValueParser {
 

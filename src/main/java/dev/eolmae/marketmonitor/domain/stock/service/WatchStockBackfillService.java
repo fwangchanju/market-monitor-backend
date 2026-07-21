@@ -76,8 +76,7 @@ public class WatchStockBackfillService {
         String stockCode = watchStock.getStockCode();
         LocalDate targetTradeDate = targetTradeDate(PROGRAM_TRADING_DAILY_SCHEDULE_TIME);
         if (programTradingDailyRepository.existsByStockCodeAndTradeDate(stockCode, targetTradeDate)) {
-            log.debug(
-                    "프로그램매매 일별 백필 스킵 (대상일 데이터 있음): stockCode={}, targetTradeDate={}", stockCode, targetTradeDate);
+            log.debug("프로그램매매 일별 백필 스킵 (대상일 데이터 있음): stockCode={}, targetTradeDate={}", stockCode, targetTradeDate);
             return;
         }
         try {

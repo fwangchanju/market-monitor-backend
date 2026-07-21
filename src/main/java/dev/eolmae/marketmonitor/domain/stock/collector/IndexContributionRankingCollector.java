@@ -4,8 +4,8 @@ import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.enums.Zone;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
-import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import dev.eolmae.marketmonitor.common.util.StockCode;
+import dev.eolmae.marketmonitor.common.util.Strings;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.SectorCurrentPriceRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.SectorCurrentPriceResponse;
@@ -21,6 +21,7 @@ import dev.eolmae.marketmonitor.domain.stock.repository.IndexContributionRanking
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketOverviewSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.SectorPriceSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
+import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
@@ -31,7 +32,6 @@ import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import dev.eolmae.marketmonitor.common.util.Strings;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -72,7 +72,8 @@ public class IndexContributionRankingCollector {
         String indsCd = IndsCd.from(market);
 
         BigDecimal prevIndexValue = collectMarketOverview(market, mrktTp, indsCd, snapshotTime); // ka20001
-        List<SectorPriceListResponse.StockItem> items = collectSectorPrice(market, mrktTp, indsCd, snapshotTime); // ka20002
+        List<SectorPriceListResponse.StockItem> items =
+                collectSectorPrice(market, mrktTp, indsCd, snapshotTime); // ka20002
 
         if (indexContributionRankingSnapshotRepository.existsBySnapshotTimeAndMarketType(snapshotTime, market)) {
             log.debug("지수기여도랭킹 이미 존재, 스킵: market={}, snapshotTime={}", market, snapshotTime);
@@ -146,8 +147,11 @@ public class IndexContributionRankingCollector {
     }
 
     private void computeAndSaveRanking(
-            Market market, List<SectorPriceListResponse.StockItem> items,
-            Map<String, StockInfo> stockInfoCache, BigDecimal prevIndexValue, LocalDateTime snapshotTime) {
+            Market market,
+            List<SectorPriceListResponse.StockItem> items,
+            Map<String, StockInfo> stockInfoCache,
+            BigDecimal prevIndexValue,
+            LocalDateTime snapshotTime) {
 
         // 유효 종목 필터링 및 전일 시가총액 합산
         StockMarketCode marketCode = StockMarketCode.from(market);
@@ -165,8 +169,8 @@ public class IndexContributionRankingCollector {
                 continue;
             }
             // 전일종가 × 상장주식수 = 종목별 전일 시가총액 합산
-            prevMarketCapitalization =
-                    prevMarketCapitalization.add(stockInfo.getLastPrice().multiply(BigDecimal.valueOf(stockInfo.getListCount())));
+            prevMarketCapitalization = prevMarketCapitalization.add(
+                    stockInfo.getLastPrice().multiply(BigDecimal.valueOf(stockInfo.getListCount())));
             candidates.add(new StockCandidate(
                     stockCode,
                     Strings.trimToEmpty(item.stkNm()),
@@ -224,8 +228,12 @@ public class IndexContributionRankingCollector {
     }
 
     private record StockCandidate(
-            String stockCode, String stockName, String marketCode,
-            BigDecimal curPrice, BigDecimal prevPrice, BigDecimal listCount) {}
+            String stockCode,
+            String stockName,
+            String marketCode,
+            BigDecimal curPrice,
+            BigDecimal prevPrice,
+            BigDecimal listCount) {}
 
     private record ScoredStock(
             String stockCode, String stockName, String marketCode, BigDecimal contribution, BigDecimal changeRate) {}

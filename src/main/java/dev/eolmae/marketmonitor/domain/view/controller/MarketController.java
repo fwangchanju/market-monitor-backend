@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -112,6 +113,20 @@ public class MarketController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
         return marketQueryService.getProgramTradingHistoryByRange(stockCode, from, to);
+    }
+
+    @GetMapping("/stocks/{stockCode}/program-trading/daily")
+    public StockHistoryResponse<ProgramTradingDailyHistoryItem> getProgramTradingDailyHistory(
+            @PathVariable String stockCode) {
+        return marketQueryService.getProgramTradingDailyHistory(stockCode);
+    }
+
+    @GetMapping("/stocks/{stockCode}/program-trading/daily/range")
+    public StockHistoryResponse<ProgramTradingDailyHistoryItem> getProgramTradingDailyHistoryByRange(
+            @PathVariable String stockCode,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return marketQueryService.getProgramTradingDailyHistoryByRange(stockCode, from, to);
     }
 
     @GetMapping("/stocks/{stockCode}/short-selling")

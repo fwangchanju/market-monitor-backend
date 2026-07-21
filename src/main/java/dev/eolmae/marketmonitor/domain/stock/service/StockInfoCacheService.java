@@ -23,8 +23,7 @@ public class StockInfoCacheService implements CacheService<Map<String, StockInfo
     @Cacheable(CacheKey.STOCK_INFO)
     @Transactional(readOnly = true)
     public Map<String, StockInfo> getCache() {
-        return stockInfoRepository.findAll()
-                .stream()
+        return stockInfoRepository.findAll().stream()
                 .collect(Collectors.toMap(StockInfo::getStockCode, Function.identity()));
     }
 

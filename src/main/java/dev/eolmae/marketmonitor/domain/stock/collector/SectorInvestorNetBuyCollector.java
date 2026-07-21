@@ -1,8 +1,10 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
+import dev.eolmae.marketmonitor.common.enums.DateTimePattern;
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.enums.Zone;
-import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
+import dev.eolmae.marketmonitor.common.exception.ErrorCode;
+import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.SectorInvestorNetBuyRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.SectorInvestorNetBuyResponse;
@@ -11,9 +13,7 @@ import dev.eolmae.marketmonitor.domain.stock.enums.AmtQty;
 import dev.eolmae.marketmonitor.domain.stock.enums.Investor;
 import dev.eolmae.marketmonitor.domain.stock.enums.StexType;
 import dev.eolmae.marketmonitor.domain.stock.repository.InvestorTradingSummarySnapshotRepository;
-import dev.eolmae.marketmonitor.common.enums.DateTimePattern;
-import dev.eolmae.marketmonitor.common.exception.ErrorCode;
-import dev.eolmae.marketmonitor.common.exception.EscalateException;
+import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
@@ -75,52 +75,39 @@ public class SectorInvestorNetBuyCollector {
         log.debug("투자자별매매종합 수집 완료: market={}", market);
     }
 
-    private static BigDecimal resolveNetBuy(
-            Investor investor, SectorInvestorNetBuyResponse.IndsNetprps item) {
-        return KiwoomValueParser.parseBigDecimal(switch (investor) {
-            case PERSONAL -> item.indNetprps();
-            case FOREIGNER -> item.frgnrNetprps();
-            case INSTITUTION -> item.orgnNetprps();
-            case FINANCIAL_INVESTMENT -> item.scNetprps();
-            case TRUST -> item.invtrtNetprps();
-            case PENSION_FUND -> item.endwNetprps();
-            case PRIVATE_FUND -> item.samoFundNetprps();
-            case INSURANCE -> item.insrncNetprps();
-            case BANK -> item.bankNetprps();
-            case OTHER_CORP -> item.etcCorpNetprps();
-            case GOVERNMENT -> item.natnNetprps();
-            case OTHER_FINANCE -> item.jnsinkmNetprps();
-            case FOREIGN_COMPANY -> item.nativeTrmtFrgnrNetprps();
-        });
+    private static BigDecimal resolveNetBuy(Investor investor, SectorInvestorNetBuyResponse.IndsNetprps item) {
+        return KiwoomValueParser.parseBigDecimal(
+                switch (investor) {
+                    case PERSONAL -> item.indNetprps();
+                    case FOREIGNER -> item.frgnrNetprps();
+                    case INSTITUTION -> item.orgnNetprps();
+                    case FINANCIAL_INVESTMENT -> item.scNetprps();
+                    case TRUST -> item.invtrtNetprps();
+                    case PENSION_FUND -> item.endwNetprps();
+                    case PRIVATE_FUND -> item.samoFundNetprps();
+                    case INSURANCE -> item.insrncNetprps();
+                    case BANK -> item.bankNetprps();
+                    case OTHER_CORP -> item.etcCorpNetprps();
+                    case GOVERNMENT -> item.natnNetprps();
+                    case OTHER_FINANCE -> item.jnsinkmNetprps();
+                    case FOREIGN_COMPANY -> item.nativeTrmtFrgnrNetprps();
+                });
     }
 
     private void saveSnapshot(
-            Market market,
-            Investor investor,
-            BigDecimal netBuyAmount,
-            LocalDateTime snapshotTime,
-            LocalDateTime now) {
+            Market market, Investor investor, BigDecimal netBuyAmount, LocalDateTime snapshotTime, LocalDateTime now) {
 
-        if (investorTradingSummarySnapshotRepository
-                .existsByMarketTypeAndInvestorAndAmtQtyAndSnapshotTime(
-                        market, investor, AmtQty.AMOUNT, snapshotTime)) {
+        if (investorTradingSummarySnapshotRepository.existsByMarketTypeAndInvestorAndAmtQtyAndSnapshotTime(
+                market, investor, AmtQty.AMOUNT, snapshotTime)) {
             return;
         }
         investorTradingSummarySnapshotRepository.save(toEntity(market, investor, netBuyAmount, snapshotTime, now));
     }
 
     private static InvestorTradingSummarySnapshot toEntity(
-            Market market, Investor investor, BigDecimal netBuyAmount,
-            LocalDateTime snapshotTime, LocalDateTime now) {
+            Market market, Investor investor, BigDecimal netBuyAmount, LocalDateTime snapshotTime, LocalDateTime now) {
         return InvestorTradingSummarySnapshot.create(
-                market,
-                investor,
-                AmtQty.AMOUNT,
-                snapshotTime,
-                BigDecimal.ZERO,
-                BigDecimal.ZERO,
-                netBuyAmount,
-                now);
+                market, investor, AmtQty.AMOUNT, snapshotTime, BigDecimal.ZERO, BigDecimal.ZERO, netBuyAmount, now);
     }
 
     private enum MrktTp {

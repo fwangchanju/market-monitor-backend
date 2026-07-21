@@ -11,8 +11,6 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import javax.swing.text.html.Option;
-
 @Service
 @RequiredArgsConstructor
 public class WatchStockCacheService implements CacheService<List<WatchStock>> {

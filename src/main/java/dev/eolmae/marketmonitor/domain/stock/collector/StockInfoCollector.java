@@ -3,20 +3,20 @@ package dev.eolmae.marketmonitor.domain.stock.collector;
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
-import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
+import dev.eolmae.marketmonitor.common.util.Strings;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.StockInfoRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.StockInfoResponse;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
+import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import dev.eolmae.marketmonitor.common.util.Strings;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,10 +51,7 @@ public class StockInfoCollector {
             if (fetched == null) {
                 if (existing.isActive()) {
                     existing.markInactive();
-                    log.debug(
-                            "종목 비활성화: stockCode={}, stockName={}",
-                            existing.getStockCode(),
-                            existing.getStockName());
+                    log.debug("종목 비활성화: stockCode={}, stockName={}", existing.getStockCode(), existing.getStockName());
                 }
                 continue;
             }

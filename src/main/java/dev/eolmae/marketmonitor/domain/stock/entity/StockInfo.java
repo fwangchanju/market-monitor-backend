@@ -74,7 +74,12 @@ public class StockInfo {
     }
 
     public void update(
-            String stockName, Market marketType, String marketCode, String categoryName, Long listCount, BigDecimal lastPrice) {
+            String stockName,
+            Market marketType,
+            String marketCode,
+            String categoryName,
+            Long listCount,
+            BigDecimal lastPrice) {
         this.stockName = stockName;
         this.marketType = marketType;
         this.marketCode = marketCode;

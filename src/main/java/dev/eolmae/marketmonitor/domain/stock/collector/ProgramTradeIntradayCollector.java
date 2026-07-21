@@ -1,7 +1,6 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
 import dev.eolmae.marketmonitor.common.enums.DateTimePattern;
-import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.HourlyProgramTradeTrendRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.HourlyProgramTradeTrendResponse;
@@ -10,6 +9,7 @@ import dev.eolmae.marketmonitor.domain.stock.entity.WatchStock;
 import dev.eolmae.marketmonitor.domain.stock.enums.StexType;
 import dev.eolmae.marketmonitor.domain.stock.repository.ProgramTradingHistoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.WatchStockCacheService;
+import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -64,7 +64,8 @@ public class ProgramTradeIntradayCollector {
         String stockCode = watchStock.getStockCode();
         String dateStr = snapshotTime.format(DateTimePattern.DATE.formatter());
 
-        Queue<HourlyProgramTradeTrendResponse.TradeTick> krxQueue = sortedQueue(fetchProgramTradeTicks(stockCode, dateStr));
+        Queue<HourlyProgramTradeTrendResponse.TradeTick> krxQueue =
+                sortedQueue(fetchProgramTradeTicks(stockCode, dateStr));
         Queue<HourlyProgramTradeTrendResponse.TradeTick> nxtQueue =
                 sortedQueue(fetchProgramTradeTicks(stockCode + "_NX", dateStr));
 
@@ -149,7 +150,8 @@ public class ProgramTradeIntradayCollector {
     }
 
     private static boolean hasEarlierTick(Queue<HourlyProgramTradeTrendResponse.TradeTick> queue, LocalTime boundary) {
-        return !queue.isEmpty() && LocalTime.parse(queue.peek().tm(), TIME_FORMATTER).isBefore(boundary);
+        return !queue.isEmpty()
+                && LocalTime.parse(queue.peek().tm(), TIME_FORMATTER).isBefore(boundary);
     }
 
     private record TradeAmount(BigDecimal buy, BigDecimal sell) {

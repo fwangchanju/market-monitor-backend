@@ -7,7 +7,8 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface IndexContributionRankingSnapshotRepository extends JpaRepository<IndexContributionRankingSnapshot, Long> {
+public interface IndexContributionRankingSnapshotRepository
+        extends JpaRepository<IndexContributionRankingSnapshot, Long> {
 
     boolean existsBySnapshotTimeAndMarketType(LocalDateTime snapshotTime, Market market);
 

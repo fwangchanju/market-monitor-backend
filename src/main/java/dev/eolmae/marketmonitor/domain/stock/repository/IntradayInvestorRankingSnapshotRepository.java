@@ -10,17 +10,15 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface IntradayInvestorRankingSnapshotRepository extends JpaRepository<IntradayInvestorRankingSnapshot, Long> {
+public interface IntradayInvestorRankingSnapshotRepository
+        extends JpaRepository<IntradayInvestorRankingSnapshot, Long> {
 
     boolean existsBySnapshotTimeAndMarketTypeAndInvestorAndRankingType(
             LocalDateTime snapshotTime, Market market, IntradayInvestor investor, IntradayRanking ranking);
 
     Optional<IntradayInvestorRankingSnapshot>
             findFirstByMarketTypeInAndInvestorInAndRankingTypeAndAmtQtyOrderBySnapshotTimeDesc(
-                    List<Market> markets,
-                    List<IntradayInvestor> investors,
-                    IntradayRanking ranking,
-                    AmtQty amtQty);
+                    List<Market> markets, List<IntradayInvestor> investors, IntradayRanking ranking, AmtQty amtQty);
 
     List<IntradayInvestorRankingSnapshot>
             findByMarketTypeInAndInvestorInAndRankingTypeAndAmtQtyAndSnapshotTimeOrderByRankAsc(

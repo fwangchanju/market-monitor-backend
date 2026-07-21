@@ -1,6 +1,5 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
-import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.AccountBalanceRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.AccountBalanceResponse;
@@ -11,7 +10,7 @@ import dev.eolmae.marketmonitor.domain.stock.repository.WatchStockRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketmonitor.domain.stock.service.WatchStockBackfillService;
 import dev.eolmae.marketmonitor.domain.stock.service.WatchStockCacheService;
-
+import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -59,7 +58,9 @@ public class HoldingsSyncService {
         // 보유 없는 HOLDINGS 삭제
         watchStockRepository.deleteByRegisterByAndStockCodeNotIn(
                 RegisterBy.HOLDINGS,
-                sortedHoldings.stream().map(AccountBalanceResponse.HoldingItem::stockCode).toList());
+                sortedHoldings.stream()
+                        .map(AccountBalanceResponse.HoldingItem::stockCode)
+                        .toList());
 
         Map<String, WatchStock> existingHoldings = watchStockRepository.findByRegisterBy(RegisterBy.HOLDINGS).stream()
                 .collect(Collectors.toMap(WatchStock::getStockCode, Function.identity()));

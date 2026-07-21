@@ -75,7 +75,8 @@ public class KiwoomApiClient {
         return fetchPage(request, dataClass, null);
     }
 
-    private <T extends KiwoomResponse> PageResult<T> fetchPage(KiwoomRequest request, Class<T> dataClass, String nextKey) {
+    private <T extends KiwoomResponse> PageResult<T> fetchPage(
+            KiwoomRequest request, Class<T> dataClass, String nextKey) {
         acquire();
         ResponseEntity<T> entity = fetch(request, dataClass, nextKey);
         return toPageResult(request, entity);

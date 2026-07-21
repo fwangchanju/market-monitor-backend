@@ -16,4 +16,6 @@ public interface WatchStockRepository extends JpaRepository<WatchStock, Long> {
     List<WatchStock> findByRegisterBy(RegisterBy registerBy);
 
     Optional<WatchStock> findByStockCode(String stockCode);
+
+    Optional<WatchStock> findByIsPrimaryTrue();
 }

@@ -68,6 +68,18 @@ public class WatchStock {
         this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
     }
 
+    /** HOLDINGS였다면 USER로 바꿔 보유종목 동기화 삭제 대상에서 제외(대표 지정은 보유 여부와 무관하게 유지되어야 함) */
+    public void designateAsPrimary() {
+        this.registerBy = RegisterBy.USER;
+        this.isPrimary = true;
+        this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
+    }
+
+    public void clearPrimary() {
+        this.isPrimary = false;
+        this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
+    }
+
     public boolean isTopHoldingRank() {
         int topHoldingRank = 1;
         return Objects.equals(topHoldingRank, holdingRank);

@@ -25,6 +25,7 @@ import dev.eolmae.marketmonitor.domain.stock.repository.ShortSellingDailyHistory
 import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketmonitor.domain.stock.service.WatchStockCacheService;
+import dev.eolmae.marketmonitor.domain.stock.util.CollectionChecker;
 import dev.eolmae.marketmonitor.domain.view.dto.IndexContributionItem;
 import dev.eolmae.marketmonitor.domain.view.dto.IntradayInvestorSummaryItem;
 import dev.eolmae.marketmonitor.domain.view.dto.InvestorTradingSummaryItem;
@@ -296,10 +297,11 @@ public class MarketQueryService {
                 .toList();
     }
 
-    /** 종목별 당일 프로그램매매 이력 반환 */
+    /** 종목별 최근 프로그램매매 이력 반환 — 장 시작 직후에도 데이터가 너무 적지 않도록 최근 2거래일을 더해 반환 */
     public StockHistoryResponse<ProgramTradingHistoryItem> getProgramTradingHistory(String stockCode) {
         LocalDate today = LocalDate.now(Zone.KST.zoneId());
-        return getProgramTradingHistoryByRange(stockCode, today.atStartOfDay(), today.atTime(LocalTime.MAX));
+        LocalDate from = CollectionChecker.previousTradingDay(CollectionChecker.previousTradingDay(today));
+        return getProgramTradingHistoryByRange(stockCode, from.atStartOfDay(), today.atTime(LocalTime.MAX));
     }
 
     /** 종목별 기간별 프로그램매매 이력 반환 */

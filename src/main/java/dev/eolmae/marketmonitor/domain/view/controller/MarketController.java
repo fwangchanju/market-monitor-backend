@@ -96,6 +96,16 @@ public class MarketController {
         watchStockService.unregister(stockCode);
     }
 
+    @PatchMapping("/watch-stocks/{stockCode}/primary")
+    public void designateAsPrimaryWatchStock(@PathVariable String stockCode) {
+        watchStockService.designateAsPrimary(stockCode);
+    }
+
+    @PutMapping("/watch-stocks/{stockCode}/primary")
+    public void registerAsPrimaryWatchStock(@PathVariable String stockCode) {
+        watchStockService.registerAsPrimary(stockCode);
+    }
+
     // ── 종목별 이력 ───────────────────────────────────────────────────────
 
     @GetMapping("/stocks/{stockCode}/program-trading")

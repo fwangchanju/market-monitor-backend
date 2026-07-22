@@ -16,4 +16,4 @@ public record MarketOverviewItem(
         int advancers,
         int decliners,
         int unchangedCount,
-        LocalDateTime lastCollectedAt) {}
+        LocalDateTime snapshotTime) {}

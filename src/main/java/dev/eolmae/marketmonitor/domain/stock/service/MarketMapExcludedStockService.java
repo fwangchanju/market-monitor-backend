@@ -24,4 +24,8 @@ public class MarketMapExcludedStockService {
     public void unregister(String stockCode) {
         marketMapExcludedStockRepository.findById(stockCode).ifPresent(MarketMapExcludedStock::deactivate);
     }
+
+    public void deleteAll() {
+        marketMapExcludedStockRepository.deleteAllInBatch();
+    }
 }

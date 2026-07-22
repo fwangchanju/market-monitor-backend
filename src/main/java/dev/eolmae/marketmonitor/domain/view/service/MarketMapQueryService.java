@@ -10,6 +10,7 @@ import dev.eolmae.marketmonitor.domain.stock.repository.MarketMapExcludedStockRe
 import dev.eolmae.marketmonitor.domain.stock.repository.SectorPriceSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.StockCategoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
+import dev.eolmae.marketmonitor.domain.stock.util.CollectionChecker;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryGroup;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapItem;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
@@ -56,13 +57,15 @@ public class MarketMapQueryService {
         Map<String, List<MarketMapItem>> grouped = candidates.stream()
                 .collect(Collectors.groupingBy(
                         stockInfo -> resolveCategoryName(stockInfo, categoryMap),
-                        Collectors.mapping(stockInfo -> toMarketMapItem(stockInfo, priceMap), Collectors.toList())));
+                        Collectors.mapping(
+                                stockInfo -> toMarketMapItem(stockInfo, priceMap, latestSnapshotTime),
+                                Collectors.toList())));
 
         List<MarketMapCategoryGroup> groups = grouped.entrySet().stream()
                 .map(entry -> new MarketMapCategoryGroup(entry.getKey(), entry.getValue()))
                 .toList();
 
-        return new SnapshotResponse<>(latestSnapshotTime, groups);
+        return new SnapshotResponse<>(CollectionChecker.expectedSnapshotTime(), groups);
     }
 
     private List<StockInfo> filterCandidates(Market market, boolean isExclude) {
@@ -96,7 +99,8 @@ public class MarketMapQueryService {
         return categoryName;
     }
 
-    private MarketMapItem toMarketMapItem(StockInfo stockInfo, Map<String, SectorPriceSnapshot> priceMap) {
+    private MarketMapItem toMarketMapItem(
+            StockInfo stockInfo, Map<String, SectorPriceSnapshot> priceMap, LocalDateTime snapshotTime) {
         BigDecimal currentPrice = BigDecimal.ZERO;
         BigDecimal changeRate = BigDecimal.ZERO;
         SectorPriceSnapshot priceSnapshot = priceMap.get(stockInfo.getStockCode());
@@ -106,6 +110,7 @@ public class MarketMapQueryService {
         }
         BigDecimal totalMarketValue = currentPrice.multiply(BigDecimal.valueOf(stockInfo.getListCount()));
 
-        return new MarketMapItem(stockInfo.getStockCode(), stockInfo.getStockName(), totalMarketValue, changeRate);
+        return new MarketMapItem(
+                stockInfo.getStockCode(), stockInfo.getStockName(), totalMarketValue, changeRate, snapshotTime);
     }
 }

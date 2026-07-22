@@ -24,6 +24,7 @@ import dev.eolmae.marketmonitor.domain.stock.repository.ShortSellingDailyHistory
 import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketmonitor.domain.stock.service.WatchStockCacheService;
+import dev.eolmae.marketmonitor.domain.stock.util.CollectionChecker;
 import dev.eolmae.marketmonitor.domain.view.dto.IndexContributionItem;
 import dev.eolmae.marketmonitor.domain.view.dto.IntradayInvestorSummaryItem;
 import dev.eolmae.marketmonitor.domain.view.dto.InvestorTradingSummaryItem;
@@ -132,7 +133,7 @@ public class MarketQueryService {
         var snapshots = marketOverviewSnapshotRepository.findBySnapshotTimeOrderByMarketTypeAsc(latestSnapshotTime);
 
         return new SnapshotResponse<>(
-                latestSnapshotTime,
+                CollectionChecker.expectedSnapshotTime(),
                 snapshots.stream()
                         .map(item -> new MarketOverviewItem(
                                 item.getMarketType(),
@@ -146,7 +147,7 @@ public class MarketQueryService {
                                 item.getAdvancers(),
                                 item.getDecliners(),
                                 item.getUnchangedCount(),
-                                item.getLastCollectedAt()))
+                                item.getSnapshotTime()))
                         .toList());
     }
 
@@ -164,14 +165,15 @@ public class MarketQueryService {
                 latestSnapshotTime);
 
         return new SnapshotResponse<>(
-                latestSnapshotTime,
+                CollectionChecker.expectedSnapshotTime(),
                 snapshots.stream()
                         .map(item -> new InvestorTradingSummaryItem(
                                 item.getMarketType(),
                                 item.getInvestor(),
                                 item.getBuyAmount(),
                                 item.getSellAmount(),
-                                item.getNetBuyAmount()))
+                                item.getNetBuyAmount(),
+                                item.getSnapshotTime()))
                         .toList());
     }
 
@@ -236,7 +238,7 @@ public class MarketQueryService {
                 .toList();
 
         return new SnapshotResponse<>(
-                latestSnapshotTime,
+                CollectionChecker.expectedSnapshotTime(),
                 sorted.stream()
                         .limit(RANKING_LIMIT)
                         .map(item -> new ProgramTradingRankingItem(
@@ -245,7 +247,8 @@ public class MarketQueryService {
                                 item.getStockName(),
                                 item.getProgramBuyAmount(),
                                 item.getProgramSellAmount(),
-                                ranking.normalize(item.getProgramNetBuyAmount())))
+                                ranking.normalize(item.getProgramNetBuyAmount()),
+                                item.getSnapshotTime()))
                         .toList());
     }
 
@@ -269,10 +272,11 @@ public class MarketQueryService {
                         item.getStockCode(),
                         item.getStockName(),
                         item.getContributionScore(),
-                        item.getPriceChangeRate()))
+                        item.getPriceChangeRate(),
+                        item.getSnapshotTime()))
                 .toList();
 
-        return new SnapshotResponse<>(latestSnapshotTime, items);
+        return new SnapshotResponse<>(CollectionChecker.expectedSnapshotTime(), items);
     }
 
     /** 관심종목 목록 반환 */
@@ -298,6 +302,7 @@ public class MarketQueryService {
     public StockHistoryResponse<ProgramTradingHistoryItem> getProgramTradingHistory(String stockCode) {
         return new StockHistoryResponse<>(
                 stockCode,
+                CollectionChecker.expectedSnapshotTime(),
                 programTradingHistoryRepository.findRecentByStockCode(stockCode).stream()
                         .map(item -> new ProgramTradingHistoryItem(
                                 item.getSnapshotTime(),
@@ -312,6 +317,7 @@ public class MarketQueryService {
             String stockCode, LocalDateTime from, LocalDateTime to) {
         return new StockHistoryResponse<>(
                 stockCode,
+                CollectionChecker.expectedSnapshotTime(),
                 programTradingHistoryRepository
                         .findByStockCodeAndSnapshotTimeBetweenOrderBySnapshotTimeAsc(stockCode, from, to)
                         .stream()
@@ -342,6 +348,7 @@ public class MarketQueryService {
             String stockCode, List<ProgramTradingDailyHistory> history) {
         return new StockHistoryResponse<>(
                 stockCode,
+                CollectionChecker.expectedSnapshotTime(),
                 history.stream()
                         .map(item -> new ProgramTradingDailyHistoryItem(
                                 item.getTradeDate(),
@@ -355,6 +362,7 @@ public class MarketQueryService {
     public StockHistoryResponse<ShortSellingHistoryItem> getShortSellingHistory(String stockCode) {
         return new StockHistoryResponse<>(
                 stockCode,
+                CollectionChecker.expectedSnapshotTime(),
                 shortSellingDailyHistoryRepository.findRecentByStockCode(stockCode).stream()
                         .map(item -> new ShortSellingHistoryItem(
                                 item.getTradeDate(),
@@ -410,11 +418,11 @@ public class MarketQueryService {
         List<IntradayInvestorSummaryItem> items = netList.stream()
                 .sorted(Comparator.comparing(StockNet::netAmount, ranking.valueComparator()))
                 .limit(RANKING_LIMIT)
-                .map(s ->
-                        new IntradayInvestorSummaryItem(s.stockCode(), s.stockName(), ranking.normalize(s.netAmount())))
+                .map(s -> new IntradayInvestorSummaryItem(
+                        s.stockCode(), s.stockName(), ranking.normalize(s.netAmount()), latestSnapshotTime))
                 .toList();
 
-        return new SnapshotResponse<>(latestSnapshotTime, items);
+        return new SnapshotResponse<>(CollectionChecker.expectedSnapshotTime(), items);
     }
 
     /** 활성 종목 전체 반환 — 관심종목 등록 화면 자동완성용 */

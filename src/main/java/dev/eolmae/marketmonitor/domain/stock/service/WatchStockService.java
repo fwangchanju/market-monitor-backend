@@ -3,7 +3,6 @@ package dev.eolmae.marketmonitor.domain.stock.service;
 import dev.eolmae.marketmonitor.common.exception.BusinessException;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.domain.stock.entity.WatchStock;
-import dev.eolmae.marketmonitor.domain.stock.enums.RegisterBy;
 import dev.eolmae.marketmonitor.domain.stock.repository.WatchStockRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -28,13 +27,10 @@ public class WatchStockService {
     }
 
     public void unregister(String stockCode) {
-        watchStockRepository
-                .findByStockCode(stockCode)
-                .filter(watchStock -> watchStock.getRegisterBy() == RegisterBy.USER)
-                .ifPresent(watchStock -> {
-                    watchStockRepository.delete(watchStock);
-                    watchStockCacheService.evict();
-                });
+        watchStockRepository.findByStockCode(stockCode).ifPresent(watchStock -> {
+            watchStockRepository.delete(watchStock);
+            watchStockCacheService.evict();
+        });
     }
 
     public void designateAsPrimary(String stockCode) {
@@ -50,5 +46,14 @@ public class WatchStockService {
     public void registerAsPrimary(String stockCode) {
         register(stockCode);
         designateAsPrimary(stockCode);
+    }
+
+    /** 대표 지위만 해제하고 관심종목 등록은 유지 */
+    public void clearPrimary(String stockCode) {
+        WatchStock target = watchStockRepository
+                .findByStockCode(stockCode)
+                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_INPUT, stockCode));
+        target.clearPrimary();
+        watchStockCacheService.evict();
     }
 }

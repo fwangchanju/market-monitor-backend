@@ -106,6 +106,11 @@ public class MarketController {
         watchStockService.registerAsPrimary(stockCode);
     }
 
+    @DeleteMapping("/watch-stocks/{stockCode}/primary")
+    public void clearPrimaryWatchStock(@PathVariable String stockCode) {
+        watchStockService.clearPrimary(stockCode);
+    }
+
     // ── 종목별 이력 ───────────────────────────────────────────────────────
 
     @GetMapping("/stocks/{stockCode}/program-trading")

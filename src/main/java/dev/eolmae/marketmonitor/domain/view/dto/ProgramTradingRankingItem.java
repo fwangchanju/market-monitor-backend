@@ -1,6 +1,7 @@
 package dev.eolmae.marketmonitor.domain.view.dto;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 public record ProgramTradingRankingItem(
         int rank,
@@ -8,4 +9,5 @@ public record ProgramTradingRankingItem(
         String stockName,
         BigDecimal programBuyAmount,
         BigDecimal programSellAmount,
-        BigDecimal programNetBuyAmount) {}
+        BigDecimal programNetBuyAmount,
+        LocalDateTime snapshotTime) {}

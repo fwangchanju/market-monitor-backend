@@ -20,4 +20,12 @@ public class StockCategoryService {
                         category -> category.update(categoryName),
                         () -> stockCategoryRepository.save(StockCategory.create(stockCode, categoryName)));
     }
+
+    public void delete(String stockCode) {
+        stockCategoryRepository.deleteById(stockCode);
+    }
+
+    public void deleteAll() {
+        stockCategoryRepository.deleteAllInBatch();
+    }
 }

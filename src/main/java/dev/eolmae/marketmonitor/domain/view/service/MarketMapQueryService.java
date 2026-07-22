@@ -11,9 +11,11 @@ import dev.eolmae.marketmonitor.domain.stock.repository.SectorPriceSnapshotRepos
 import dev.eolmae.marketmonitor.domain.stock.repository.StockCategoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketmonitor.domain.stock.util.CollectionChecker;
+import dev.eolmae.marketmonitor.domain.view.dto.ExcludedStockItem;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryGroup;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapItem;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
+import dev.eolmae.marketmonitor.domain.view.dto.StockCategoryItem;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -111,6 +113,36 @@ public class MarketMapQueryService {
         BigDecimal totalMarketValue = currentPrice.multiply(BigDecimal.valueOf(stockInfo.getListCount()));
 
         return new MarketMapItem(
-                stockInfo.getStockCode(), stockInfo.getStockName(), totalMarketValue, changeRate, snapshotTime);
+                stockInfo.getStockCode(),
+                stockInfo.getStockName(),
+                stockInfo.getLastPrice(),
+                totalMarketValue,
+                changeRate,
+                snapshotTime);
+    }
+
+    /** 마켓맵 표시 제외 종목 목록 */
+    public List<ExcludedStockItem> listExcludedStocks() {
+        Map<String, StockInfo> stockInfoCache = stockInfoCacheService.getCache();
+        return marketMapExcludedStockRepository.findByIsActiveTrue().stream()
+                .map(excluded -> new ExcludedStockItem(
+                        excluded.getStockCode(), resolveStockName(excluded.getStockCode(), stockInfoCache)))
+                .toList();
+    }
+
+    /** 카테고리 재분류(수동 오버라이드)된 종목 목록 */
+    public List<StockCategoryItem> listCategoryOverrides() {
+        Map<String, StockInfo> stockInfoCache = stockInfoCacheService.getCache();
+        return stockCategoryRepository.findAll().stream()
+                .map(category -> new StockCategoryItem(
+                        category.getStockCode(),
+                        resolveStockName(category.getStockCode(), stockInfoCache),
+                        category.getCategoryName()))
+                .toList();
+    }
+
+    private String resolveStockName(String stockCode, Map<String, StockInfo> stockInfoCache) {
+        StockInfo stockInfo = stockInfoCache.get(stockCode);
+        return stockInfo != null ? stockInfo.getStockName() : stockCode;
     }
 }

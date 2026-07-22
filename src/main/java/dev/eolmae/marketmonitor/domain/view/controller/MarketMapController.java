@@ -3,10 +3,13 @@ package dev.eolmae.marketmonitor.domain.view.controller;
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.domain.stock.service.MarketMapExcludedStockService;
 import dev.eolmae.marketmonitor.domain.stock.service.StockCategoryService;
+import dev.eolmae.marketmonitor.domain.view.dto.ExcludedStockItem;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryGroup;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
+import dev.eolmae.marketmonitor.domain.view.dto.StockCategoryItem;
 import dev.eolmae.marketmonitor.domain.view.dto.StockCategoryRequest;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,6 +36,11 @@ public class MarketMapController {
         return marketMapQueryService.getMarketMap(market, isExclude);
     }
 
+    @GetMapping("/excluded-stocks")
+    public List<ExcludedStockItem> getExcludedStocks() {
+        return marketMapQueryService.listExcludedStocks();
+    }
+
     @PostMapping("/excluded-stocks/{stockCode}")
     public void registerExcludedStock(@PathVariable String stockCode) {
         marketMapExcludedStockService.register(stockCode);
@@ -43,8 +51,34 @@ public class MarketMapController {
         marketMapExcludedStockService.unregister(stockCode);
     }
 
+    @DeleteMapping("/excluded-stocks")
+    public void deleteExcludedStocks() {
+        marketMapExcludedStockService.deleteAll();
+    }
+
+    @GetMapping("/categories")
+    public List<StockCategoryItem> getCategoryOverrides() {
+        return marketMapQueryService.listCategoryOverrides();
+    }
+
     @PatchMapping("/categories/{stockCode}")
     public void reassignCategory(@PathVariable String stockCode, @RequestBody StockCategoryRequest request) {
         stockCategoryService.reassign(stockCode, request.categoryName());
+    }
+
+    @DeleteMapping("/categories/{stockCode}")
+    public void deleteCategory(@PathVariable String stockCode) {
+        stockCategoryService.delete(stockCode);
+    }
+
+    @DeleteMapping("/categories")
+    public void deleteCategories() {
+        stockCategoryService.deleteAll();
+    }
+
+    @DeleteMapping("/reset")
+    public void resetMarketMapCustomizations() {
+        marketMapExcludedStockService.deleteAll();
+        stockCategoryService.deleteAll();
     }
 }

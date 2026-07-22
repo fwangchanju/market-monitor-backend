@@ -58,7 +58,7 @@ public class MarketMapController {
 
     @GetMapping("/categories")
     public List<StockCategoryItem> getCategoryOverrides() {
-        return marketMapQueryService.listCategoryOverrides();
+        return marketMapQueryService.listStockCategories();
     }
 
     @PatchMapping("/categories/{stockCode}")

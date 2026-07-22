@@ -130,8 +130,8 @@ public class MarketMapQueryService {
                 .toList();
     }
 
-    /** 카테고리 재분류(수동 오버라이드)된 종목 목록 */
-    public List<StockCategoryItem> listCategoryOverrides() {
+    /** 카테고리 재분류된 종목 목록 */
+    public List<StockCategoryItem> listStockCategories() {
         Map<String, StockInfo> stockInfoCache = stockInfoCacheService.getCache();
         return stockCategoryRepository.findAll().stream()
                 .map(category -> new StockCategoryItem(

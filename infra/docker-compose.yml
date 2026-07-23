@@ -28,25 +28,12 @@ services:
       - DEVELOPER_CHAT_ID=${DEVELOPER_CHAT_ID}
       - KRX_ID=${KRX_ID}
       - KRX_PW=${KRX_PW}
+      - RENDERER_URL=${RENDERER_URL}
       - SERVER_PORT=8081
     expose:
       - "8081"
     networks:
       - proxy
-
-  market-monitor-renderer:
-    image: ghcr.io/fwangchanju/market-monitor-renderer:latest
-    container_name: market-monitor-renderer
-    restart: always
-    environment:
-      - DASHBOARD_URL=http://market-monitor-nginx
-      - DASHBOARD_USER=${DASHBOARD_USER}
-      - DASHBOARD_PASS=${DASHBOARD_PASS}
-    expose:
-      - "3000"
-    networks:
-      - proxy
-    shm_size: '128m'
 
 volumes:
   market-monitor-postgres-data:

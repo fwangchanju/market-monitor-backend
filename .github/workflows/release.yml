@@ -82,7 +82,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           envs: CR_PAT
           script: |
-            DEPLOY_DIR=~/app/market-monitor-backend/infra
+            DEPLOY_DIR=~/repo/market-monitor-backend/infra
             TARGET="${{ inputs.target }}"
             EVENT="${{ github.event_name }}"
 
@@ -105,5 +105,5 @@ jobs:
           key: ${{ secrets.RENDERER_SERVER_SSH_KEY }}
           envs: CR_PAT
           script: |
-            DEPLOY_DIR=~/app/market-monitor-backend/infra
+            DEPLOY_DIR=~/repo/market-monitor-backend/infra
             bash "$DEPLOY_DIR/deploy-renderer.sh"

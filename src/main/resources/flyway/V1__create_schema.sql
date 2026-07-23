@@ -30,6 +30,13 @@ CREATE TABLE market_map_excluded_stock (
     CONSTRAINT fk_market_map_excluded_stock_stock FOREIGN KEY (stock_code) REFERENCES stock_info (stock_code)
 );
 
+CREATE TABLE allowed_ip (
+    ip VARCHAR(45) NOT NULL,
+    role VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_allowed_ip PRIMARY KEY (ip)
+);
+
 CREATE TABLE watch_stock (
     id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
     stock_code VARCHAR(20) NOT NULL,

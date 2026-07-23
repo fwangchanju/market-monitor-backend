@@ -5,9 +5,9 @@ const app = express()
 app.use(express.json())
 
 const PORT = process.env.PORT || 3000
-const DASHBOARD_URL = process.env.DASHBOARD_URL || 'http://localhost:5173'
-const DASHBOARD_USER = process.env.DASHBOARD_USER || ''
-const DASHBOARD_PASS = process.env.DASHBOARD_PASS || ''
+const CAPTURE_URL = process.env.CAPTURE_URL || 'http://localhost:5173'
+const CAPTURE_USER = process.env.CAPTURE_USER || ''
+const CAPTURE_PASS = process.env.CAPTURE_PASS || ''
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' })
@@ -24,13 +24,13 @@ app.post('/capture', async (req, res) => {
       viewport: { width: 1440, height: 900 },
     })
 
-    if (DASHBOARD_USER && DASHBOARD_PASS) {
-      const credentials = Buffer.from(`${DASHBOARD_USER}:${DASHBOARD_PASS}`).toString('base64')
+    if (CAPTURE_USER && CAPTURE_PASS) {
+      const credentials = Buffer.from(`${CAPTURE_USER}:${CAPTURE_PASS}`).toString('base64')
       await context.setExtraHTTPHeaders({ Authorization: `Basic ${credentials}` })
     }
 
     const page = await context.newPage()
-    await page.goto(DASHBOARD_URL, { waitUntil: 'networkidle', timeout: 30000 })
+    await page.goto(CAPTURE_URL, { waitUntil: 'networkidle', timeout: 30000 })
     await page.waitForTimeout(2000)
 
     const sections = await page.$$('section.section')
@@ -54,5 +54,5 @@ app.post('/capture', async (req, res) => {
 })
 
 app.listen(PORT, () => {
-  console.log(`market-monitor-renderer 시작 — port ${PORT}, dashboard: ${DASHBOARD_URL}`)
+  console.log(`market-monitor-renderer 시작 — port ${PORT}, capture: ${CAPTURE_URL}`)
 })

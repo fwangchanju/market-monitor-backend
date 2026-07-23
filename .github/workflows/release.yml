@@ -1,4 +1,4 @@
-name: Build & Push Docker Images
+name: Release
 
 on:
   push:
@@ -18,7 +18,7 @@ on:
           - all
 
 jobs:
-  build-and-push:
+  release:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -71,7 +71,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Deploy to server
+      - name: Deploy to server 1 (app/nginx)
+        if: github.event_name == 'push' || inputs.target == 'app' || inputs.target == 'nginx' || inputs.target == 'all'
         uses: appleboy/ssh-action@v1
         env:
           CR_PAT: ${{ secrets.CR_PAT }}
@@ -91,6 +92,18 @@ jobs:
               bash "$DEPLOY_DIR/deploy-app.sh"
             elif [ "$TARGET" = "nginx" ]; then
               bash "$DEPLOY_DIR/deploy-nginx.sh"
-            elif [ "$TARGET" = "renderer" ]; then
-              bash "$DEPLOY_DIR/deploy-renderer.sh"
             fi
+
+      - name: Deploy to server 2 (renderer)
+        if: github.event_name == 'push' || inputs.target == 'renderer' || inputs.target == 'all'
+        uses: appleboy/ssh-action@v1
+        env:
+          CR_PAT: ${{ secrets.CR_PAT }}
+        with:
+          host: ${{ secrets.RENDERER_SERVER_HOST }}
+          username: ${{ secrets.RENDERER_SERVER_USER }}
+          key: ${{ secrets.RENDERER_SERVER_SSH_KEY }}
+          envs: CR_PAT
+          script: |
+            DEPLOY_DIR=~/app/market-monitor-backend/infra
+            bash "$DEPLOY_DIR/deploy-renderer.sh"

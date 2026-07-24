@@ -82,9 +82,13 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           envs: CR_PAT
           script: |
-            DEPLOY_DIR=~/repo/market-monitor-backend/infra/scripts
+            source ~/repo/market-monitor-backend/infra/scripts/env.sh
+            DEPLOY_DIR="$REPO_DIR/infra/scripts"
             TARGET="${{ inputs.target }}"
             EVENT="${{ github.event_name }}"
+
+            git -C "$REPO_DIR" fetch origin main
+            git -C "$REPO_DIR" reset --hard origin/main
 
             if [ "$EVENT" = "push" ] || [ "$TARGET" = "all" ]; then
               bash "$DEPLOY_DIR/deploy.sh"
@@ -105,5 +109,10 @@ jobs:
           key: ${{ secrets.RENDERER_SERVER_SSH_KEY }}
           envs: CR_PAT
           script: |
-            DEPLOY_DIR=~/repo/market-monitor-backend/infra/scripts
+            source ~/repo/market-monitor-backend/infra/scripts/env.sh
+            DEPLOY_DIR="$REPO_DIR/infra/scripts"
+
+            git -C "$REPO_DIR" fetch origin main
+            git -C "$REPO_DIR" reset --hard origin/main
+
             bash "$DEPLOY_DIR/deploy-renderer.sh"

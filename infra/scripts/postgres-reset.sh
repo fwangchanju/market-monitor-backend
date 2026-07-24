@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-COMPOSE_FILE="$HOME/repo/market-monitor-backend/infra/docker-compose.yml"
-ENV_FILE="$HOME/env/market-monitor.env"
-DB_DATA_DIR="$HOME/db"
+source "$HOME/repo/market-monitor-backend/infra/scripts/env.sh"
+
+COMPOSE_FILE="$REPO_DIR/infra/docker-compose.yml"
 
 echo "이 스크립트는 DB 데이터를 전부 삭제하고 처음부터 다시 만듭니다."
 read -p "계속하려면 'yes'를 입력하세요: " confirm

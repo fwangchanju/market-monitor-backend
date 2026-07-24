@@ -1,8 +1,9 @@
 #!/bin/bash
 set -e
 
-COMPOSE_FILE="$HOME/repo/market-monitor-backend/infra/docker-compose.yml"
-ENV_FILE="$HOME/env/market-monitor.env"
+source "$HOME/repo/market-monitor-backend/infra/scripts/env.sh"
+
+COMPOSE_FILE="$REPO_DIR/infra/docker-compose.yml"
 
 echo "=== [db] Stopping market-monitor-postgres (데이터 유지) ==="
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" stop market-monitor-postgres

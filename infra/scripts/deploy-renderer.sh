@@ -1,14 +1,15 @@
 #!/bin/bash
 set -e
 
-COMPOSE_FILE="$(dirname "$0")/renderer-docker-compose.yml"
-ENV_FILE="$HOME/env/market-monitor.env"
+source "$HOME/repo/market-monitor-backend/infra/scripts/env.sh"
+
+COMPOSE_FILE="$REPO_DIR/infra/renderer-docker-compose.yml"
 
 echo "=== [renderer] Logging in to GHCR ==="
-echo "$CR_PAT" | docker login ghcr.io -u fwangchanju --password-stdin
+echo "$CR_PAT" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
 echo "=== [renderer] Pulling latest image ==="
-docker pull ghcr.io/fwangchanju/market-monitor-renderer:latest
+docker pull "ghcr.io/$GHCR_USER/market-monitor-renderer:latest"
 
 echo "=== [renderer] Restarting market-monitor-renderer ==="
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d

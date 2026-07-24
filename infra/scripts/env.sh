@@ -1,0 +1,4 @@
+REPO_DIR="$HOME/repo/market-monitor-backend"
+ENV_FILE="$HOME/env/market-monitor.env"
+DB_DATA_DIR="$HOME/db"
+GHCR_USER="fwangchanju"

@@ -39,13 +39,5 @@ out/
 ### local gradle home ###
 .gradle-user-home/
 
-### Claude Code ###
-.claude/settings.json
-.claude/settings.local.json
-CLAUDE.md
-
 ### env files ###
 infra/.env
-
-### Internal docs ###
-docs/

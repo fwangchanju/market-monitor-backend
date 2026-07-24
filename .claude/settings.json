@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "deny": [
+      "mcp__github__merge_pull_request",
+      "Read(infra/.env)",
+      "Edit(infra/.env)",
+      "Write(infra/.env)",
+      "Bash(*.env*)"
+    ],
+    "ask": [
+      "Bash(git commit*)",
+      "Bash(git push*)",
+      "mcp__github__create_pull_request"
+    ]
+  }
+}

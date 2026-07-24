@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-COMPOSE_FILE="$(dirname "$0")/renderer-docker-compose.yml"
+COMPOSE_FILE="$HOME/repo/market-monitor-backend/infra/renderer-docker-compose.yml"
 ENV_FILE="$HOME/env/market-monitor.env"
 
 echo "=== [renderer] Logging in to GHCR ==="

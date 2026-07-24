@@ -8,7 +8,7 @@ services:
       - POSTGRES_USER=market_monitor
       - POSTGRES_PASSWORD=${DB_PASSWORD}
     volumes:
-      - market-monitor-postgres-data:/var/lib/postgresql/data
+      - ${HOME}/db:/var/lib/postgresql/data
     ports:
       - "5433:5432"
     networks:
@@ -34,9 +34,6 @@ services:
       - "8081"
     networks:
       - proxy
-
-volumes:
-  market-monitor-postgres-data:
 
 networks:
   proxy:

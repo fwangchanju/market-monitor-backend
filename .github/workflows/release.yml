@@ -9,10 +9,10 @@ on:
       target:
         description: '빌드 대상'
         required: true
-        default: 'app'
+        default: 'application'
         type: choice
         options:
-          - app
+          - application
           - nginx
           - renderer
           - all
@@ -38,8 +38,8 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push app image
-        if: github.event_name == 'push' || inputs.target == 'app' || inputs.target == 'all'
+      - name: Build and push application image
+        if: github.event_name == 'push' || inputs.target == 'application' || inputs.target == 'all'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -71,8 +71,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Deploy to server 1 (app/nginx)
-        if: github.event_name == 'push' || inputs.target == 'app' || inputs.target == 'nginx' || inputs.target == 'all'
+      - name: Deploy to server 1 (application/nginx)
+        if: github.event_name == 'push' || inputs.target == 'application' || inputs.target == 'nginx' || inputs.target == 'all'
         uses: appleboy/ssh-action@v1
         env:
           CR_PAT: ${{ secrets.CR_PAT }}
@@ -82,14 +82,14 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           envs: CR_PAT
           script: |
-            DEPLOY_DIR=~/repo/market-monitor-backend/infra
+            DEPLOY_DIR=~/repo/market-monitor-backend/infra/scripts
             TARGET="${{ inputs.target }}"
             EVENT="${{ github.event_name }}"
 
             if [ "$EVENT" = "push" ] || [ "$TARGET" = "all" ]; then
               bash "$DEPLOY_DIR/deploy.sh"
-            elif [ "$TARGET" = "app" ]; then
-              bash "$DEPLOY_DIR/deploy-app.sh"
+            elif [ "$TARGET" = "application" ]; then
+              bash "$DEPLOY_DIR/deploy-application.sh"
             elif [ "$TARGET" = "nginx" ]; then
               bash "$DEPLOY_DIR/deploy-nginx.sh"
             fi
@@ -105,5 +105,5 @@ jobs:
           key: ${{ secrets.RENDERER_SERVER_SSH_KEY }}
           envs: CR_PAT
           script: |
-            DEPLOY_DIR=~/repo/market-monitor-backend/infra
+            DEPLOY_DIR=~/repo/market-monitor-backend/infra/scripts
             bash "$DEPLOY_DIR/deploy-renderer.sh"

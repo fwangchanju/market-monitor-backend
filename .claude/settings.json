@@ -10,7 +10,8 @@
     "ask": [
       "Bash(git commit*)",
       "Bash(git push*)",
-      "mcp__github__create_pull_request"
+      "mcp__github__create_pull_request",
+      "mcp__github__update_pull_request"
     ]
   }
 }

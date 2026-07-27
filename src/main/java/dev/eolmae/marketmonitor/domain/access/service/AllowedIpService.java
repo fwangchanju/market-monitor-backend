@@ -9,7 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 일반(USER) 허용 IP 관리. admin(ADMIN role) IP는 이 서비스로 관리하지 않고 DB에 직접 등록한다. */
+/** IP 화이트리스트 관리. */
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -35,5 +35,14 @@ public class AllowedIpService {
     public void delete(String ip) {
         allowedIpRepository.deleteByIpAndRole(ip, Role.USER);
         allowedIpAccessService.invalidate(ip);
+    }
+
+    public void reregisterAdmin(String oldIp, String newIp) {
+        if (oldIp != null) {
+            allowedIpRepository.deleteByIpAndRole(oldIp, Role.ADMIN);
+        }
+        allowedIpRepository
+                .findById(newIp)
+                .ifPresentOrElse(existing -> {}, () -> allowedIpRepository.save(AllowedIp.create(newIp, Role.ADMIN)));
     }
 }

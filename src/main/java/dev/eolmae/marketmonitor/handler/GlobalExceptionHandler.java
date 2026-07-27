@@ -23,7 +23,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(EscalateException.class)
     public ErrorResponse handleEscalateException(EscalateException e) {
         String message = e.createMessage();
-        log.error(message);
+        log.error(message, e);
         eventPublisher.publishEvent(new EscalationEvent(message));
 
         return ErrorResponse.of(e.getErrorCode(), message);

@@ -37,6 +37,15 @@ CREATE TABLE allowed_ip (
     CONSTRAINT pk_allowed_ip PRIMARY KEY (ip)
 );
 
+CREATE TABLE admin_token (
+    token VARCHAR(64) NOT NULL,
+    current_ip VARCHAR(45),
+    label VARCHAR(50),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_admin_token PRIMARY KEY (token)
+);
+
 CREATE TABLE watch_stock (
     id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
     stock_code VARCHAR(20) NOT NULL,

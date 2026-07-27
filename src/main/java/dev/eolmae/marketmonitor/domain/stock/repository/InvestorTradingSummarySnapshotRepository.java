@@ -16,5 +16,5 @@ public interface InvestorTradingSummarySnapshotRepository extends JpaRepository<
 
     Optional<InvestorTradingSummarySnapshot> findFirstByOrderBySnapshotTimeDesc();
 
-    List<InvestorTradingSummarySnapshot> findBySnapshotTimeOrderByMarketTypeAscInvestorAsc(LocalDateTime snapshotTime);
+    List<InvestorTradingSummarySnapshot> findBySnapshotTime(LocalDateTime snapshotTime);
 }

@@ -130,7 +130,12 @@ public class MarketQueryService {
             return SnapshotResponse.empty();
         }
 
-        var snapshots = marketOverviewSnapshotRepository.findBySnapshotTimeOrderByMarketTypeAsc(latestSnapshotTime);
+        // marketType은 @Enumerated(STRING)이라 DB ORDER BY는 문자열 순(KOSDAQ < KOSPI)이 됨 -
+        // enum 선언 순서(KOSPI, KOSDAQ)대로 나오도록 Java에서 재정렬.
+        var snapshots = marketOverviewSnapshotRepository.findBySnapshotTime(latestSnapshotTime)
+                .stream()
+                .sorted(Comparator.comparing(MarketOverviewSnapshot::getMarketType))
+                .toList();
 
         return new SnapshotResponse<>(
                 CollectionChecker.expectedSnapshotTime(),
@@ -161,8 +166,13 @@ public class MarketQueryService {
             return SnapshotResponse.empty();
         }
 
-        var snapshots = investorTradingSummarySnapshotRepository.findBySnapshotTimeOrderByMarketTypeAscInvestorAsc(
-                latestSnapshotTime);
+        // marketType/investor 둘 다 @Enumerated(STRING)이라 DB ORDER BY는 문자열 순이 됨 -
+        // enum 선언 순서(시장: KOSPI, KOSDAQ / 투자자: PERSONAL, FOREIGNER, ...)대로 Java에서 재정렬.
+        var snapshots = investorTradingSummarySnapshotRepository.findBySnapshotTime(latestSnapshotTime)
+                .stream()
+                .sorted(Comparator.comparing(InvestorTradingSummarySnapshot::getMarketType)
+                        .thenComparing(InvestorTradingSummarySnapshot::getInvestor))
+                .toList();
 
         return new SnapshotResponse<>(
                 CollectionChecker.expectedSnapshotTime(),

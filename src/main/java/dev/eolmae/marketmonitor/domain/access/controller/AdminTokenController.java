@@ -17,8 +17,8 @@ public class AdminTokenController {
     private final AdminTokenService adminTokenService;
 
     @GetMapping("/internal/register-ip")
-    public ResponseEntity<Void> registerIp(@RequestParam String token, @RequestHeader("X-Real-IP") String ip) {
-        adminTokenService.registerIp(token, ip);
+    public ResponseEntity<Void> registerIp(@RequestParam String token, @RequestHeader("X-Real-IP") String currentIp) {
+        adminTokenService.registerIp(token, currentIp);
         return ResponseEntity.status(HttpStatus.FOUND).location(URI.create("/")).build();
     }
 }

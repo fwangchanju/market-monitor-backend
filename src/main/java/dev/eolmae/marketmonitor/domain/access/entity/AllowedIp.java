@@ -27,13 +27,23 @@ public class AllowedIp {
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
+    @Column(nullable = false)
+    private LocalDateTime updatedAt;
+
     protected AllowedIp() {}
 
     public static AllowedIp create(String ip, Role role) {
         var entity = new AllowedIp();
         entity.ip = ip;
         entity.role = role;
-        entity.createdAt = LocalDateTime.now(Zone.KST.zoneId());
+        LocalDateTime now = LocalDateTime.now(Zone.KST.zoneId());
+        entity.createdAt = now;
+        entity.updatedAt = now;
         return entity;
+    }
+
+    public void promoteToAdmin() {
+        this.role = Role.ADMIN;
+        this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
     }
 }

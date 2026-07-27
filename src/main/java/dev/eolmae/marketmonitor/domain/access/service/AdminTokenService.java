@@ -15,17 +15,19 @@ public class AdminTokenService {
 
     private final AdminTokenRepository adminTokenRepository;
     private final AllowedIpService allowedIpService;
+    private final AllowedIpAccessService allowedIpAccessService;
 
-    public void registerIp(String token, String ip) {
+    public void registerIp(String token, String currentIp) {
         AdminToken adminToken =
                 adminTokenRepository.findById(token).orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN));
 
-        if (ip.equals(adminToken.getCurrentIp())) {
+        String lastIp = adminToken.getLastIp();
+        if (currentIp.equals(lastIp) && allowedIpAccessService.isAllowedAdmin(currentIp)) {
             return;
         }
 
         // 필요한 경우 로그인 기능 추가
-        allowedIpService.reregisterAdmin(adminToken.getCurrentIp(), ip);
-        adminToken.updateCurrentIp(ip);
+        allowedIpService.reregisterAdmin(lastIp, currentIp);
+        adminToken.updateLastIp(currentIp);
     }
 }

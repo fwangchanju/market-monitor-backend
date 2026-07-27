@@ -37,12 +37,13 @@ public class AllowedIpService {
         allowedIpAccessService.invalidate(ip);
     }
 
-    public void reregisterAdmin(String oldIp, String newIp) {
-        if (oldIp != null) {
-            allowedIpRepository.deleteByIpAndRole(oldIp, Role.ADMIN);
+    public void reregisterAdmin(String lastIp, String currentIp) {
+        if (lastIp != null) {
+            allowedIpRepository.deleteByIpAndRole(lastIp, Role.ADMIN);
         }
         allowedIpRepository
-                .findById(newIp)
-                .ifPresentOrElse(existing -> {}, () -> allowedIpRepository.save(AllowedIp.create(newIp, Role.ADMIN)));
+                .findById(currentIp)
+                .ifPresentOrElse(
+                        AllowedIp::promoteToAdmin, () -> allowedIpRepository.save(AllowedIp.create(currentIp, Role.ADMIN)));
     }
 }

@@ -17,8 +17,8 @@ public class AdminToken {
     @Column(length = 64)
     private String token;
 
-    @Column(name = "current_ip", length = 45)
-    private String currentIp;
+    @Column(name = "last_ip", length = 45)
+    private String lastIp;
 
     @Column(length = 50)
     private String label;
@@ -40,8 +40,8 @@ public class AdminToken {
         return entity;
     }
 
-    public void updateCurrentIp(String ip) {
-        this.currentIp = ip;
+    public void updateLastIp(String ip) {
+        this.lastIp = ip;
         this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
     }
 }

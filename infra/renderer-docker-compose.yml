@@ -3,10 +3,8 @@ services:
     image: ghcr.io/fwangchanju/market-monitor-renderer:latest
     container_name: market-monitor-renderer
     restart: always
-    environment:
-      - CAPTURE_URL=${CAPTURE_URL}
-      - CAPTURE_USER=${CAPTURE_USER}
-      - CAPTURE_PASS=${CAPTURE_PASS}
+    env_file:
+      - ${HOME}/env/market-monitor.env
     ports:
       - "3000:3000"
     shm_size: '128m'

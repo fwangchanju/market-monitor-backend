@@ -3,10 +3,11 @@ services:
     image: postgres:17-alpine
     container_name: market-monitor-postgres
     restart: always
+    env_file:
+      - ${HOME}/env/market-monitor.env
     environment:
       - POSTGRES_DB=market_monitor_db
       - POSTGRES_USER=market_monitor
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
     volumes:
       - ${DB_DATA_DIR}:/var/lib/postgresql/data
     ports:
@@ -18,17 +19,10 @@ services:
     image: ghcr.io/fwangchanju/market-monitor:latest
     container_name: market-monitor
     restart: always
+    env_file:
+      - ${HOME}/env/market-monitor.env
     environment:
       - SPRING_PROFILES_ACTIVE=prod
-      - DB_PASSWORD=${DB_PASSWORD}
-      - KIWOOM_APP_KEY_B=${KIWOOM_APP_KEY_B}
-      - KIWOOM_SECRET_B=${KIWOOM_SECRET_B}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
-      - DEVELOPER_CHAT_ID=${DEVELOPER_CHAT_ID}
-      - KRX_ID=${KRX_ID}
-      - KRX_PW=${KRX_PW}
-      - RENDERER_URL=${RENDERER_URL}
       - SERVER_PORT=8081
     expose:
       - "8081"

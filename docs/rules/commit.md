@@ -18,3 +18,12 @@
 - ci: CI/CD 파이프라인, GitHub Actions 워크플로 설정 변경
 - build: 빌드 도구/의존성 관련 변경 (build.gradle 등 — chore보다 더 구체적으로 표현하고 싶을 때 사용)
 - revert: 이전 커밋을 되돌리는 경우
+
+## 브랜치 명
+
+claude/<type>/<작업-내용-kebab-case>
+
+- <type>은 위 커밋 타입과 동일한 기준으로 선택한다.
+- 작업 내용은 영문 kebab-case로 간결하게 요약하되, 최대 3단어 이하로 작성한다.
+
+예: claude/feat/widget-followups, claude/fix/admin-tokens-env

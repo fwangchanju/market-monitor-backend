@@ -1,6 +1,7 @@
 package dev.eolmae.marketmonitor.domain.access.controller;
 
 import dev.eolmae.marketmonitor.domain.access.service.AdminTokenService;
+import dev.eolmae.marketmonitor.domain.access.util.RedirectPaths;
 import java.net.URI;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -17,8 +18,11 @@ public class AdminTokenController {
     private final AdminTokenService adminTokenService;
 
     @GetMapping("/internal/register-ip")
-    public ResponseEntity<Void> registerIp(@RequestParam String token, @RequestHeader("X-Real-IP") String currentIp) {
+    public ResponseEntity<Void> registerIp(
+            @RequestParam String token,
+            @RequestParam(required = false, defaultValue = "/") String redirectTo,
+            @RequestHeader("X-Real-IP") String currentIp) {
         adminTokenService.registerIp(token, currentIp);
-        return ResponseEntity.status(HttpStatus.FOUND).location(URI.create("/")).build();
+        return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(RedirectPaths.resolveInternal(redirectTo))).build();
     }
 }

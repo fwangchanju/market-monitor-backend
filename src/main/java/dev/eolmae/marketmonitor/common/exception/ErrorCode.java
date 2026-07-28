@@ -30,7 +30,7 @@ public enum ErrorCode {
     COMPOSITE_INDEX_ROW_NOT_FOUND("투자자별매매종합 종합지수 행을 찾을 수 없습니다."),
     BASE_SNAPSHOT_NOT_FOUND("연산 기준 스냅샷 데이터가 없습니다."),
 
-    // Dashboard
+    // Market summary
     RENDERER_DISABLED("렌더러가 비활성 상태입니다."),
     SCREENSHOT_CAPTURE_FAILED("스크린샷 캡처에 실패했습니다."),
     TELEGRAM_MESSAGE_SEND_FAILED("텔레그램 메시지 발송에 실패했습니다."),

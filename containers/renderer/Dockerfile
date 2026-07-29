@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/playwright:v1.62.0-focal
+FROM mcr.microsoft.com/playwright:v1.61.1-jammy
 WORKDIR /app
 COPY containers/renderer/package.json containers/renderer/package-lock.json ./
 RUN npm ci

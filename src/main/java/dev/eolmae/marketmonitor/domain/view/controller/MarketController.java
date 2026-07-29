@@ -43,16 +43,6 @@ public class MarketController {
         return marketQueryService.getIntradayTop(market, investor, ranking, amtQty);
     }
 
-    /** 상세 랭킹 (기존 호환용) */
-    //    @GetMapping("/intraday-rankings")
-    //    public SnapshotResponse<IntradayInvestorRankingItem> getIntradayRankings(
-    //            @RequestParam Market market,
-    //            @RequestParam IntradayInvestor investor,
-    //            @RequestParam IntradayRanking ranking) {
-    //        return marketQueryService.getIntradayRankings(market, investor, ranking);
-    //    }
-    // TODO 화면에서 미사용 확인됨 — 화면 점검 후 이상 없으면 서비스 레이어 메서드까지 삭제
-
     // ── 프로그램매매 상위 상세 ────────────────────────────────────────────
 
     @GetMapping("/program-trading-rankings")

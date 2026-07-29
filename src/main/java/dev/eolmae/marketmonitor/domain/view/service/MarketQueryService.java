@@ -186,34 +186,6 @@ public class MarketQueryService {
                         .toList());
     }
 
-    // TODO 화면에서 미사용 확인됨 (컨트롤러 #3과 동일) — 화면 점검 후 이상 없으면 삭제
-    //    public SnapshotResponse<IntradayInvestorRankingItem> getIntradayRankings(
-    //            Market marketType, IntradayInvestor investor, IntradayRanking rankingType) {
-    //        var snapshotTime = intradayInvestorRankingSnapshotRepository
-    //                .findLatestSnapshotTime()
-    //                .orElse(null);
-    //        if (snapshotTime == null) {
-    //            return new SnapshotResponse<>(null, List.of());
-    //        }
-    //
-    //        var items = intradayInvestorRankingSnapshotRepository
-    //                .findBySnapshotTimeAndMarketTypeAndInvestorAndRankingTypeOrderByRankAsc(
-    //                        snapshotTime, marketType, investor, rankingType)
-    //                .stream()
-    //                .limit(10)
-    //                .map(item -> new IntradayInvestorRankingItem(
-    //                        item.getMarketType(),
-    //                        item.getInvestor(),
-    //                        item.getRank(),
-    //                        item.getStockCode(),
-    //                        item.getStockName(),
-    //                        item.getNetBuyAmount(),
-    //                        item.getTradedVolume()))
-    //                .toList();
-    //
-    //        return new SnapshotResponse<>(snapshotTime, items);
-    //    }
-
     public SnapshotResponse<ProgramTradingRankingItem> getProgramTradingRankings(
             MarketQuery market, RankingType ranking, AmtQty amtQty) {
         return getProgramTradingRankings(market.toMarkets(), ProgramRanking.from(ranking), amtQty);

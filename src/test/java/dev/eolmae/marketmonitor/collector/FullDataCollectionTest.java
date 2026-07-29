@@ -37,9 +37,6 @@ class FullDataCollectionTest {
     StockInfoCollector stockInfoCollector;
 
     @Autowired
-    SectorCurrentPriceCollector sectorCurrentPriceCollector;
-
-    @Autowired
     SectorInvestorNetBuyCollector sectorInvestorNetBuyCollector;
 
     @Autowired

@@ -62,7 +62,9 @@ public class HoldingsSyncService {
                         .map(AccountBalanceResponse.HoldingItem::stockCode)
                         .toList());
 
-        Map<String, WatchStock> existingHoldings = watchStockRepository.findByRegisterBy(RegisterBy.HOLDINGS).stream()
+        // stockCode는 registerBy와 무관하게 테이블 전체에서 유일해야 해서(uk_watch_stock_stock),
+        // 대표종목 지정 등으로 USER로 전환된 종목까지 함께 조회해 신규 insert 시 중복을 피한다.
+        Map<String, WatchStock> existingWatchStocks = watchStockRepository.findAll().stream()
                 .collect(Collectors.toMap(WatchStock::getStockCode, Function.identity()));
         Map<String, StockInfo> stockInfoCache = stockInfoCacheService.getCache();
 
@@ -71,9 +73,11 @@ public class HoldingsSyncService {
             String stockCode = holding.stockCode();
             int holdingRank = rank++;
 
-            WatchStock existing = existingHoldings.get(stockCode);
+            WatchStock existing = existingWatchStocks.get(stockCode);
             if (existing != null) {
-                existing.updateHoldingRank(holdingRank);
+                if (existing.getRegisterBy() == RegisterBy.HOLDINGS) {
+                    existing.updateHoldingRank(holdingRank);
+                }
                 continue;
             }
 

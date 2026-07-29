@@ -2,10 +2,10 @@ package dev.eolmae.marketmonitor.domain.stock.collector;
 
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-import dev.eolmae.marketmonitor.common.enums.Exchange;
+import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.util.NumberParser;
-import dev.eolmae.marketmonitor.domain.stock.IndexContributionRankingSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
+import dev.eolmae.marketmonitor.domain.stock.entity.IndexContributionRankingSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.dto.*;
 import dev.eolmae.marketmonitor.domain.stock.repository.IndexContributionRankingSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketOverviewSnapshotRepository;
@@ -58,9 +58,6 @@ class KiwoomApiVerificationTest {
 
     @Autowired
     KiwoomApiClient kiwoomApiClient;
-
-    @Autowired
-    SectorCurrentPriceCollector sectorCurrentPriceCollector;
 
     @Autowired
     IndexContributionRankingCollector indexContributionRankingCollector;
@@ -423,18 +420,13 @@ class KiwoomApiVerificationTest {
                 LocalDateTime.now(KST).withMinute(0).withSecond(0).withNano(0);
         log.info("=== 지수기여도 수집 시작 | snapshotTime={} ===", snapshotTime);
 
-        // IndexContributionRankingCollector가 전일 지수값 역산에 MarketOverviewSnapshot을 사용하므로 선행 수집 필요
-        if (marketOverviewSnapshotRepository.count() == 0) {
-            log.info("MarketOverviewSnapshot 없음 → 선행 수집 실행");
-            sectorCurrentPriceCollector.collect(snapshotTime);
-        }
-
+        // IndexContributionRankingCollector가 MarketOverviewSnapshot/SectorPriceSnapshot도 함께 저장함
         indexContributionRankingCollector.collect(snapshotTime);
 
-        for (Exchange market : List.of(Exchange.KOSPI, Exchange.KOSDAQ)) {
+        for (Market market : List.of(Market.KOSPI, Market.KOSDAQ)) {
             List<IndexContributionRankingSnapshot> snapshots =
-                    indexContributionRankingSnapshotRepository.findBySnapshotTimeAndMarketTypeOrderByRankAsc(
-                            snapshotTime, market);
+                    indexContributionRankingSnapshotRepository.findByMarketTypeAndSnapshotTimeOrderByRankAsc(
+                            market, snapshotTime);
 
             log.info("[{}] 저장 건수={}", market, snapshots.size());
 
@@ -445,8 +437,9 @@ class KiwoomApiVerificationTest {
             log.info("[{}] 상위 {}종목 기여도 합산={}", market, snapshots.size(), sumContribution);
 
             // 실제 지수 등락폭과 비교 (MarketOverviewSnapshot의 changeValue)
-            marketOverviewSnapshotRepository
-                    .findTopByMarketTypeOrderBySnapshotTimeDesc(market)
+            marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime).stream()
+                    .filter(overview -> overview.getMarketType() == market)
+                    .findFirst()
                     .ifPresent(overview -> log.info(
                             "[{}] 실제 지수등락={} | 기여도합산={} | 편차={}",
                             market,

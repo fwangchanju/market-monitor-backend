@@ -42,7 +42,6 @@ import dev.eolmae.marketmonitor.domain.view.enums.IntradayInvestorQuery;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.enums.RankingType;
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -187,34 +186,6 @@ public class MarketQueryService {
                         .toList());
     }
 
-    // TODO 화면에서 미사용 확인됨 (컨트롤러 #3과 동일) — 화면 점검 후 이상 없으면 삭제
-    //    public SnapshotResponse<IntradayInvestorRankingItem> getIntradayRankings(
-    //            Market marketType, IntradayInvestor investor, IntradayRanking rankingType) {
-    //        var snapshotTime = intradayInvestorRankingSnapshotRepository
-    //                .findLatestSnapshotTime()
-    //                .orElse(null);
-    //        if (snapshotTime == null) {
-    //            return new SnapshotResponse<>(null, List.of());
-    //        }
-    //
-    //        var items = intradayInvestorRankingSnapshotRepository
-    //                .findBySnapshotTimeAndMarketTypeAndInvestorAndRankingTypeOrderByRankAsc(
-    //                        snapshotTime, marketType, investor, rankingType)
-    //                .stream()
-    //                .limit(10)
-    //                .map(item -> new IntradayInvestorRankingItem(
-    //                        item.getMarketType(),
-    //                        item.getInvestor(),
-    //                        item.getRank(),
-    //                        item.getStockCode(),
-    //                        item.getStockName(),
-    //                        item.getNetBuyAmount(),
-    //                        item.getTradedVolume()))
-    //                .toList();
-    //
-    //        return new SnapshotResponse<>(snapshotTime, items);
-    //    }
-
     public SnapshotResponse<ProgramTradingRankingItem> getProgramTradingRankings(
             MarketQuery market, RankingType ranking, AmtQty amtQty) {
         return getProgramTradingRankings(market.toMarkets(), ProgramRanking.from(ranking), amtQty);
@@ -322,36 +293,10 @@ public class MarketQueryService {
                         .toList());
     }
 
-    /** 종목별 기간별 프로그램매매 이력 반환 */
-    public StockHistoryResponse<ProgramTradingHistoryItem> getProgramTradingHistoryByRange(
-            String stockCode, LocalDateTime from, LocalDateTime to) {
-        return new StockHistoryResponse<>(
-                stockCode,
-                CollectionChecker.expectedSnapshotTime(),
-                programTradingHistoryRepository
-                        .findByStockCodeAndSnapshotTimeBetweenOrderBySnapshotTimeAsc(stockCode, from, to)
-                        .stream()
-                        .map(item -> new ProgramTradingHistoryItem(
-                                item.getSnapshotTime(),
-                                item.getProgramBuyAmount(),
-                                item.getProgramSellAmount(),
-                                item.getProgramNetBuyAmount()))
-                        .toList());
-    }
-
     /** 종목별 프로그램매매 이력(일별) 최신 20건 반환 */
     public StockHistoryResponse<ProgramTradingDailyHistoryItem> getProgramTradingDailyHistory(String stockCode) {
         return toProgramTradingDailyHistoryResponse(
                 stockCode, programTradingDailyHistoryRepository.findRecentByStockCode(stockCode));
-    }
-
-    /** 종목별 기간별 프로그램매매 이력(일별) 반환 */
-    public StockHistoryResponse<ProgramTradingDailyHistoryItem> getProgramTradingDailyHistoryByRange(
-            String stockCode, LocalDate from, LocalDate to) {
-        return toProgramTradingDailyHistoryResponse(
-                stockCode,
-                programTradingDailyHistoryRepository.findByStockCodeAndTradeDateBetweenOrderByTradeDateDesc(
-                        stockCode, from, to));
     }
 
     private StockHistoryResponse<ProgramTradingDailyHistoryItem> toProgramTradingDailyHistoryResponse(

@@ -20,7 +20,6 @@ import java.util.ArrayDeque;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Queue;
-import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -72,8 +71,7 @@ public class ProgramTradeIntradayCollector {
         LocalDate snapshotDate = snapshotTime.toLocalDate();
         LocalDateTime snapshotHour = snapshotTime.truncatedTo(ChronoUnit.HOURS);
 
-        Set<LocalDateTime> existingSnapshots =
-                Set.copyOf(historyRepository.findSnapshotTimesByStockCodeAndDate(stockCode, snapshotDate));
+        List<LocalDateTime> existingSnapshots = historyRepository.findSnapshotTimesByStockCodeAndDate(stockCode, snapshotDate);
 
         HourlyProgramTradeTrendResponse.TradeTick krxTick = null;
         HourlyProgramTradeTrendResponse.TradeTick nxtTick = null;

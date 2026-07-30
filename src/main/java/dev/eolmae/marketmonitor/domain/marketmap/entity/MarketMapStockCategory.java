@@ -1,4 +1,4 @@
-package dev.eolmae.marketmonitor.domain.marketmapcategory.entity;
+package dev.eolmae.marketmonitor.domain.marketmap.entity;
 
 import dev.eolmae.marketmonitor.common.enums.Zone;
 import jakarta.persistence.Column;

@@ -1,4 +1,4 @@
-package dev.eolmae.marketmonitor.domain.marketmapcategory.entity;
+package dev.eolmae.marketmonitor.domain.marketmap.entity;
 
 import dev.eolmae.marketmonitor.common.enums.Zone;
 import jakarta.persistence.Column;
@@ -42,7 +42,7 @@ public class MarketMapCategory {
 
     protected MarketMapCategory() {}
 
-    public static MarketMapCategory create(String name, int displayOrder) {
+    public static MarketMapCategory createParent(String name, int displayOrder) {
         var entity = new MarketMapCategory();
         entity.name = name;
         entity.parentId = null;
@@ -54,7 +54,7 @@ public class MarketMapCategory {
         return entity;
     }
 
-    public static MarketMapCategory create(String name, MarketMapCategory parent, int displayOrder) {
+    public static MarketMapCategory createChild(String name, MarketMapCategory parent, int displayOrder) {
         var entity = new MarketMapCategory();
         entity.name = name;
         entity.parentId = parent.id;
@@ -64,11 +64,6 @@ public class MarketMapCategory {
         entity.createdAt = now;
         entity.updatedAt = now;
         return entity;
-    }
-
-    public void rename(String name) {
-        this.name = name;
-        this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
     }
 
     public void tagVersion(Long versionId) {

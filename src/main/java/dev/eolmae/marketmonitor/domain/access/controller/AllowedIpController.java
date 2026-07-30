@@ -20,8 +20,8 @@ public class AllowedIpController {
     private final AllowedIpService allowedIpService;
 
     @GetMapping
-    public List<AllowedIpItem> list() {
-        return allowedIpService.list();
+    public List<AllowedIpItem> getAllowedIps() {
+        return allowedIpService.getAllowedIps();
     }
 
     @PostMapping("/{ip}")

@@ -34,7 +34,11 @@ public enum ErrorCode {
     RENDERER_DISABLED("렌더러가 비활성 상태입니다."),
     SCREENSHOT_CAPTURE_FAILED("스크린샷 캡처에 실패했습니다."),
     TELEGRAM_MESSAGE_SEND_FAILED("텔레그램 메시지 발송에 실패했습니다."),
-    TELEGRAM_IMAGE_SEND_FAILED("텔레그램 이미지 발송에 실패했습니다.");
+    TELEGRAM_IMAGE_SEND_FAILED("텔레그램 이미지 발송에 실패했습니다."),
+
+    // Market map
+    CATEGORY_TREE_SERIALIZE_FAILED("카테고리 트리 직렬화에 실패했습니다."),
+    CATEGORY_TREE_PARSE_FAILED("카테고리 스냅샷 파싱에 실패했습니다.");
 
     private final String message;
 }

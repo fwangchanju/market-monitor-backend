@@ -19,7 +19,7 @@ public class AllowedIpService {
     private final AllowedIpAccessService allowedIpAccessService;
 
     @Transactional(readOnly = true)
-    public List<AllowedIpItem> list() {
+    public List<AllowedIpItem> getAllowedIps() {
         return allowedIpRepository.findByRole(Role.USER).stream()
                 .map(ip -> new AllowedIpItem(ip.getIp(), ip.getCreatedAt()))
                 .toList();

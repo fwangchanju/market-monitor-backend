@@ -1,6 +1,6 @@
-package dev.eolmae.marketmonitor.domain.marketmapcategory.repository;
+package dev.eolmae.marketmonitor.domain.marketmap.repository;
 
-import dev.eolmae.marketmonitor.domain.marketmapcategory.entity.MarketMapCategoryVersion;
+import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategoryVersion;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 

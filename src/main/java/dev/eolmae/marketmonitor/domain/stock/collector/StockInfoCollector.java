@@ -1,6 +1,7 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
+import dev.eolmae.marketmonitor.common.event.StockInfoSyncedEvent;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.common.util.Strings;
@@ -15,8 +16,11 @@ import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,10 +30,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class StockInfoCollector {
 
     // ka10099: 종목정보 리스트 (종목정보 카테고리)
+    private static final String UNCATEGORIZED = "미분류";
 
     private final KiwoomApiClient kiwoomApiClient;
     private final StockInfoRepository stockInfoRepository;
     private final StockInfoCacheService stockInfoCacheService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public void sync() {
@@ -44,6 +50,11 @@ public class StockInfoCollector {
         }
 
         int fetchedCount = fetchedStocks.size();
+
+        Set<String> categoryNames = fetchedStocks.values().stream()
+                .map(fetched -> fetched.categoryName().isBlank() ? UNCATEGORIZED : fetched.categoryName())
+                .collect(Collectors.toSet());
+        eventPublisher.publishEvent(new StockInfoSyncedEvent(categoryNames));
 
         for (StockInfo existing : stockInfoRepository.findAll()) {
             FetchStockInfo fetched = fetchedStocks.remove(existing.getStockCode());

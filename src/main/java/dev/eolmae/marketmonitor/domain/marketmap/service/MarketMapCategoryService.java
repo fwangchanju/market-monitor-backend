@@ -1,5 +1,6 @@
 package dev.eolmae.marketmonitor.domain.marketmap.service;
 
+import dev.eolmae.marketmonitor.common.event.StockInfoSyncedEvent;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.BlockingStockItem;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryDeletePreview;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryItem;
@@ -11,10 +12,13 @@ import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.event.EventListener;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +40,32 @@ public class MarketMapCategoryService {
     @Transactional(readOnly = true)
     public List<CategoryItem> getCategories() {
         return marketMapCategoryRepository.findAll().stream().map(this::toItem).toList();
+    }
+
+    /** stock_info 카테고리명 중 아직 없는 것만 최상위 카테고리로 생성. stock -> marketmap 순환 의존을 피하려고 이벤트로 수신(StockInfoSyncedEvent 참고). */
+    @EventListener
+    public void onStockInfoSynced(StockInfoSyncedEvent event) {
+        createMissingCategories(event.categoryNames());
+    }
+
+    private void createMissingCategories(Set<String> categoryNames) {
+        Set<String> existingNames = new HashSet<>();
+        int maxOrder = 0;
+        for (MarketMapCategory category : marketMapCategoryRepository.findAll()) {
+            existingNames.add(category.getName());
+            if (category.getParentId() == null && category.getDisplayOrder() > maxOrder) {
+                maxOrder = category.getDisplayOrder();
+            }
+        }
+
+        List<MarketMapCategory> newCategories = new ArrayList<>();
+        for (String categoryName : categoryNames) {
+            if (existingNames.contains(categoryName)) {
+                continue;
+            }
+            newCategories.add(MarketMapCategory.createParent(categoryName, ++maxOrder));
+        }
+        marketMapCategoryRepository.saveAll(newCategories);
     }
 
     public CategoryItem createParent(String name) {

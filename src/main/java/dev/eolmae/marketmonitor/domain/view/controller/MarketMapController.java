@@ -4,7 +4,8 @@ import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.domain.stock.service.MarketMapExcludedStockService;
 import dev.eolmae.marketmonitor.domain.stock.service.StockCategoryService;
 import dev.eolmae.marketmonitor.domain.view.dto.ExcludedStockItem;
-import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryGroup;
+// import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryGroup;
+import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
 import dev.eolmae.marketmonitor.domain.view.dto.StockCategoryItem;
 import dev.eolmae.marketmonitor.domain.view.dto.StockCategoryRequest;
@@ -30,10 +31,19 @@ public class MarketMapController {
     private final MarketMapExcludedStockService marketMapExcludedStockService;
     private final StockCategoryService stockCategoryService;
 
+    // TODO 화면 점검 후 이상 없으면 삭제
+    // @GetMapping
+    // public SnapshotResponse<MarketMapCategoryGroup> getMarketMap(
+    //         @RequestParam Market market, @RequestParam boolean isExclude) {
+    //     return marketMapQueryService.getMarketMap(market, isExclude);
+    // }
+
     @GetMapping
-    public SnapshotResponse<MarketMapCategoryGroup> getMarketMap(
-            @RequestParam Market market, @RequestParam boolean isExclude) {
-        return marketMapQueryService.getMarketMap(market, isExclude);
+    public SnapshotResponse<MarketMapCategoryNode> getMarketMap(
+            @RequestParam Market market, @RequestParam boolean isExclude, @RequestParam boolean isCustom) {
+        return isCustom
+                ? marketMapQueryService.getCustomMarketMap(market, isExclude)
+                : marketMapQueryService.getDefaultMarketMap(market, isExclude);
     }
 
     @GetMapping("/excluded-stocks")

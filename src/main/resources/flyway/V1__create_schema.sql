@@ -38,6 +38,41 @@ CREATE TABLE allowed_ip (
     CONSTRAINT pk_allowed_ip PRIMARY KEY (ip)
 );
 
+CREATE TABLE market_map_category_version (
+    id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
+    label VARCHAR(50) NOT NULL,
+    snapshot_json JSONB NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_market_map_category_version PRIMARY KEY (id)
+);
+
+CREATE TABLE market_map_category (
+    id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
+    parent_id BIGINT,
+    version_id BIGINT,
+    name VARCHAR(50) NOT NULL,
+    display_order INT NOT NULL DEFAULT 0,
+    depth INT NOT NULL,
+    is_synced BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_market_map_category PRIMARY KEY (id),
+    CONSTRAINT uk_market_map_category_name UNIQUE (name),
+    CONSTRAINT fk_market_map_category_parent FOREIGN KEY (parent_id) REFERENCES market_map_category (id),
+    CONSTRAINT fk_market_map_category_version FOREIGN KEY (version_id) REFERENCES market_map_category_version (id) ON DELETE SET NULL
+);
+
+CREATE TABLE market_map_stock_category (
+    stock_code VARCHAR(20) NOT NULL,
+    category_id BIGINT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_market_map_stock_category PRIMARY KEY (stock_code),
+    CONSTRAINT fk_market_map_stock_category_stock FOREIGN KEY (stock_code) REFERENCES stock_info (stock_code),
+    CONSTRAINT fk_market_map_stock_category_category FOREIGN KEY (category_id) REFERENCES market_map_category (id)
+);
+
 CREATE TABLE admin_token (
     token VARCHAR(64) NOT NULL,
     last_ip VARCHAR(45),

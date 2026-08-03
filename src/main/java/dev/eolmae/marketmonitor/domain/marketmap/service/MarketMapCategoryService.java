@@ -12,7 +12,7 @@ import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -45,14 +45,16 @@ public class MarketMapCategoryService {
     /** stock_info 카테고리명 중 아직 없는 것만 최상위 카테고리로 생성. stock -> marketmap 순환 의존을 피하려고 이벤트로 수신(StockInfoSyncedEvent 참고). */
     @EventListener
     public void onStockInfoSynced(StockInfoSyncedEvent event) {
-        createMissingCategories(event.categoryNames());
+        syncCategories(event.categoryNames());
     }
 
-    private void createMissingCategories(Set<String> categoryNames) {
-        Set<String> existingNames = new HashSet<>();
+    /** 사용자가 직접 만드는 카테고리는 최상단에 추가되지만(createParent), 자동 생성은 최하단에 추가.
+     * 백그라운드 동기화로 인해 사용자가 정리해둔 기존 순서를 건드리지 않기 위함. */
+    private void syncCategories(Set<String> categoryNames) {
+        Map<String, MarketMapCategory> existingByName = new HashMap<>();
         int maxOrder = 0;
         for (MarketMapCategory category : marketMapCategoryRepository.findAll()) {
-            existingNames.add(category.getName());
+            existingByName.put(category.getName(), category);
             if (category.getParentId() == null && category.getDisplayOrder() > maxOrder) {
                 maxOrder = category.getDisplayOrder();
             }
@@ -60,10 +62,14 @@ public class MarketMapCategoryService {
 
         List<MarketMapCategory> newCategories = new ArrayList<>();
         for (String categoryName : categoryNames) {
-            if (existingNames.contains(categoryName)) {
+            MarketMapCategory existing = existingByName.get(categoryName);
+            if (existing != null) {
+                if (!existing.isSynced()) {
+                    existing.markSynced();
+                }
                 continue;
             }
-            newCategories.add(MarketMapCategory.createParent(categoryName, ++maxOrder));
+            newCategories.add(MarketMapCategory.createParent(categoryName, ++maxOrder, true));
         }
         marketMapCategoryRepository.saveAll(newCategories);
     }
@@ -74,7 +80,7 @@ public class MarketMapCategoryService {
         }
         // 최상위 카테고리는 부모 카테고리가 없다.
         shiftSiblingsForInsert(null);
-        MarketMapCategory category = MarketMapCategory.createParent(name, INITIAL_DISPLAY_ORDER);
+        MarketMapCategory category = MarketMapCategory.createParent(name, INITIAL_DISPLAY_ORDER, false);
         return toItem(marketMapCategoryRepository.save(category));
     }
 
@@ -119,19 +125,26 @@ public class MarketMapCategoryService {
     @Transactional(readOnly = true)
     public CategoryDeletePreview deletePreview(Long categoryId) {
         List<MarketMapCategory> categories = marketMapCategoryRepository.findAll();
-        List<Long> subCategoryIds = collectSubCategoryIds(categoryId, categories);
+        MarketMapCategory target = findCategory(categoryId, categories);
+        if (target.isSynced()) {
+            return CategoryDeletePreview.blocked(target.getName(), List.of());
+        }
 
+        List<Long> subCategoryIds = collectSubCategoryIds(categoryId, categories);
         List<MarketMapStockCategory> stockCategories = marketMapStockCategoryRepository.findByCategoryIdIn(subCategoryIds);
         if (!stockCategories.isEmpty()) {
-            return CategoryDeletePreview.blocked(toBlockingStockItems(stockCategories, categories));
+            return CategoryDeletePreview.blocked(target.getName(), toBlockingStockItems(stockCategories, categories));
         }
-        return CategoryDeletePreview.deletable(toDeletableCategoryNames(categoryId, subCategoryIds, categories));
+        return CategoryDeletePreview.deletable(target.getName(), toDeletableCategoryNames(categoryId, subCategoryIds, categories));
     }
 
     public void delete(Long categoryId) {
         List<MarketMapCategory> categories = marketMapCategoryRepository.findAll();
-        List<Long> subCategoryIds = collectSubCategoryIds(categoryId, categories);
+        if (findCategory(categoryId, categories).isSynced()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT);
+        }
 
+        List<Long> subCategoryIds = collectSubCategoryIds(categoryId, categories);
         if (!marketMapStockCategoryRepository.findByCategoryIdIn(subCategoryIds).isEmpty()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT);
         }
@@ -141,6 +154,13 @@ public class MarketMapCategoryService {
                 .sorted(Comparator.comparingInt(MarketMapCategory::getDepth).reversed())
                 .toList();
         marketMapCategoryRepository.deleteAll(subCategories);
+    }
+
+    private MarketMapCategory findCategory(Long categoryId, List<MarketMapCategory> categories) {
+        return categories.stream()
+                .filter(category -> category.getId().equals(categoryId))
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
     }
 
     private List<String> toDeletableCategoryNames(Long categoryId, List<Long> subCategoryIds, List<MarketMapCategory> categories) {
@@ -177,6 +197,11 @@ public class MarketMapCategoryService {
 
     private CategoryItem toItem(MarketMapCategory category) {
         return new CategoryItem(
-                category.getId(), category.getName(), category.getParentId(), category.getDepth(), category.getDisplayOrder());
+                category.getId(),
+                category.getName(),
+                category.getParentId(),
+                category.getDepth(),
+                category.getDisplayOrder(),
+                category.isSynced());
     }
 }

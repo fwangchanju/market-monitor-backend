@@ -95,6 +95,7 @@ domain/<feature>/
 - **단일 IN 쿼리 + 자바 합산 우선** — market/investor별 개별 쿼리를 반복 호출하지 않는다. `List<...>`를 받는 단일 IN 쿼리 + 자바 스트림에서 합산·정렬.
 - **N+1 제거** — `findAll()` 단일 조회 + `Map<code, Entity>` 구성 + `remove()`로 매칭. 루프 내 개별 조회 금지.
 - **Map 사용은 필요한 경우만** — O(1) 조회가 실제로 필요할 때. 단순 단일 엔티티 조회는 평범한 객체/switch.
+- **Map의 value는 웬만하면 객체 그대로** — key는 조회에 쓸 식별 값, value는 특정 필드 하나만 미리 뽑아 담지 않고 엔티티/객체 자체를 담는다. 필요한 필드는 호출부에서 그때 꺼내 쓴다. `Map<Long, String> nameById` ❌ → `Map<Long, MarketMapCategory> categoryById`로 담고 호출부에서 `.getName()`.
 - **컬렉션 반환은 null 대신 빈 컬렉션** — `return null` → `return List.of()`.
 - **`List.of()` guard** — `if (list == null || list.isEmpty()) { return; }` 후 사용.
 - **제네릭 응답 래퍼는 `empty()` 정적 팩토리 제공** — `SnapshotResponse<T>`처럼 "데이터 없음"을 표현하는 값이 반복적으로 필요한 제네릭 래퍼 레코드는, 호출부마다 `new Wrapper<>(null, List.of())`를 직접 조립하지 않고 `public static <T> Wrapper<T> empty()` 정적 팩토리를 두고 재사용한다.

@@ -9,6 +9,7 @@ import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -39,15 +40,17 @@ public class MarketMapStockCategoryService {
     }
 
     @Transactional(readOnly = true)
-    public List<StockCategoryItem> getAssignments() {
-        Map<Long, String> categoryNameById = marketMapCategoryRepository.findAll().stream()
-                .collect(Collectors.toMap(MarketMapCategory::getId, MarketMapCategory::getName));
+    public List<StockCategoryItem> getStockCategories() {
+        Map<Long, MarketMapCategory> categoryById = marketMapCategoryRepository.findAll().stream()
+                .collect(Collectors.toMap(MarketMapCategory::getId, Function.identity()));
         Map<String, StockInfo> stockInfoCache = stockInfoCacheService.getCache();
         return marketMapStockCategoryRepository.findAll().stream()
                 .map(stockCategory -> {
                     String stockCode = stockCategory.getStockCode();
                     return new StockCategoryItem(
-                            stockCode, stockInfoCache.get(stockCode).getStockName(), categoryNameById.get(stockCategory.getCategoryId()));
+                            stockCode,
+                            stockInfoCache.get(stockCode).getStockName(),
+                            categoryById.get(stockCategory.getCategoryId()).getName());
                 })
                 .toList();
     }

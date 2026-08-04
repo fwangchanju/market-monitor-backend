@@ -1,9 +1,9 @@
 package dev.eolmae.marketmonitor.domain.marketmap.service;
 
 import dev.eolmae.marketmonitor.common.event.StockInfoSyncedEvent;
-import dev.eolmae.marketmonitor.domain.marketmap.dto.StockCategoryItem;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryDeletePreview;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryItem;
+import dev.eolmae.marketmonitor.domain.marketmap.dto.StockCategoryItem;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategory;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapStockCategory;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRepository;
@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.event.EventListener;
@@ -133,7 +134,7 @@ public class MarketMapCategoryService {
         List<Long> subCategoryIds = collectSubCategoryIds(categoryId, categories);
         List<MarketMapStockCategory> stockCategories = marketMapStockCategoryRepository.findByCategoryIdIn(subCategoryIds);
         if (!stockCategories.isEmpty()) {
-            return CategoryDeletePreview.blocked(target.getName(), toBlockingStockItems(stockCategories, categories));
+            return CategoryDeletePreview.blocked(target.getName(), toBlockingStockCategoryItems(stockCategories, categories));
         }
         return CategoryDeletePreview.deletable(target.getName(), toDeletableCategoryNames(categoryId, subCategoryIds, categories));
     }
@@ -164,18 +165,23 @@ public class MarketMapCategoryService {
     }
 
     private List<String> toDeletableCategoryNames(Long categoryId, List<Long> subCategoryIds, List<MarketMapCategory> categories) {
-        Map<Long, String> categoryNameById = categories.stream().collect(Collectors.toMap(MarketMapCategory::getId, MarketMapCategory::getName));
-        return subCategoryIds.stream().filter(id -> !id.equals(categoryId)).map(categoryNameById::get).toList();
+        Map<Long, MarketMapCategory> categoryById = categories.stream().collect(Collectors.toMap(MarketMapCategory::getId, Function.identity()));
+        return subCategoryIds.stream()
+                .filter(id -> !id.equals(categoryId))
+                .map(id -> categoryById.get(id).getName())
+                .toList();
     }
 
-    private List<StockCategoryItem> toBlockingStockItems(List<MarketMapStockCategory> stockCategories, List<MarketMapCategory> categories) {
-        Map<Long, String> categoryNameById = categories.stream().collect(Collectors.toMap(MarketMapCategory::getId, MarketMapCategory::getName));
+    private List<StockCategoryItem> toBlockingStockCategoryItems(List<MarketMapStockCategory> stockCategories, List<MarketMapCategory> categories) {
+        Map<Long, MarketMapCategory> categoryById = categories.stream().collect(Collectors.toMap(MarketMapCategory::getId, Function.identity()));
         Map<String, StockInfo> stockInfoCache = stockInfoCacheService.getCache();
         return stockCategories.stream()
                 .map(stockCategory -> {
                     String stockCode = stockCategory.getStockCode();
                     return new StockCategoryItem(
-                            stockCode, stockInfoCache.get(stockCode).getStockName(), categoryNameById.get(stockCategory.getCategoryId()));
+                            stockCode,
+                            stockInfoCache.get(stockCode).getStockName(),
+                            categoryById.get(stockCategory.getCategoryId()).getName());
                 })
                 .toList();
     }

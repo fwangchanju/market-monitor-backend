@@ -20,8 +20,8 @@ public class MarketMapStockCategoryController {
     private final MarketMapStockCategoryService marketMapStockCategoryService;
 
     @GetMapping
-    public List<StockCategoryItem> getAssignments() {
-        return marketMapStockCategoryService.getAssignments();
+    public List<StockCategoryItem> getStockCategories() {
+        return marketMapStockCategoryService.getStockCategories();
     }
 
     @PutMapping("/{stockCode}")

@@ -50,7 +50,7 @@ public class CollectionScheduler {
         runSafely("프로그램매매랭킹", () -> programNetBuyRankingCollector.collect(snapshotTime));
         runSafely("프로그램매매히스토리", () -> programTradeIntradayCollector.collect(snapshotTime));
         runSafely("지수기여도랭킹", () -> indexContributionRankingCollector.collect(snapshotTime));
-        runSafely("시장현황텔레그램발송", marketSummaryRenderService::sendMarketSummary);
+        // runSafely("시장현황텔레그램발송", marketSummaryRenderService::sendMarketSummary);
 
         log.info("장중 시장 데이터 수집 완료: snapshotTime={}", snapshotTime);
     }

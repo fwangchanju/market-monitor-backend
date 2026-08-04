@@ -1,8 +1,15 @@
 package dev.eolmae.marketmonitor.domain.marketmap.service;
 
+import dev.eolmae.marketmonitor.domain.marketmap.dto.StockCategoryItem;
+import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategory;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapStockCategory;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapStockCategoryRepository;
+import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
+import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -17,6 +24,7 @@ public class MarketMapStockCategoryService {
 
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository;
     private final MarketMapCategoryRepository marketMapCategoryRepository;
+    private final StockInfoCacheService stockInfoCacheService;
 
     public void assign(String stockCode, Long categoryId) {
         if (!marketMapCategoryRepository.existsById(categoryId)) {
@@ -28,5 +36,19 @@ public class MarketMapStockCategoryService {
                 .ifPresentOrElse(
                         stockCategory -> stockCategory.reassign(categoryId),
                         () -> marketMapStockCategoryRepository.save(MarketMapStockCategory.create(stockCode, categoryId)));
+    }
+
+    @Transactional(readOnly = true)
+    public List<StockCategoryItem> getAssignments() {
+        Map<Long, String> categoryNameById = marketMapCategoryRepository.findAll().stream()
+                .collect(Collectors.toMap(MarketMapCategory::getId, MarketMapCategory::getName));
+        Map<String, StockInfo> stockInfoCache = stockInfoCacheService.getCache();
+        return marketMapStockCategoryRepository.findAll().stream()
+                .map(stockCategory -> {
+                    String stockCode = stockCategory.getStockCode();
+                    return new StockCategoryItem(
+                            stockCode, stockInfoCache.get(stockCode).getStockName(), categoryNameById.get(stockCategory.getCategoryId()));
+                })
+                .toList();
     }
 }

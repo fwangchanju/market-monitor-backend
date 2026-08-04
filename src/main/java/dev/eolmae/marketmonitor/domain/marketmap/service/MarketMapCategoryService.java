@@ -1,7 +1,7 @@
 package dev.eolmae.marketmonitor.domain.marketmap.service;
 
 import dev.eolmae.marketmonitor.common.event.StockInfoSyncedEvent;
-import dev.eolmae.marketmonitor.domain.marketmap.dto.BlockingStockItem;
+import dev.eolmae.marketmonitor.domain.marketmap.dto.StockCategoryItem;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryDeletePreview;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryItem;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategory;
@@ -168,13 +168,15 @@ public class MarketMapCategoryService {
         return subCategoryIds.stream().filter(id -> !id.equals(categoryId)).map(categoryNameById::get).toList();
     }
 
-    private List<BlockingStockItem> toBlockingStockItems(List<MarketMapStockCategory> stockCategories, List<MarketMapCategory> categories) {
+    private List<StockCategoryItem> toBlockingStockItems(List<MarketMapStockCategory> stockCategories, List<MarketMapCategory> categories) {
         Map<Long, String> categoryNameById = categories.stream().collect(Collectors.toMap(MarketMapCategory::getId, MarketMapCategory::getName));
         Map<String, StockInfo> stockInfoCache = stockInfoCacheService.getCache();
         return stockCategories.stream()
-                .map(stockCategory -> new BlockingStockItem(
-                        categoryNameById.get(stockCategory.getCategoryId()),
-                        stockInfoCache.get(stockCategory.getStockCode()).getStockName()))
+                .map(stockCategory -> {
+                    String stockCode = stockCategory.getStockCode();
+                    return new StockCategoryItem(
+                            stockCode, stockInfoCache.get(stockCode).getStockName(), categoryNameById.get(stockCategory.getCategoryId()));
+                })
                 .toList();
     }
 

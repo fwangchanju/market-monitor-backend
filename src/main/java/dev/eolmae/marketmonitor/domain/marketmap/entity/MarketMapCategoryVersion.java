@@ -12,9 +12,9 @@ import lombok.Getter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-@Getter
-@Entity
 @Table(name = "market_map_category_version")
+@Entity
+@Getter
 public class MarketMapCategoryVersion {
 
     @Id
@@ -24,8 +24,8 @@ public class MarketMapCategoryVersion {
     @Column(nullable = false, length = 50)
     private String label;
 
-    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "snapshot_json", nullable = false)
+    @JdbcTypeCode(SqlTypes.JSON)
     private String snapshotJson;
 
     @Column(nullable = false)

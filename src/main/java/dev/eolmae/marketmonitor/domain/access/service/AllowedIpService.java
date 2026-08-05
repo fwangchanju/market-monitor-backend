@@ -11,8 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /** IP 화이트리스트 관리. */
 @Service
-@RequiredArgsConstructor
 @Transactional
+@RequiredArgsConstructor
 public class AllowedIpService {
 
     private final AllowedIpRepository allowedIpRepository;

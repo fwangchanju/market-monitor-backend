@@ -1,6 +1,6 @@
 package dev.eolmae.marketmonitor.domain.marketmap.controller;
 
-import dev.eolmae.marketmonitor.domain.marketmap.dto.AssignStockRequest;
+import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryIdRequest;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.StockCategoryItem;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapStockCategoryService;
 import java.util.List;
@@ -12,8 +12,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@RestController
 @RequestMapping("/api/admin/market-map/stock-categories")
+@RestController
 @RequiredArgsConstructor
 public class MarketMapStockCategoryController {
 
@@ -25,7 +25,7 @@ public class MarketMapStockCategoryController {
     }
 
     @PutMapping("/{stockCode}")
-    public void assign(@PathVariable String stockCode, @RequestBody AssignStockRequest request) {
+    public void assign(@PathVariable String stockCode, @RequestBody CategoryIdRequest request) {
         marketMapStockCategoryService.assign(stockCode, request.categoryId());
     }
 }

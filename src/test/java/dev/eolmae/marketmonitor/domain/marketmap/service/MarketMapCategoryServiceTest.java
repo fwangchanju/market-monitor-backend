@@ -52,14 +52,14 @@ class MarketMapCategoryServiceTest {
         assertThat(saved).allMatch(category -> category.getParentId() == null);
         // 자식(메모리)의 displayOrder는 최상위 maxOrder 계산에서 제외되고, 기존 최상위 최댓값(2) 다음부터 이어진다.
         assertThat(saved).extracting(MarketMapCategory::getDisplayOrder).containsExactlyInAnyOrder(3, 4);
-        // 이벤트에 포함된 기존 카테고리(반도체)는 isSynced로 갱신되고, 포함 안 된 건 그대로다.
-        assertThat(semiconductor.isSynced()).isTrue();
-        assertThat(electronics.isSynced()).isFalse();
-        assertThat(memory.isSynced()).isFalse();
+        // 이벤트에 포함된 기존 카테고리(반도체)는 isLocked로 갱신되고, 포함 안 된 건 그대로다.
+        assertThat(semiconductor.isLocked()).isTrue();
+        assertThat(electronics.isLocked()).isFalse();
+        assertThat(memory.isLocked()).isFalse();
     }
 
     @Test
-    void onStockInfoSynced_전부_이미_존재하면_새로_생성하지_않고_isSynced만_갱신한다() {
+    void onStockInfoSynced_전부_이미_존재하면_새로_생성하지_않고_isLocked만_갱신한다() {
         MarketMapCategory semiconductor = category(1L, null, "반도체", 1);
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
 
@@ -68,11 +68,11 @@ class MarketMapCategoryServiceTest {
         ArgumentCaptor<List<MarketMapCategory>> captor = ArgumentCaptor.forClass(List.class);
         verify(marketMapCategoryRepository).saveAll(captor.capture());
         assertThat(captor.getValue()).isEmpty();
-        assertThat(semiconductor.isSynced()).isTrue();
+        assertThat(semiconductor.isLocked()).isTrue();
     }
 
     @Test
-    void getCategories_isSynced_필드가_그대로_노출된다() {
+    void getCategories_isLocked_필드가_그대로_노출된다() {
         MarketMapCategory semiconductor = category(1L, null, "반도체", 1, true);
         MarketMapCategory chemical = category(2L, null, "화학", 2, false);
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor, chemical));
@@ -80,12 +80,12 @@ class MarketMapCategoryServiceTest {
         List<CategoryItem> items = service.getCategories();
 
         assertThat(items)
-                .extracting(CategoryItem::name, CategoryItem::isSynced)
+                .extracting(CategoryItem::name, CategoryItem::isLocked)
                 .containsExactlyInAnyOrder(tuple("반도체", true), tuple("화학", false));
     }
 
     @Test
-    void deletePreview_isSynced인_카테고리는_이유_없이_차단된다() {
+    void deletePreview_isLocked인_카테고리는_이유_없이_차단된다() {
         MarketMapCategory semiconductor = category(1L, null, "반도체", 1, true);
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
 
@@ -134,7 +134,7 @@ class MarketMapCategoryServiceTest {
     }
 
     @Test
-    void delete_isSynced인_카테고리는_409로_차단된다() {
+    void delete_isLocked인_카테고리는_409로_차단된다() {
         MarketMapCategory semiconductor = category(1L, null, "반도체", 1, true);
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
 
@@ -151,13 +151,93 @@ class MarketMapCategoryServiceTest {
         assertThatThrownBy(() -> service.delete(1L)).isInstanceOf(ResponseStatusException.class);
     }
 
+    @Test
+    void delete_성공하면_대상과_하위카테고리가_삭제되고_남은_형제_순서가_당겨진다() {
+        MarketMapCategory parent = category(1L, null, "부모", 1);
+        MarketMapCategory a = category(2L, 1L, "A", 1);
+        MarketMapCategory target = category(3L, 1L, "삭제대상", 2);
+        MarketMapCategory b = category(4L, 1L, "B", 3);
+        MarketMapCategory child = category(5L, 3L, "자식", 1);
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(parent, a, target, b, child));
+        when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(3L, 5L))).thenReturn(List.of());
+
+        service.delete(3L);
+
+        ArgumentCaptor<List<MarketMapCategory>> captor = ArgumentCaptor.forClass(List.class);
+        verify(marketMapCategoryRepository).deleteAll(captor.capture());
+        assertThat(captor.getValue()).containsExactlyInAnyOrder(target, child);
+        assertThat(a.getDisplayOrder()).isEqualTo(1); // 삭제 대상보다 앞이라 영향 없음
+        assertThat(b.getDisplayOrder()).isEqualTo(2); // 한 칸 당겨짐
+    }
+
+    @Test
+    void reparent_기존_부모_밑_형제_순서가_당겨지고_새_부모_밑_맨_앞에_삽입된다() {
+        MarketMapCategory parentA = category(1L, null, "A", 1);
+        MarketMapCategory parentB = category(2L, null, "B", 2);
+        MarketMapCategory x = category(3L, 1L, "X", 1);
+        MarketMapCategory y = category(4L, 1L, "Y", 2);
+        MarketMapCategory z = category(5L, 2L, "Z", 1);
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(parentA, parentB, x, y, z));
+        when(marketMapCategoryRepository.findByParentId(2L)).thenReturn(List.of(z));
+
+        service.reparent(4L, 2L);
+
+        assertThat(y.getParentId()).isEqualTo(2L);
+        assertThat(y.getDisplayOrder()).isEqualTo(1);
+        assertThat(y.getDepth()).isEqualTo(1);
+        assertThat(x.getDisplayOrder()).isEqualTo(1); // Y보다 앞이라 영향 없음
+        assertThat(z.getDisplayOrder()).isEqualTo(2); // 새 부모 밑에서 한 칸 밀림
+    }
+
+    @Test
+    void reparent_이동한_카테고리의_하위_카테고리도_depth가_함께_바뀐다() {
+        MarketMapCategory e = category(1L, null, "E", 1);
+        MarketMapCategory d = category(2L, 1L, "D", 1);
+        MarketMapCategory a = category(3L, null, "A", 2);
+        MarketMapCategory b = category(4L, 3L, "B", 1);
+        MarketMapCategory c = category(5L, 4L, "C", 1);
+        ReflectionTestUtils.setField(c, "depth", 2); // 실제 부모(B)는 depth 1인데, 헬퍼는 placeholder를 항상 depth 0으로 가정하므로 보정
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(e, d, a, b, c));
+
+        service.reparent(4L, 2L);
+
+        assertThat(b.getParentId()).isEqualTo(2L);
+        assertThat(b.getDepth()).isEqualTo(2);
+        assertThat(c.getDepth()).isEqualTo(3);
+    }
+
+    @Test
+    void reparent_새_부모가_자기_자신이면_409를_던진다() {
+        MarketMapCategory a = category(1L, null, "A", 1);
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(a));
+
+        assertThatThrownBy(() -> service.reparent(1L, 1L)).isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
+    void reparent_새_부모가_자신의_하위_카테고리면_409를_던진다() {
+        MarketMapCategory a = category(1L, null, "A", 1);
+        MarketMapCategory b = category(2L, 1L, "B", 1);
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(a, b));
+
+        assertThatThrownBy(() -> service.reparent(1L, 2L)).isInstanceOf(ResponseStatusException.class);
+    }
+
+    @Test
+    void reparent_존재하지_않는_카테고리면_404를_던진다() {
+        MarketMapCategory a = category(1L, null, "A", 1);
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(a));
+
+        assertThatThrownBy(() -> service.reparent(99L, 1L)).isInstanceOf(ResponseStatusException.class);
+    }
+
     private MarketMapCategory category(Long id, Long parentId, String name, int displayOrder) {
         return category(id, parentId, name, displayOrder, false);
     }
 
-    private MarketMapCategory category(Long id, Long parentId, String name, int displayOrder, boolean isSynced) {
+    private MarketMapCategory category(Long id, Long parentId, String name, int displayOrder, boolean isLocked) {
         MarketMapCategory category = parentId == null
-                ? MarketMapCategory.createParent(name, displayOrder, isSynced)
+                ? MarketMapCategory.createParent(name, displayOrder, isLocked)
                 : categoryWithParent(parentId, name, displayOrder);
         ReflectionTestUtils.setField(category, "id", id);
         return category;

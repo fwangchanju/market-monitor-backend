@@ -10,9 +10,9 @@ import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import lombok.Getter;
 
-@Getter
-@Entity
 @Table(name = "market_map_category")
+@Entity
+@Getter
 public class MarketMapCategory {
 
     @Id
@@ -34,8 +34,8 @@ public class MarketMapCategory {
     @Column(nullable = false)
     private int depth;
 
-    @Column(name = "is_synced", nullable = false)
-    private boolean isSynced;
+    @Column(name = "is_locked", nullable = false)
+    private boolean isLocked;
 
     @Column(nullable = false)
     private LocalDateTime createdAt;
@@ -45,13 +45,13 @@ public class MarketMapCategory {
 
     protected MarketMapCategory() {}
 
-    public static MarketMapCategory createParent(String name, int displayOrder, boolean isSynced) {
+    public static MarketMapCategory createParent(String name, int displayOrder, boolean isLocked) {
         var entity = new MarketMapCategory();
         entity.name = name;
         entity.parentId = null;
         entity.depth = 0;
         entity.displayOrder = displayOrder;
-        entity.isSynced = isSynced;
+        entity.isLocked = isLocked;
         LocalDateTime now = LocalDateTime.now(Zone.KST.zoneId());
         entity.createdAt = now;
         entity.updatedAt = now;
@@ -65,7 +65,7 @@ public class MarketMapCategory {
         entity.parentId = parent.id;
         entity.depth = parent.depth + 1;
         entity.displayOrder = displayOrder;
-        entity.isSynced = false;
+        entity.isLocked = false;
         LocalDateTime now = LocalDateTime.now(Zone.KST.zoneId());
         entity.createdAt = now;
         entity.updatedAt = now;
@@ -82,8 +82,23 @@ public class MarketMapCategory {
         this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
     }
 
-    public void markSynced() {
-        this.isSynced = true;
+    public void changeParent(Long parentId, int displayOrder) {
+        this.parentId = parentId;
+        this.displayOrder = displayOrder;
         this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
+    }
+
+    public void changeDepth(int depth) {
+        this.depth = depth;
+        this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
+    }
+
+    public void lock() {
+        this.isLocked = true;
+        this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
+    }
+
+    public boolean isUnlocked() {
+        return !isLocked;
     }
 }

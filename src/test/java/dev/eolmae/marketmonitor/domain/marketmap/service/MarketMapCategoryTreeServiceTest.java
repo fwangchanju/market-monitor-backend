@@ -40,7 +40,7 @@ class MarketMapCategoryTreeServiceTest {
         assertThat(tree).hasSize(2);
         CategoryTreeNode electronicsNode = tree.get(0);
         assertThat(electronicsNode.categoryName()).isEqualTo("전기/전자");
-        assertThat(electronicsNode.isSynced()).isTrue();
+        assertThat(electronicsNode.isLocked()).isTrue();
         assertThat(electronicsNode.stockCodes()).containsExactly("009150");
         assertThat(electronicsNode.children()).hasSize(1);
         assertThat(electronicsNode.children().get(0).categoryName()).isEqualTo("반도체");
@@ -48,7 +48,7 @@ class MarketMapCategoryTreeServiceTest {
 
         CategoryTreeNode chemicalNode = tree.get(1);
         assertThat(chemicalNode.categoryName()).isEqualTo("화학");
-        assertThat(chemicalNode.isSynced()).isFalse();
+        assertThat(chemicalNode.isLocked()).isFalse();
         assertThat(chemicalNode.stockCodes()).isEmpty();
         assertThat(chemicalNode.children()).isEmpty();
     }
@@ -72,9 +72,9 @@ class MarketMapCategoryTreeServiceTest {
         return category(id, parentId, name, displayOrder, false);
     }
 
-    private MarketMapCategory category(Long id, Long parentId, String name, int displayOrder, boolean isSynced) {
+    private MarketMapCategory category(Long id, Long parentId, String name, int displayOrder, boolean isLocked) {
         MarketMapCategory category = parentId == null
-                ? MarketMapCategory.createParent(name, displayOrder, isSynced)
+                ? MarketMapCategory.createParent(name, displayOrder, isLocked)
                 : categoryWithParent(parentId, name, displayOrder);
         ReflectionTestUtils.setField(category, "id", id);
         return category;

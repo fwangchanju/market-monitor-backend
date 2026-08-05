@@ -1,6 +1,7 @@
 package dev.eolmae.marketmonitor.domain.marketmap.controller;
 
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryDeletePreview;
+import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryIdRequest;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryItem;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CreateCategoryRequest;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.ReorderCategoryRequest;
@@ -16,8 +17,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@RestController
 @RequestMapping("/api/admin/market-map/categories")
+@RestController
 @RequiredArgsConstructor
 public class MarketMapCategoryController {
 
@@ -39,6 +40,11 @@ public class MarketMapCategoryController {
     @PatchMapping("/{id}/order")
     public void reorder(@PathVariable Long id, @RequestBody ReorderCategoryRequest request) {
         marketMapCategoryService.reorder(id, request.displayOrder());
+    }
+
+    @PatchMapping("/{id}/parent")
+    public void reparent(@PathVariable Long id, @RequestBody CategoryIdRequest request) {
+        marketMapCategoryService.reparent(id, request.categoryId());
     }
 
     @GetMapping("/{id}/delete-preview")

@@ -11,17 +11,17 @@ import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import lombok.Getter;
 
-@Getter
-@Entity
 @Table(name = "allowed_ip")
+@Entity
+@Getter
 public class AllowedIp {
 
     @Id
     @Column(length = 45)
     private String ip;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
+    @Enumerated(EnumType.STRING)
     private Role role;
 
     @Column(nullable = false)

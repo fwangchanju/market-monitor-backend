@@ -17,30 +17,30 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.Getter;
 
-@Getter
-@Entity
 @Table(
         name = "investor_trading_summary_snapshot",
         uniqueConstraints =
                 @UniqueConstraint(
                         name = "uk_investor_trading_summary_snapshot",
                         columnNames = {"market_type", "investor_type", "amt_qty_type", "snapshot_time"}))
+@Entity
+@Getter
 public class InvestorTradingSummarySnapshot {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
+    @Enumerated(EnumType.STRING)
     private Market marketType;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
+    @Enumerated(EnumType.STRING)
     private Investor investor;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
+    @Enumerated(EnumType.STRING)
     private AmtQty amtQty;
 
     @Column(nullable = false)

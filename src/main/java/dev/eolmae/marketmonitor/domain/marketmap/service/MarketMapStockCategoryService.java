@@ -19,8 +19,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 /** 종목의 카테고리 배정/재배정. */
 @Service
-@RequiredArgsConstructor
 @Transactional
+@RequiredArgsConstructor
 public class MarketMapStockCategoryService {
 
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository;
@@ -45,13 +45,10 @@ public class MarketMapStockCategoryService {
                 .collect(Collectors.toMap(MarketMapCategory::getId, Function.identity()));
         Map<String, StockInfo> stockInfoCache = stockInfoCacheService.getCache();
         return marketMapStockCategoryRepository.findAll().stream()
-                .map(stockCategory -> {
-                    String stockCode = stockCategory.getStockCode();
-                    return new StockCategoryItem(
-                            stockCode,
-                            stockInfoCache.get(stockCode).getStockName(),
-                            categoryById.get(stockCategory.getCategoryId()).getName());
-                })
+                .map(stockCategory -> new StockCategoryItem(
+                        stockCategory.getStockCode(),
+                        stockInfoCache.get(stockCategory.getStockCode()).getStockName(),
+                        categoryById.get(stockCategory.getCategoryId()).getName()))
                 .toList();
     }
 }

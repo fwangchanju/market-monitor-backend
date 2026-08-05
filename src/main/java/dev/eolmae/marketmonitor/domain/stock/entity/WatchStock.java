@@ -14,9 +14,9 @@ import java.time.LocalDateTime;
 import java.util.Objects;
 import lombok.Getter;
 
-@Getter
-@Entity
 @Table(name = "watch_stock")
+@Entity
+@Getter
 public class WatchStock {
 
     @Id
@@ -29,8 +29,8 @@ public class WatchStock {
     @Column(nullable = false)
     private boolean isPrimary;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
+    @Enumerated(EnumType.STRING)
     private RegisterBy registerBy;
 
     @Column(name = "holding_rank")

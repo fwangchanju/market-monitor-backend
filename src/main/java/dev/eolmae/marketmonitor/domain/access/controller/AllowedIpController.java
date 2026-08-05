@@ -12,8 +12,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /** 일반(USER) 허용 IP 관리. 이 경로 자체가 nginx에서 admin scope로 보호됨. */
-@RestController
 @RequestMapping("/api/admin/allowed-ips")
+@RestController
 @RequiredArgsConstructor
 public class AllowedIpController {
 

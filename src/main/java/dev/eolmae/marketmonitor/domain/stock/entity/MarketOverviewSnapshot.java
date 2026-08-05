@@ -15,22 +15,22 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.Getter;
 
-@Getter
-@Entity
 @Table(
         name = "market_overview_snapshot",
         uniqueConstraints =
                 @UniqueConstraint(
                         name = "uk_market_overview_snapshot",
                         columnNames = {"market_type", "snapshot_time"}))
+@Entity
+@Getter
 public class MarketOverviewSnapshot {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
+    @Enumerated(EnumType.STRING)
     private Market marketType;
 
     @Column(nullable = false)

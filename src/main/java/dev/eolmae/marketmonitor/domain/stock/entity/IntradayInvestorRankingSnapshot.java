@@ -18,8 +18,6 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.Getter;
 
-@Getter
-@Entity
 @Table(
         name = "intraday_investor_ranking_snapshot",
         uniqueConstraints =
@@ -33,26 +31,28 @@ import lombok.Getter;
                             "stock_code",
                             "snapshot_time"
                         }))
+@Entity
+@Getter
 public class IntradayInvestorRankingSnapshot {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
+    @Enumerated(EnumType.STRING)
     private Market marketType;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
+    @Enumerated(EnumType.STRING)
     private IntradayInvestor investor;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
+    @Enumerated(EnumType.STRING)
     private IntradayRanking rankingType;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
+    @Enumerated(EnumType.STRING)
     private AmtQty amtQty;
 
     @Column(nullable = false)

@@ -20,12 +20,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 /** 라이브 카테고리 트리 조립 및 버전 스냅샷 직렬화/복원. */
 @Service
-@RequiredArgsConstructor
 @Transactional
+@RequiredArgsConstructor
 public class MarketMapCategoryTreeService {
 
     /** Collectors.groupingBy는 classifier가 null을 반환하면 예외를 던지므로, 루트(parent_id null)를 묶기 위한 대체 키. */
-    private static final Long ROOT_KEY = 0L;
+    private static final long ROOT_KEY = 0L;
 
     private final MarketMapCategoryRepository marketMapCategoryRepository;
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository;
@@ -61,7 +61,7 @@ public class MarketMapCategoryTreeService {
         List<String> stockCodes = stocksByCategoryId.getOrDefault(category.getId(), List.of()).stream()
                 .map(MarketMapStockCategory::getStockCode)
                 .toList();
-        return new CategoryTreeNode(category.getName(), category.getDisplayOrder(), category.isSynced(), children, stockCodes);
+        return new CategoryTreeNode(category.getName(), category.getDisplayOrder(), category.isLocked(), children, stockCodes);
     }
 
     @Transactional(readOnly = true)
@@ -97,7 +97,7 @@ public class MarketMapCategoryTreeService {
 
     private void insertNode(CategoryTreeNode node, MarketMapCategory parent, Long versionId) {
         MarketMapCategory category = parent == null
-                ? MarketMapCategory.createParent(node.categoryName(), node.displayOrder(), node.isSynced())
+                ? MarketMapCategory.createParent(node.categoryName(), node.displayOrder(), node.isLocked())
                 : MarketMapCategory.createChild(node.categoryName(), parent, node.displayOrder());
         category.tagVersion(versionId);
         MarketMapCategory saved = marketMapCategoryRepository.save(category);

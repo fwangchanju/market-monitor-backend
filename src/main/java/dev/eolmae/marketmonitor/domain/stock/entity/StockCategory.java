@@ -8,9 +8,9 @@ import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import lombok.Getter;
 
-@Getter
-@Entity
 @Table(name = "stock_category")
+@Entity
+@Getter
 public class StockCategory {
 
     @Id

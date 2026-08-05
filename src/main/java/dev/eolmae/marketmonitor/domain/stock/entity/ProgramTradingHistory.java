@@ -12,14 +12,14 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.Getter;
 
-@Getter
-@Entity
 @Table(
         name = "program_trading_history",
         uniqueConstraints =
                 @UniqueConstraint(
                         name = "uk_program_trading_history",
                         columnNames = {"stock_code", "snapshot_time"}))
+@Entity
+@Getter
 public class ProgramTradingHistory {
 
     @Id

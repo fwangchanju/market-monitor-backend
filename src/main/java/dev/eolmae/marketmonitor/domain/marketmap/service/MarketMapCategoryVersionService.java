@@ -15,8 +15,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 /** 카테고리 버전(백업) 저장/덮어쓰기/불러오기/삭제. */
 @Service
-@RequiredArgsConstructor
 @Transactional
+@RequiredArgsConstructor
 public class MarketMapCategoryVersionService {
 
     private final MarketMapCategoryVersionRepository marketMapCategoryVersionRepository;

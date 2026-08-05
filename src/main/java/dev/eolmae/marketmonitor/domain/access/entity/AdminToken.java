@@ -8,9 +8,9 @@ import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import lombok.Getter;
 
-@Getter
-@Entity
 @Table(name = "admin_token")
+@Entity
+@Getter
 public class AdminToken {
 
     @Id

@@ -9,8 +9,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
-@RequiredArgsConstructor
 @Transactional
+@RequiredArgsConstructor
 public class AdminTokenService {
 
     private final AdminTokenRepository adminTokenRepository;

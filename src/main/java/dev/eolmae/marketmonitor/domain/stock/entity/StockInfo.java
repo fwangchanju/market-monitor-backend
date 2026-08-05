@@ -12,9 +12,9 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.Getter;
 
-@Getter
-@Entity
 @Table(name = "stock_info")
+@Entity
+@Getter
 public class StockInfo {
 
     @Id
@@ -24,8 +24,8 @@ public class StockInfo {
     @Column(nullable = false, length = 100)
     private String stockName;
 
-    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
+    @Enumerated(EnumType.STRING)
     private Market marketType;
 
     @Column(length = 5)

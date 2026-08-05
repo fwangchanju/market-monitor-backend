@@ -19,8 +19,8 @@ public class ApplicationConfig {
     public static final String CACHE_MANAGER = "cacheManager";
     public static final String ACCESS_CACHE_MANAGER = "accessCacheManager";
 
-    @Primary
     @Bean(CACHE_MANAGER)
+    @Primary
     public CacheManager cacheManager() {
         return new CaffeineCacheManager(CacheKey.STOCK_INFO, CacheKey.WATCH_STOCK);
     }

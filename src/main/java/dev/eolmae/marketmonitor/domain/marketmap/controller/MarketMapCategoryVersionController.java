@@ -1,8 +1,7 @@
 package dev.eolmae.marketmonitor.domain.marketmap.controller;
 
-import dev.eolmae.marketmonitor.domain.marketmap.dto.OverwriteVersionRequest;
-import dev.eolmae.marketmonitor.domain.marketmap.dto.SaveVersionRequest;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.VersionItem;
+import dev.eolmae.marketmonitor.domain.marketmap.dto.VersionLabelRequest;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryVersionService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -15,8 +14,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@RestController
 @RequestMapping("/api/admin/market-map/versions")
+@RestController
 @RequiredArgsConstructor
 public class MarketMapCategoryVersionController {
 
@@ -33,12 +32,12 @@ public class MarketMapCategoryVersionController {
     }
 
     @PostMapping
-    public VersionItem save(@RequestBody SaveVersionRequest request) {
+    public VersionItem save(@RequestBody VersionLabelRequest request) {
         return marketMapCategoryVersionService.save(request.label());
     }
 
     @PatchMapping("/{id}")
-    public VersionItem overwrite(@PathVariable Long id, @RequestBody OverwriteVersionRequest request) {
+    public VersionItem overwrite(@PathVariable Long id, @RequestBody VersionLabelRequest request) {
         return marketMapCategoryVersionService.overwrite(id, request.label());
     }
 

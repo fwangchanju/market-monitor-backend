@@ -36,12 +36,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 @Transactional(readOnly = true)
+@RequiredArgsConstructor
 public class MarketMapQueryService {
 
     private static final String UNCATEGORIZED = "미분류";
-    private static final Long ROOT_KEY = 0L;
+    private static final long ROOT_KEY = 0L;
 
     private final StockInfoCacheService stockInfoCacheService;
     private final StockCategoryRepository stockCategoryRepository;

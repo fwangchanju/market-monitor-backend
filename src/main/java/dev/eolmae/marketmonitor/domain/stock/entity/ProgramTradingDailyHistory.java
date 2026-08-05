@@ -13,14 +13,14 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import lombok.Getter;
 
-@Getter
-@Entity
 @Table(
         name = "program_trading_daily",
         uniqueConstraints =
                 @UniqueConstraint(
                         name = "uk_program_trading_daily",
                         columnNames = {"stock_code", "trade_date"}))
+@Entity
+@Getter
 public class ProgramTradingDailyHistory {
 
     @Id

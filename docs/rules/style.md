@@ -129,8 +129,6 @@ domain/<feature>/
 - **`@Transactional`/`@Cacheable`은 구현체에만** — 인터페이스는 순수 계약. Spring 프록시는 인터페이스 애노테이션을 상속하지 않음.
 - **`existsBy` 패턴 사용** — `findBy(...).isEmpty()` 금지.
 - **중복 체크 후 저장** — `if (exists) return;` early return 패턴.
-- **bulk delete** — 루프 내 개별 `delete()` 대신 단일 `@Modifying @Query`로.
-- **최신 스냅샷 조회** — `findLatestSnapshotTime()` + 후속 조회 2-step 대신 `WHERE s.snapshotTime = (SELECT MAX(...))` 서브쿼리 단일 쿼리.
 
 ---
 
@@ -157,6 +155,7 @@ domain/<feature>/
 - **GET** — `@RequestParam`/`@PathVariable` 개별 파라미터.
 - **POST/PUT** — 파라미터 개수와 무관하게 Request 객체(record)로 받음.
 - **요청 모양 공유 + 소수 필드로 갈리는 변형 동작은 컨트롤러에서 분기** — 요청 DTO 모양이 거의 같고 핵심 로직도 대부분 공유하는데 필드 하나(주로 nullable)로 동작이 갈리는 경우(예: 카테고리 생성 시 `parentId` 유무로 대분류/하위분류 분기), 엔드포인트는 하나로 유지하고 컨트롤러가 그 필드를 보고 서로 다른 서비스 메서드(`createRoot`/`createChild`)를 호출한다. 서비스 메서드는 각자의 케이스만 처리하고 내부에 분기를 두지 않는다. 반면 요청 파라미터 구성 자체가 다르거나 서로 다른 인증/도메인 경로를 타는 경우는 엔드포인트 자체를 분리한다(`AllowedIpController.register` vs `AdminTokenController.registerIp`).
+- **필드 구성이 동일한 Request record는 병합** — 엔드포인트가 달라도 필드 타입·개수가 완전히 같은 단순 Request record(예: `Long` 하나, `String` 하나)는 엔드포인트별로 따로 만들지 않는다. 필드가 실제로 같은 의미를 가리키면(예: `parentId`와 `categoryId`가 둘 다 카테고리 id) 그 의미를 담은 이름 하나로 합쳐 여러 컨트롤러가 공유한다(`CategoryIdRequest(Long categoryId)`, `VersionLabelRequest(String label)`).
 - **미사용 코드 처리** — 즉시 삭제 금지. 주석 처리 + `// TODO 화면 점검 후 이상 없으면 삭제`.
 - **`@ConditionalOnProperty`는 실제 호출 경로 기준으로만** — 상위에서 이미 가드되면 하위 중복 금지. 도메인별로 프로퍼티 분리(예: `krx.enabled`).
 

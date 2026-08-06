@@ -3,6 +3,7 @@ package dev.eolmae.marketmonitor.domain.marketmap.controller;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryDeletePreview;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryIdRequest;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryItem;
+import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryNameRequest;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CreateCategoryRequest;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.ReorderCategoryRequest;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryService;
@@ -35,6 +36,11 @@ public class MarketMapCategoryController {
             return marketMapCategoryService.createParent(request.name());
         }
         return marketMapCategoryService.createChild(request.name(), request.parentId());
+    }
+
+    @PatchMapping("/{id}/name")
+    public void rename(@PathVariable Long id, @RequestBody CategoryNameRequest request) {
+        marketMapCategoryService.rename(id, request.name());
     }
 
     @PatchMapping("/{id}/order")

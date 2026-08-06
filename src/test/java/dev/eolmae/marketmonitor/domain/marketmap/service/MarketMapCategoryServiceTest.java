@@ -3,11 +3,13 @@ package dev.eolmae.marketmonitor.domain.marketmap.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.event.StockInfoSyncedEvent;
+import dev.eolmae.marketmonitor.common.event.StockInfoSyncedEvent.NewStock;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryDeletePreview;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryItem;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategory;
@@ -19,7 +21,6 @@ import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
@@ -36,69 +37,76 @@ class MarketMapCategoryServiceTest {
             new MarketMapCategoryService(marketMapCategoryRepository, marketMapStockCategoryRepository, stockInfoCacheService);
 
     @Test
-    void onStockInfoSynced_없는_카테고리만_최상위로_생성하고_기존은_건너뛴다() {
+    void onStockInfoSynced_없는_카테고리는_생성하고_신규종목을_배정한다() {
         MarketMapCategory semiconductor = category(1L, null, "반도체", 1);
         MarketMapCategory electronics = category(2L, null, "전기/전자", 2);
-        MarketMapCategory memory = category(3L, 2L, "메모리", 1);
-        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor, electronics, memory));
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor, electronics));
+        // IDENTITY 전략은 insert 시점에 즉시 id가 채워지므로, saveAll이 그 시점을 흉내내도록 stub
+        when(marketMapCategoryRepository.saveAll(Mockito.anyList())).thenAnswer(invocation -> {
+            List<MarketMapCategory> saved = invocation.getArgument(0);
+            long nextId = 100L;
+            for (MarketMapCategory category : saved) {
+                ReflectionTestUtils.setField(category, "id", nextId++);
+            }
+            return saved;
+        });
 
-        service.onStockInfoSynced(new StockInfoSyncedEvent(Set.of("반도체", "화학", "미분류")));
+        service.onStockInfoSynced(new StockInfoSyncedEvent(
+                List.of(new NewStock("005930", "반도체"), new NewStock("051910", "화학"))));
 
-        ArgumentCaptor<List<MarketMapCategory>> captor = ArgumentCaptor.forClass(List.class);
-        verify(marketMapCategoryRepository).saveAll(captor.capture());
-        List<MarketMapCategory> saved = captor.getValue();
+        ArgumentCaptor<List<MarketMapCategory>> categoryCaptor = ArgumentCaptor.forClass(List.class);
+        verify(marketMapCategoryRepository).saveAll(categoryCaptor.capture());
+        assertThat(categoryCaptor.getValue()).extracting(MarketMapCategory::getName).containsExactly("화학");
+        assertThat(categoryCaptor.getValue()).allMatch(category -> category.getParentId() == null);
+        Long chemicalId = categoryCaptor.getValue().get(0).getId();
 
-        assertThat(saved).extracting(MarketMapCategory::getName).containsExactlyInAnyOrder("화학", "미분류");
-        assertThat(saved).allMatch(category -> category.getParentId() == null);
-        // 자식(메모리)의 displayOrder는 최상위 maxOrder 계산에서 제외되고, 기존 최상위 최댓값(2) 다음부터 이어진다.
-        assertThat(saved).extracting(MarketMapCategory::getDisplayOrder).containsExactlyInAnyOrder(3, 4);
-        // 이벤트에 포함된 기존 카테고리(반도체)는 isLocked로 갱신되고, 포함 안 된 건 그대로다.
-        assertThat(semiconductor.isLocked()).isTrue();
-        assertThat(electronics.isLocked()).isFalse();
-        assertThat(memory.isLocked()).isFalse();
+        ArgumentCaptor<List<MarketMapStockCategory>> assignmentCaptor = ArgumentCaptor.forClass(List.class);
+        verify(marketMapStockCategoryRepository).saveAll(assignmentCaptor.capture());
+        assertThat(assignmentCaptor.getValue())
+                .extracting(MarketMapStockCategory::getStockCode, MarketMapStockCategory::getCategoryId)
+                .containsExactlyInAnyOrder(tuple("005930", 1L), tuple("051910", chemicalId));
     }
 
     @Test
-    void onStockInfoSynced_전부_이미_존재하면_새로_생성하지_않고_isLocked만_갱신한다() {
+    void onStockInfoSynced_전부_이미_존재하면_새로_생성하지_않고_배정만_한다() {
         MarketMapCategory semiconductor = category(1L, null, "반도체", 1);
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
 
-        service.onStockInfoSynced(new StockInfoSyncedEvent(Set.of("반도체")));
+        service.onStockInfoSynced(new StockInfoSyncedEvent(List.of(new NewStock("005930", "반도체"))));
 
-        ArgumentCaptor<List<MarketMapCategory>> captor = ArgumentCaptor.forClass(List.class);
-        verify(marketMapCategoryRepository).saveAll(captor.capture());
-        assertThat(captor.getValue()).isEmpty();
-        assertThat(semiconductor.isLocked()).isTrue();
+        ArgumentCaptor<List<MarketMapCategory>> categoryCaptor = ArgumentCaptor.forClass(List.class);
+        verify(marketMapCategoryRepository).saveAll(categoryCaptor.capture());
+        assertThat(categoryCaptor.getValue()).isEmpty();
+
+        ArgumentCaptor<List<MarketMapStockCategory>> assignmentCaptor = ArgumentCaptor.forClass(List.class);
+        verify(marketMapStockCategoryRepository).saveAll(assignmentCaptor.capture());
+        assertThat(assignmentCaptor.getValue())
+                .extracting(MarketMapStockCategory::getStockCode, MarketMapStockCategory::getCategoryId)
+                .containsExactly(tuple("005930", 1L));
     }
 
     @Test
-    void getCategories_isLocked_필드가_그대로_노출된다() {
-        MarketMapCategory semiconductor = category(1L, null, "반도체", 1, true);
-        MarketMapCategory chemical = category(2L, null, "화학", 2, false);
+    void onStockInfoSynced_신규종목이_없으면_아무것도_하지_않는다() {
+        service.onStockInfoSynced(new StockInfoSyncedEvent(List.of()));
+
+        verify(marketMapCategoryRepository, never()).saveAll(Mockito.anyList());
+        verify(marketMapStockCategoryRepository, never()).saveAll(Mockito.anyList());
+    }
+
+    @Test
+    void getCategories_카테고리_목록을_반환한다() {
+        MarketMapCategory semiconductor = category(1L, null, "반도체", 1);
+        MarketMapCategory chemical = category(2L, null, "화학", 2);
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor, chemical));
 
         List<CategoryItem> items = service.getCategories();
 
-        assertThat(items)
-                .extracting(CategoryItem::name, CategoryItem::isLocked)
-                .containsExactlyInAnyOrder(tuple("반도체", true), tuple("화학", false));
-    }
-
-    @Test
-    void deletePreview_isLocked인_카테고리는_이유_없이_차단된다() {
-        MarketMapCategory semiconductor = category(1L, null, "반도체", 1, true);
-        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
-
-        CategoryDeletePreview preview = service.deletePreview(1L);
-
-        assertThat(preview.categoryName()).isEqualTo("반도체");
-        assertThat(preview.deletable()).isFalse();
-        assertThat(preview.blockingStocks()).isEmpty();
+        assertThat(items).extracting(CategoryItem::name).containsExactlyInAnyOrder("반도체", "화학");
     }
 
     @Test
     void deletePreview_배정된_종목이_있으면_종목_목록과_함께_차단된다() {
-        MarketMapCategory semiconductor = category(1L, null, "반도체", 1, false);
+        MarketMapCategory semiconductor = category(1L, null, "반도체", 1);
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
         when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L)))
                 .thenReturn(List.of(MarketMapStockCategory.create("005930", 1L)));
@@ -114,7 +122,7 @@ class MarketMapCategoryServiceTest {
 
     @Test
     void deletePreview_배정된_종목이_없으면_삭제_가능하고_하위카테고리_목록을_반환한다() {
-        MarketMapCategory electronics = category(1L, null, "전기/전자", 1, false);
+        MarketMapCategory electronics = category(1L, null, "전기/전자", 1);
         MarketMapCategory semiconductor = category(2L, 1L, "반도체", 1);
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(electronics, semiconductor));
         when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L, 2L))).thenReturn(List.of());
@@ -134,16 +142,8 @@ class MarketMapCategoryServiceTest {
     }
 
     @Test
-    void delete_isLocked인_카테고리는_409로_차단된다() {
-        MarketMapCategory semiconductor = category(1L, null, "반도체", 1, true);
-        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
-
-        assertThatThrownBy(() -> service.delete(1L)).isInstanceOf(ResponseStatusException.class);
-    }
-
-    @Test
     void delete_배정된_종목이_있으면_409로_차단된다() {
-        MarketMapCategory semiconductor = category(1L, null, "반도체", 1, false);
+        MarketMapCategory semiconductor = category(1L, null, "반도체", 1);
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
         when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L)))
                 .thenReturn(List.of(MarketMapStockCategory.create("005930", 1L)));
@@ -232,19 +232,15 @@ class MarketMapCategoryServiceTest {
     }
 
     private MarketMapCategory category(Long id, Long parentId, String name, int displayOrder) {
-        return category(id, parentId, name, displayOrder, false);
-    }
-
-    private MarketMapCategory category(Long id, Long parentId, String name, int displayOrder, boolean isLocked) {
         MarketMapCategory category = parentId == null
-                ? MarketMapCategory.createParent(name, displayOrder, isLocked)
+                ? MarketMapCategory.createParent(name, displayOrder)
                 : categoryWithParent(parentId, name, displayOrder);
         ReflectionTestUtils.setField(category, "id", id);
         return category;
     }
 
     private MarketMapCategory categoryWithParent(Long parentId, String name, int displayOrder) {
-        MarketMapCategory parent = MarketMapCategory.createParent("parent-placeholder", 0, false);
+        MarketMapCategory parent = MarketMapCategory.createParent("parent-placeholder", 0);
         ReflectionTestUtils.setField(parent, "id", parentId);
         return MarketMapCategory.createChild(name, parent, displayOrder);
     }

@@ -54,7 +54,6 @@ CREATE TABLE market_map_category (
     name VARCHAR(50) NOT NULL,
     display_order INT NOT NULL DEFAULT 0,
     depth INT NOT NULL,
-    is_locked BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_market_map_category PRIMARY KEY (id),

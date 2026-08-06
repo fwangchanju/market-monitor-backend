@@ -9,6 +9,7 @@ import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.StockInfoRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.StockInfoResponse;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
+import dev.eolmae.marketmonitor.domain.stock.enums.StockMarketCode;
 import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
@@ -16,8 +17,6 @@ import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -51,11 +50,6 @@ public class StockInfoCollector {
 
         int fetchedCount = fetchedStocks.size();
 
-        Set<String> categoryNames = fetchedStocks.values().stream()
-                .map(fetched -> fetched.categoryName().isBlank() ? UNCATEGORIZED : fetched.categoryName())
-                .collect(Collectors.toSet());
-        eventPublisher.publishEvent(new StockInfoSyncedEvent(categoryNames));
-
         for (StockInfo existing : stockInfoRepository.findAll()) {
             FetchStockInfo fetched = fetchedStocks.remove(existing.getStockCode());
 
@@ -88,6 +82,14 @@ public class StockInfoCollector {
                         fetched.lastPrice()))
                 .toList();
         stockInfoRepository.saveAll(newStocks);
+
+        // 마켓맵은 주권(코스피/코스닥)만 다루므로 ELW/ETF 등은 이벤트 발행 단계에서 제외 (stock_info 저장 자체는 종류 무관하게 전부 유지)
+        List<StockInfoSyncedEvent.NewStock> newStockEvents = newStocks.stream()
+                .filter(stock -> StockMarketCode.isOrdinaryShare(stock.getMarketCode()))
+                .map(stock -> new StockInfoSyncedEvent.NewStock(
+                        stock.getStockCode(), stock.getCategoryName().isBlank() ? UNCATEGORIZED : stock.getCategoryName()))
+                .toList();
+        eventPublisher.publishEvent(new StockInfoSyncedEvent(newStockEvents));
 
         stockInfoCacheService.evict();
         log.info("종목 정보 동기화 완료: 조회 종목 수={}", fetchedCount);

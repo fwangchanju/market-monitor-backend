@@ -154,7 +154,6 @@ public class IndexContributionRankingCollector {
             LocalDateTime snapshotTime) {
 
         // 유효 종목 필터링 및 전일 시가총액 합산
-        StockMarketCode marketCode = StockMarketCode.from(market);
         List<StockCandidate> candidates = new ArrayList<>();
         BigDecimal prevMarketCapitalization = BigDecimal.ZERO;
         for (SectorPriceListResponse.StockItem item : items) {
@@ -165,7 +164,7 @@ public class IndexContributionRankingCollector {
                 continue;
             }
             // ELW, ETF 등 주권 외 종목 제외
-            if (!marketCode.matches(stockInfo.getMarketCode())) {
+            if (!StockMarketCode.isOrdinaryShare(stockInfo.getMarketCode())) {
                 continue;
             }
             // 전일종가 × 상장주식수 = 종목별 전일 시가총액 합산

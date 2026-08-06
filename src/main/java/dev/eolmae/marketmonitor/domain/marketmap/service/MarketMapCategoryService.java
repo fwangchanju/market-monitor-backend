@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.event.EventListener;
 import org.springframework.http.HttpStatus;
@@ -43,15 +44,34 @@ public class MarketMapCategoryService {
         return findAllCategories().stream().map(this::toItem).toList();
     }
 
-    /** stock_info 카테고리명 중 아직 없는 것만 최상위 카테고리로 생성. stock -> marketmap 순환 의존을 피하려고 이벤트로 수신(StockInfoSyncedEvent 참고). */
+    /** 신규 종목(이벤트 발행 단계에서 이미 주권만 필터링됨) 기준으로, 카테고리명 중 아직 없는 것만 최상위 카테고리로
+     * 생성한 뒤 market_map_stock_category에 배정한다.
+     * stock -> marketmap 순환 의존을 피하려고 이벤트로 수신(StockInfoSyncedEvent 참고). */
     @EventListener
     public void onStockInfoSynced(StockInfoSyncedEvent event) {
-        syncCategories(event.categoryNames());
+        List<StockInfoSyncedEvent.NewStock> newStocks = event.newStocks();
+        if (newStocks.isEmpty()) {
+            return;
+        }
+
+        Set<String> categoryNames =
+                newStocks.stream().map(StockInfoSyncedEvent.NewStock::categoryName).collect(Collectors.toSet());
+        Map<String, MarketMapCategory> categoryByName = syncCategories(categoryNames);
+        createNewStockCategories(newStocks, categoryByName);
+    }
+
+    private void createNewStockCategories(List<StockInfoSyncedEvent.NewStock> newStocks, Map<String, MarketMapCategory> categoryByName) {
+        List<MarketMapStockCategory> newStockCategories = newStocks.stream()
+                .map(stock -> MarketMapStockCategory.create(
+                        stock.stockCode(), categoryByName.get(stock.categoryName()).getId()))
+                .toList();
+        marketMapStockCategoryRepository.saveAll(newStockCategories);
     }
 
     /** 사용자가 직접 만드는 카테고리는 최상단에 추가되지만(createParent), 자동 생성은 최하단에 추가.
-     * 백그라운드 동기화로 인해 사용자가 정리해둔 기존 순서를 건드리지 않기 위함. */
-    private void syncCategories(Set<String> categoryNames) {
+     * 백그라운드 동기화로 인해 사용자가 정리해둔 기존 순서를 건드리지 않기 위함.
+     * 기존 + 신규 생성분을 합친 이름별 맵을 리턴해서, 호출부가 다시 전체 조회할 필요가 없게 한다. */
+    private Map<String, MarketMapCategory> syncCategories(Set<String> categoryNames) {
         Map<String, MarketMapCategory> existingByName = new HashMap<>();
         int maxOrder = 0;
         for (MarketMapCategory category : findAllCategories()) {
@@ -63,16 +83,14 @@ public class MarketMapCategoryService {
 
         List<MarketMapCategory> newCategories = new ArrayList<>();
         for (String categoryName : categoryNames) {
-            MarketMapCategory existing = existingByName.get(categoryName);
-            if (existing != null) {
-                if (existing.isUnlocked()) {
-                    existing.lock();
-                }
+            if (existingByName.containsKey(categoryName)) {
                 continue;
             }
-            newCategories.add(MarketMapCategory.createParent(categoryName, ++maxOrder, true));
+            newCategories.add(MarketMapCategory.createParent(categoryName, ++maxOrder));
         }
         marketMapCategoryRepository.saveAll(newCategories);
+        newCategories.forEach(category -> existingByName.put(category.getName(), category));
+        return existingByName;
     }
 
     public CategoryItem createParent(String name) {
@@ -81,7 +99,7 @@ public class MarketMapCategoryService {
         }
         // 최상위 카테고리는 부모 카테고리가 없다.
         shiftSiblingsForInsert(findCategoriesByParentId(null));
-        MarketMapCategory category = MarketMapCategory.createParent(name, INITIAL_DISPLAY_ORDER, false);
+        MarketMapCategory category = MarketMapCategory.createParent(name, INITIAL_DISPLAY_ORDER);
         return toItem(marketMapCategoryRepository.save(category));
     }
 
@@ -103,6 +121,22 @@ public class MarketMapCategoryService {
 
     private List<MarketMapCategory> findCategoriesByParentId(Long parentId) {
         return marketMapCategoryRepository.findByParentId(parentId);
+    }
+
+    public void rename(Long categoryId, String name) {
+        if (name == null || name.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
+        }
+        MarketMapCategory target = marketMapCategoryRepository
+                .findById(categoryId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (target.getName().equals(name)) {
+            return;
+        }
+        if (marketMapCategoryRepository.existsByName(name)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT);
+        }
+        target.rename(name);
     }
 
     public void reorder(Long categoryId, int newDisplayOrder) {
@@ -174,9 +208,6 @@ public class MarketMapCategoryService {
         CategoryMaps maps = getCategoryMaps();
         Map<Long, MarketMapCategory> categoryById = maps.categoryById();
         MarketMapCategory target = findCategory(categoryId, categoryById);
-        if (target.isLocked()) {
-            return CategoryDeletePreview.blocked(target.getName(), List.of());
-        }
 
         List<Long> subCategoryIds = collectSubCategoryIds(categoryId, maps.categoryByParentId());
         List<MarketMapStockCategory> stockCategories = marketMapStockCategoryRepository.findByCategoryIdIn(subCategoryIds);
@@ -191,9 +222,6 @@ public class MarketMapCategoryService {
         Map<Long, MarketMapCategory> categoryById = maps.categoryById();
         Map<Long, List<MarketMapCategory>> categoryByParentId = maps.categoryByParentId();
         MarketMapCategory target = findCategory(categoryId, categoryById);
-        if (target.isLocked()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT);
-        }
 
         List<Long> subCategoryIds = collectSubCategoryIds(categoryId, categoryByParentId);
         if (!marketMapStockCategoryRepository.findByCategoryIdIn(subCategoryIds).isEmpty()) {
@@ -273,11 +301,6 @@ public class MarketMapCategoryService {
 
     private CategoryItem toItem(MarketMapCategory category) {
         return new CategoryItem(
-                category.getId(),
-                category.getName(),
-                category.getParentId(),
-                category.getDepth(),
-                category.getDisplayOrder(),
-                category.isLocked());
+                category.getId(), category.getName(), category.getParentId(), category.getDepth(), category.getDisplayOrder());
     }
 }

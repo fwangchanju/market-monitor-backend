@@ -61,7 +61,7 @@ public class MarketMapCategoryTreeService {
         List<String> stockCodes = stocksByCategoryId.getOrDefault(category.getId(), List.of()).stream()
                 .map(MarketMapStockCategory::getStockCode)
                 .toList();
-        return new CategoryTreeNode(category.getName(), category.getDisplayOrder(), category.isLocked(), children, stockCodes);
+        return new CategoryTreeNode(category.getName(), category.getDisplayOrder(), children, stockCodes);
     }
 
     @Transactional(readOnly = true)
@@ -97,7 +97,7 @@ public class MarketMapCategoryTreeService {
 
     private void insertNode(CategoryTreeNode node, MarketMapCategory parent, Long versionId) {
         MarketMapCategory category = parent == null
-                ? MarketMapCategory.createParent(node.categoryName(), node.displayOrder(), node.isLocked())
+                ? MarketMapCategory.createParent(node.categoryName(), node.displayOrder())
                 : MarketMapCategory.createChild(node.categoryName(), parent, node.displayOrder());
         category.tagVersion(versionId);
         MarketMapCategory saved = marketMapCategoryRepository.save(category);

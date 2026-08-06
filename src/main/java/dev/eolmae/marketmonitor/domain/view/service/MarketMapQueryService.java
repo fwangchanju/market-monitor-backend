@@ -178,12 +178,10 @@ public class MarketMapQueryService {
     }
 
     private List<StockInfo> filterCandidates(Market market, boolean isExclude) {
-        StockMarketCode marketCode = StockMarketCode.from(market);
-
         List<StockInfo> candidates = stockInfoCacheService.getCache().values().stream()
                 .filter(stockInfo -> stockInfo.getMarketType() == market)
                 .filter(StockInfo::isActive)
-                .filter(stockInfo -> marketCode.matches(stockInfo.getMarketCode()))
+                .filter(stockInfo -> StockMarketCode.isOrdinaryShare(stockInfo.getMarketCode()))
                 .toList();
 
         if (!isExclude) {

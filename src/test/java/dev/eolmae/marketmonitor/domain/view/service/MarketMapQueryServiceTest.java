@@ -191,14 +191,14 @@ class MarketMapQueryServiceTest {
 
     private MarketMapCategory category(Long id, Long parentId, String name, int displayOrder) {
         MarketMapCategory category = parentId == null
-                ? MarketMapCategory.createParent(name, displayOrder, false)
+                ? MarketMapCategory.createParent(name, displayOrder)
                 : categoryWithParent(parentId, name, displayOrder);
         ReflectionTestUtils.setField(category, "id", id);
         return category;
     }
 
     private MarketMapCategory categoryWithParent(Long parentId, String name, int displayOrder) {
-        MarketMapCategory parent = MarketMapCategory.createParent("parent-placeholder", 0, false);
+        MarketMapCategory parent = MarketMapCategory.createParent("parent-placeholder", 0);
         ReflectionTestUtils.setField(parent, "id", parentId);
         return MarketMapCategory.createChild(name, parent, displayOrder);
     }

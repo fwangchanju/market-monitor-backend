@@ -1,7 +1,5 @@
 package dev.eolmae.marketmonitor.domain.stock.enums;
 
-import dev.eolmae.marketmonitor.common.enums.Market;
-
 public enum StockMarketCode {
     KOSPI("0"), // 유가증권시장(코스피) 주권
     ELW("3"), // ELW
@@ -28,10 +26,7 @@ public enum StockMarketCode {
         return code.equals(marketCode);
     }
 
-    public static StockMarketCode from(Market market) {
-        return switch (market) {
-            case KOSPI -> KOSPI;
-            case KOSDAQ -> KOSDAQ;
-        };
+    public static boolean isOrdinaryShare(String marketCode) {
+        return KOSPI.matches(marketCode) || KOSDAQ.matches(marketCode);
     }
 }

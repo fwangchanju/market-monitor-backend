@@ -24,9 +24,9 @@ class MarketMapCategoryTreeServiceTest {
 
     @Test
     void buildTree_대분류_세부카테고리_직속종목_정확히_조립된다() {
-        MarketMapCategory electronics = category(1L, null, "전기/전자", 1, true);
+        MarketMapCategory electronics = category(1L, null, "전기/전자", 1);
         MarketMapCategory semiconductor = category(2L, 1L, "반도체", 1);
-        MarketMapCategory chemical = category(3L, null, "화학", 2, false);
+        MarketMapCategory chemical = category(3L, null, "화학", 2);
 
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(electronics, semiconductor, chemical));
         when(marketMapStockCategoryRepository.findAll())
@@ -40,7 +40,6 @@ class MarketMapCategoryTreeServiceTest {
         assertThat(tree).hasSize(2);
         CategoryTreeNode electronicsNode = tree.get(0);
         assertThat(electronicsNode.categoryName()).isEqualTo("전기/전자");
-        assertThat(electronicsNode.isLocked()).isTrue();
         assertThat(electronicsNode.stockCodes()).containsExactly("009150");
         assertThat(electronicsNode.children()).hasSize(1);
         assertThat(electronicsNode.children().get(0).categoryName()).isEqualTo("반도체");
@@ -48,7 +47,6 @@ class MarketMapCategoryTreeServiceTest {
 
         CategoryTreeNode chemicalNode = tree.get(1);
         assertThat(chemicalNode.categoryName()).isEqualTo("화학");
-        assertThat(chemicalNode.isLocked()).isFalse();
         assertThat(chemicalNode.stockCodes()).isEmpty();
         assertThat(chemicalNode.children()).isEmpty();
     }
@@ -58,8 +56,7 @@ class MarketMapCategoryTreeServiceTest {
         List<CategoryTreeNode> original = List.of(new CategoryTreeNode(
                 "전기/전자",
                 1,
-                true,
-                List.of(new CategoryTreeNode("반도체", 1, false, List.of(), List.of("005930", "000660"))),
+                List.of(new CategoryTreeNode("반도체", 1, List.of(), List.of("005930", "000660"))),
                 List.of("009150")));
 
         String json = service.toJson(original);
@@ -69,19 +66,15 @@ class MarketMapCategoryTreeServiceTest {
     }
 
     private MarketMapCategory category(Long id, Long parentId, String name, int displayOrder) {
-        return category(id, parentId, name, displayOrder, false);
-    }
-
-    private MarketMapCategory category(Long id, Long parentId, String name, int displayOrder, boolean isLocked) {
         MarketMapCategory category = parentId == null
-                ? MarketMapCategory.createParent(name, displayOrder, isLocked)
+                ? MarketMapCategory.createParent(name, displayOrder)
                 : categoryWithParent(parentId, name, displayOrder);
         ReflectionTestUtils.setField(category, "id", id);
         return category;
     }
 
     private MarketMapCategory categoryWithParent(Long parentId, String name, int displayOrder) {
-        MarketMapCategory parent = MarketMapCategory.createParent("parent-placeholder", 0, false);
+        MarketMapCategory parent = MarketMapCategory.createParent("parent-placeholder", 0);
         ReflectionTestUtils.setField(parent, "id", parentId);
         return MarketMapCategory.createChild(name, parent, displayOrder);
     }

@@ -1,3 +1,5 @@
 package dev.eolmae.marketmonitor.domain.marketmap.dto;
 
-public record VersionLabelRequest(String label) {}
+import jakarta.validation.constraints.NotBlank;
+
+public record VersionLabelRequest(@NotBlank(message = "버전명을 입력해주세요.") String label) {}

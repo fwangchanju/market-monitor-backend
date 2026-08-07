@@ -128,9 +128,6 @@ public class MarketMapCategoryService {
     }
 
     public void rename(Long categoryId, String name) {
-        if (name == null || name.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
-        }
         MarketMapCategory target = marketMapCategoryRepository
                 .findById(categoryId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.CATEGORY_NOT_FOUND, categoryId));

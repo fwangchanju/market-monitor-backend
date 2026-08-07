@@ -1,15 +1,18 @@
 package dev.eolmae.marketmonitor.handler;
 
 import dev.eolmae.marketmonitor.common.event.EscalationEvent;
+import dev.eolmae.marketmonitor.common.exception.BadRequestException;
 import dev.eolmae.marketmonitor.common.exception.BusinessException;
-import dev.eolmae.marketmonitor.common.exception.ErrorResponse;
+import dev.eolmae.marketmonitor.common.exception.ConflictException;
+import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
+import dev.eolmae.marketmonitor.common.exception.NotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @Slf4j
@@ -17,24 +20,32 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RequiredArgsConstructor
 public class GlobalExceptionHandler {
 
+    private static final String ERROR_CODE_PROPERTY = "errorCode";
+
     private final ApplicationEventPublisher eventPublisher;
 
-    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    @ExceptionHandler(EscalateException.class)
-    public ErrorResponse handleEscalateException(EscalateException e) {
-        String message = e.createMessage();
-        log.error(message, e);
-        eventPublisher.publishEvent(new EscalationEvent(message));
+    @ExceptionHandler(BusinessException.class)
+    public ProblemDetail handleBusinessException(BusinessException e) {
+        HttpStatus status =
+                switch (e) {
+                    case BadRequestException ignored -> HttpStatus.BAD_REQUEST;
+                    case NotFoundException ignored -> HttpStatus.NOT_FOUND;
+                    case ConflictException ignored -> HttpStatus.CONFLICT;
+                    case EscalateException ignored -> HttpStatus.INTERNAL_SERVER_ERROR;
+                };
 
-        return ErrorResponse.of(e.getErrorCode(), message);
+        String logMessage = e.createLogMessage();
+        log.error(logMessage, e);
+        if (e instanceof EscalateException) {
+            eventPublisher.publishEvent(new EscalationEvent(logMessage));
+        }
+
+        return toProblemDetail(status, e.getErrorCode(), e.getMessage());
     }
 
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    @ExceptionHandler(BusinessException.class)
-    public ErrorResponse handleBusinessException(BusinessException e) {
-        String message = e.createMessage();
-        log.error(message);
-
-        return ErrorResponse.of(e.getErrorCode(), message);
+    private ProblemDetail toProblemDetail(HttpStatus status, ErrorCode errorCode, String detail) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(status, detail);
+        problemDetail.setProperty(ERROR_CODE_PROPERTY, errorCode.name());
+        return problemDetail;
     }
 }

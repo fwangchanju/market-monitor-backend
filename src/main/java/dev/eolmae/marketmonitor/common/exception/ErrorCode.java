@@ -38,7 +38,12 @@ public enum ErrorCode {
 
     // Market map
     CATEGORY_TREE_SERIALIZE_FAILED("카테고리 트리 직렬화에 실패했습니다."),
-    CATEGORY_TREE_PARSE_FAILED("카테고리 스냅샷 파싱에 실패했습니다.");
+    CATEGORY_TREE_PARSE_FAILED("카테고리 스냅샷 파싱에 실패했습니다."),
+    CATEGORY_NOT_FOUND("이미 삭제되었거나 존재하지 않는 카테고리입니다."),
+    CATEGORY_NAME_DUPLICATE("이미 사용 중인 카테고리명입니다."),
+    CATEGORY_CIRCULAR_REFERENCE("해당 위치로 카테고리 위치 변경이 불가능합니다."),
+    CATEGORY_HAS_ASSIGNED_STOCK("배정된 종목이 있어 삭제할 수 없습니다."),
+    VERSION_NOT_FOUND("이미 삭제되었거나 존재하지 않는 버전입니다.");
 
     private final String message;
 }

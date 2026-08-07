@@ -2,7 +2,7 @@ package dev.eolmae.marketmonitor.domain.stock.client;
 
 import dev.eolmae.marketmonitor.common.enums.DateTimePattern;
 import dev.eolmae.marketmonitor.common.enums.Zone;
-import dev.eolmae.marketmonitor.common.exception.BusinessException;
+import dev.eolmae.marketmonitor.common.exception.BadRequestException;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.domain.stock.dto.TokenRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.TokenResponse;
@@ -41,10 +41,10 @@ public class KiwoomTokenManager {
     private String refreshToken() {
         log.info("Kiwoom 토큰 발급 요청");
         TokenResponse response = Optional.ofNullable(requestToken())
-                .orElseThrow(() -> new BusinessException(ErrorCode.KIWOOM_TOKEN_ISSUE_FAILED));
+                .orElseThrow(() -> new BadRequestException(ErrorCode.KIWOOM_TOKEN_ISSUE_FAILED));
 
         if (response.returnCode() != SUCCESS_CODE) {
-            throw new BusinessException(ErrorCode.KIWOOM_TOKEN_ISSUE_FAILED, response.returnMsg());
+            throw new BadRequestException(ErrorCode.KIWOOM_TOKEN_ISSUE_FAILED, response.returnMsg());
         }
 
         cachedToken = response.token();
@@ -64,7 +64,7 @@ public class KiwoomTokenManager {
                     .retrieve()
                     .body(TokenResponse.class);
         } catch (RestClientException e) {
-            throw new BusinessException(ErrorCode.KIWOOM_TOKEN_ISSUE_FAILED, e);
+            throw new BadRequestException(ErrorCode.KIWOOM_TOKEN_ISSUE_FAILED, e);
         }
     }
 }

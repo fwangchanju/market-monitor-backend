@@ -3,7 +3,7 @@ package dev.eolmae.marketmonitor.domain.marketmap.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.eolmae.marketmonitor.common.exception.BusinessException;
+import dev.eolmae.marketmonitor.common.exception.BadRequestException;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryTreeNode;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategory;
@@ -40,7 +40,8 @@ public class MarketMapCategoryTreeService {
     private List<CategoryTreeNode> assemble(
             List<MarketMapCategory> categories, List<MarketMapStockCategory> stockCategories) {
         Map<Long, List<MarketMapCategory>> childrenByParentId = categories.stream()
-                .collect(Collectors.groupingBy(category -> category.getParentId() == null ? ROOT_KEY : category.getParentId()));
+                .collect(Collectors.groupingBy(
+                        category -> category.getParentId() == null ? ROOT_KEY : category.getParentId()));
         Map<Long, List<MarketMapStockCategory>> stocksByCategoryId =
                 stockCategories.stream().collect(Collectors.groupingBy(MarketMapStockCategory::getCategoryId));
 
@@ -73,7 +74,7 @@ public class MarketMapCategoryTreeService {
         try {
             return objectMapper.writeValueAsString(tree);
         } catch (JsonProcessingException e) {
-            throw new BusinessException(ErrorCode.CATEGORY_TREE_SERIALIZE_FAILED, e);
+            throw new BadRequestException(ErrorCode.CATEGORY_TREE_SERIALIZE_FAILED, e);
         }
     }
 
@@ -81,7 +82,7 @@ public class MarketMapCategoryTreeService {
         try {
             return objectMapper.readValue(snapshotJson, new TypeReference<List<CategoryTreeNode>>() {});
         } catch (JsonProcessingException e) {
-            throw new BusinessException(ErrorCode.CATEGORY_TREE_PARSE_FAILED, e);
+            throw new BadRequestException(ErrorCode.CATEGORY_TREE_PARSE_FAILED, e);
         }
     }
 

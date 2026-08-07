@@ -105,8 +105,9 @@ public class MarketMapQueryService {
         List<MarketMapCategoryNode> nodes = grouped.entrySet().stream()
                 .map(entry -> {
                     List<MarketMapItem> items = entry.getValue();
-                    BigDecimal totalMarketValue =
-                            items.stream().map(MarketMapItem::totalMarketValue).reduce(BigDecimal.ZERO, BigDecimal::add);
+                    BigDecimal totalMarketValue = items.stream()
+                            .map(MarketMapItem::totalMarketValue)
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
                     return new MarketMapCategoryNode(entry.getKey(), totalMarketValue, List.of(), items);
                 })
                 .toList();
@@ -131,7 +132,9 @@ public class MarketMapQueryService {
         for (MarketMapCategory category : categories) {
             categoryByName.put(category.getName(), category);
             Long parentKey = category.getParentId() == null ? ROOT_KEY : category.getParentId();
-            childrenByParentId.computeIfAbsent(parentKey, key -> new ArrayList<>()).add(category);
+            childrenByParentId
+                    .computeIfAbsent(parentKey, key -> new ArrayList<>())
+                    .add(category);
         }
         Map<String, MarketMapStockCategory> stockCategoryMap = marketMapStockCategoryRepository.findAll().stream()
                 .collect(Collectors.toMap(MarketMapStockCategory::getStockCode, Function.identity()));
@@ -161,7 +164,8 @@ public class MarketMapQueryService {
                 .map(child -> toCategoryNode(child, childrenByParentId, itemsByCategoryId))
                 .toList();
         List<MarketMapItem> items = itemsByCategoryId.getOrDefault(category.getId(), List.of());
-        BigDecimal itemsValue = items.stream().map(MarketMapItem::totalMarketValue).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal itemsValue =
+                items.stream().map(MarketMapItem::totalMarketValue).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal childrenValue =
                 children.stream().map(MarketMapCategoryNode::totalMarketValue).reduce(BigDecimal.ZERO, BigDecimal::add);
         return new MarketMapCategoryNode(category.getName(), itemsValue.add(childrenValue), children, items);
@@ -169,12 +173,16 @@ public class MarketMapQueryService {
 
     /** 명시적 배정(market_map_stock_category)이 있으면 그 카테고리, 없으면 stock_info 카테고리명(미분류 포함)으로 실제 카테고리에서 이름 매치. 수집기가 모든 카테고리명을 미리 생성해두므로 항상 매치된다고 전제한다. */
     private Long resolveCategoryId(
-            StockInfo stockInfo, Map<String, MarketMapStockCategory> stockCategoryMap, Map<String, MarketMapCategory> categoryByName) {
+            StockInfo stockInfo,
+            Map<String, MarketMapStockCategory> stockCategoryMap,
+            Map<String, MarketMapCategory> categoryByName) {
         MarketMapStockCategory assignment = stockCategoryMap.get(stockInfo.getStockCode());
         if (assignment != null) {
             return assignment.getCategoryId();
         }
-        return categoryByName.get(normalizeCategoryName(stockInfo.getCategoryName())).getId();
+        return categoryByName
+                .get(normalizeCategoryName(stockInfo.getCategoryName()))
+                .getId();
     }
 
     private List<StockInfo> filterCandidates(Market market, boolean isExclude) {
@@ -222,7 +230,11 @@ public class MarketMapQueryService {
         BigDecimal totalMarketValue = currentPrice.multiply(BigDecimal.valueOf(stockInfo.getListCount()));
 
         return new MarketMapItem(
-                stockInfo.getStockCode(), stockInfo.getStockName(), stockInfo.getLastPrice(), totalMarketValue, changeRate);
+                stockInfo.getStockCode(),
+                stockInfo.getStockName(),
+                stockInfo.getLastPrice(),
+                totalMarketValue,
+                changeRate);
     }
 
     /** 마켓맵 표시 제외 종목 목록 */

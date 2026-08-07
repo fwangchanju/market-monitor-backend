@@ -18,8 +18,9 @@ public class AdminTokenService {
     private final AllowedIpAccessService allowedIpAccessService;
 
     public void registerIp(String token, String currentIp) {
-        AdminToken adminToken =
-                adminTokenRepository.findById(token).orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN));
+        AdminToken adminToken = adminTokenRepository
+                .findById(token)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN));
 
         String lastIp = adminToken.getLastIp();
         if (currentIp.equals(lastIp) && allowedIpAccessService.isAllowedAdmin(currentIp)) {

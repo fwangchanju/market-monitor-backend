@@ -87,7 +87,8 @@ public class StockInfoCollector {
         List<StockInfoSyncedEvent.NewStock> newStockEvents = newStocks.stream()
                 .filter(stock -> StockMarketCode.isOrdinaryShare(stock.getMarketCode()))
                 .map(stock -> new StockInfoSyncedEvent.NewStock(
-                        stock.getStockCode(), stock.getCategoryName().isBlank() ? UNCATEGORIZED : stock.getCategoryName()))
+                        stock.getStockCode(),
+                        stock.getCategoryName().isBlank() ? UNCATEGORIZED : stock.getCategoryName()))
                 .toList();
         eventPublisher.publishEvent(new StockInfoSyncedEvent(newStockEvents));
 

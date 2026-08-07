@@ -3,7 +3,10 @@ package dev.eolmae.marketmonitor.domain.marketmap.dto;
 import java.util.List;
 
 public record CategoryDeletePreview(
-        String categoryName, boolean deletable, List<StockCategoryItem> blockingStocks, List<String> deletableCategories) {
+        String categoryName,
+        boolean deletable,
+        List<StockCategoryItem> blockingStocks,
+        List<String> deletableCategories) {
 
     public static CategoryDeletePreview blocked(String categoryName, List<StockCategoryItem> blockingStocks) {
         return new CategoryDeletePreview(categoryName, false, blockingStocks, List.of());

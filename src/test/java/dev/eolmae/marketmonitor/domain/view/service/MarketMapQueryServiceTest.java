@@ -31,10 +31,12 @@ class MarketMapQueryServiceTest {
 
     private final StockInfoCacheService stockInfoCacheService = Mockito.mock(StockInfoCacheService.class);
     private final StockCategoryRepository stockCategoryRepository = Mockito.mock(StockCategoryRepository.class);
-    private final SectorPriceSnapshotRepository sectorPriceSnapshotRepository = Mockito.mock(SectorPriceSnapshotRepository.class);
+    private final SectorPriceSnapshotRepository sectorPriceSnapshotRepository =
+            Mockito.mock(SectorPriceSnapshotRepository.class);
     private final MarketMapExcludedStockRepository marketMapExcludedStockRepository =
             Mockito.mock(MarketMapExcludedStockRepository.class);
-    private final MarketMapCategoryRepository marketMapCategoryRepository = Mockito.mock(MarketMapCategoryRepository.class);
+    private final MarketMapCategoryRepository marketMapCategoryRepository =
+            Mockito.mock(MarketMapCategoryRepository.class);
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository =
             Mockito.mock(MarketMapStockCategoryRepository.class);
     private final MarketMapQueryService service = new MarketMapQueryService(
@@ -85,8 +87,10 @@ class MarketMapQueryServiceTest {
         List<MarketMapCategoryNode> nodes = response.items();
         assertThat(nodes).hasSize(2);
 
-        MarketMapCategoryNode electronicsNode =
-                nodes.stream().filter(node -> node.categoryName().equals("전기/전자")).findFirst().orElseThrow();
+        MarketMapCategoryNode electronicsNode = nodes.stream()
+                .filter(node -> node.categoryName().equals("전기/전자"))
+                .findFirst()
+                .orElseThrow();
         assertThat(electronicsNode.items()).extracting("stockCode").containsExactly("009150");
         assertThat(electronicsNode.children()).hasSize(1);
 
@@ -98,8 +102,10 @@ class MarketMapQueryServiceTest {
         // 전기/전자 총액 = 직속(009150: 5*200=1000) + 자식(반도체: 2000) = 3000
         assertThat(electronicsNode.totalMarketValue()).isEqualByComparingTo(BigDecimal.valueOf(3000));
 
-        MarketMapCategoryNode chemicalNode =
-                nodes.stream().filter(node -> node.categoryName().equals("화학")).findFirst().orElseThrow();
+        MarketMapCategoryNode chemicalNode = nodes.stream()
+                .filter(node -> node.categoryName().equals("화학"))
+                .findFirst()
+                .orElseThrow();
         assertThat(chemicalNode.children()).isEmpty();
         assertThat(chemicalNode.items()).extracting("stockCode").containsExactly("051910");
         assertThat(chemicalNode.totalMarketValue()).isEqualByComparingTo(BigDecimal.valueOf(500));
@@ -137,14 +143,18 @@ class MarketMapQueryServiceTest {
         List<MarketMapCategoryNode> nodes = response.items();
         assertThat(nodes).hasSize(2);
 
-        MarketMapCategoryNode chemicalNode =
-                nodes.stream().filter(node -> node.categoryName().equals("화학")).findFirst().orElseThrow();
+        MarketMapCategoryNode chemicalNode = nodes.stream()
+                .filter(node -> node.categoryName().equals("화학"))
+                .findFirst()
+                .orElseThrow();
         assertThat(chemicalNode.children()).isEmpty();
         assertThat(chemicalNode.items()).extracting("stockCode").containsExactly("051910");
         assertThat(chemicalNode.totalMarketValue()).isEqualByComparingTo(BigDecimal.valueOf(500));
 
-        MarketMapCategoryNode semiconductorNode =
-                nodes.stream().filter(node -> node.categoryName().equals("반도체")).findFirst().orElseThrow();
+        MarketMapCategoryNode semiconductorNode = nodes.stream()
+                .filter(node -> node.categoryName().equals("반도체"))
+                .findFirst()
+                .orElseThrow();
         assertThat(semiconductorNode.children()).isEmpty();
         assertThat(semiconductorNode.items()).extracting("stockCode").containsExactlyInAnyOrder("005930", "000660");
         assertThat(semiconductorNode.totalMarketValue()).isEqualByComparingTo(BigDecimal.valueOf(2000));
@@ -176,14 +186,18 @@ class MarketMapQueryServiceTest {
         List<MarketMapCategoryNode> nodes = response.items();
         assertThat(nodes).hasSize(2);
 
-        MarketMapCategoryNode semiconductorNode =
-                nodes.stream().filter(node -> node.categoryName().equals("반도체")).findFirst().orElseThrow();
+        MarketMapCategoryNode semiconductorNode = nodes.stream()
+                .filter(node -> node.categoryName().equals("반도체"))
+                .findFirst()
+                .orElseThrow();
         assertThat(semiconductorNode.children()).isEmpty();
         assertThat(semiconductorNode.items()).extracting("stockCode").containsExactlyInAnyOrder("005930", "000660");
         assertThat(semiconductorNode.totalMarketValue()).isEqualByComparingTo(BigDecimal.valueOf(2000));
 
-        MarketMapCategoryNode uncategorizedNode =
-                nodes.stream().filter(node -> node.categoryName().equals("미분류")).findFirst().orElseThrow();
+        MarketMapCategoryNode uncategorizedNode = nodes.stream()
+                .filter(node -> node.categoryName().equals("미분류"))
+                .findFirst()
+                .orElseThrow();
         assertThat(uncategorizedNode.children()).isEmpty();
         assertThat(uncategorizedNode.items()).extracting("stockCode").containsExactly("051910");
         assertThat(uncategorizedNode.totalMarketValue()).isEqualByComparingTo(BigDecimal.valueOf(500));
@@ -203,7 +217,8 @@ class MarketMapQueryServiceTest {
         return MarketMapCategory.createChild(name, parent, displayOrder);
     }
 
-    private StockInfo stockInfo(String stockCode, String stockName, String categoryName, Long listCount, BigDecimal lastPrice) {
+    private StockInfo stockInfo(
+            String stockCode, String stockName, String categoryName, Long listCount, BigDecimal lastPrice) {
         return StockInfo.create(stockCode, stockName, Market.KOSPI, "0", categoryName, listCount, lastPrice);
     }
 

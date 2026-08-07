@@ -4,4 +4,7 @@ import java.math.BigDecimal;
 import java.util.List;
 
 public record MarketMapCategoryNode(
-        String categoryName, BigDecimal totalMarketValue, List<MarketMapCategoryNode> children, List<MarketMapItem> items) {}
+        String categoryName,
+        BigDecimal totalMarketValue,
+        List<MarketMapCategoryNode> children,
+        List<MarketMapItem> items) {}

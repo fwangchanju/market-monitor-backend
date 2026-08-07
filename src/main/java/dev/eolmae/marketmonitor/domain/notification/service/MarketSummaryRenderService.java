@@ -30,6 +30,7 @@ public class MarketSummaryRenderService {
 
     private String buildAccessUrl() {
         String token = adminProperties.tokens().getFirst();
-        return marketMonitorProperties.baseUrl() + "/internal/register-ip?token=" + token + "&redirectTo=/market-summary";
+        return marketMonitorProperties.baseUrl() + "/internal/register-ip?token=" + token
+                + "&redirectTo=/market-summary";
     }
 }

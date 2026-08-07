@@ -44,6 +44,7 @@ public class AllowedIpService {
         allowedIpRepository
                 .findById(currentIp)
                 .ifPresentOrElse(
-                        AllowedIp::promoteToAdmin, () -> allowedIpRepository.save(AllowedIp.create(currentIp, Role.ADMIN)));
+                        AllowedIp::promoteToAdmin,
+                        () -> allowedIpRepository.save(AllowedIp.create(currentIp, Role.ADMIN)));
     }
 }

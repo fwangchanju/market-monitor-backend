@@ -71,7 +71,8 @@ public class ProgramTradeIntradayCollector {
         LocalDate snapshotDate = snapshotTime.toLocalDate();
         LocalDateTime snapshotHour = snapshotTime.truncatedTo(ChronoUnit.HOURS);
 
-        List<LocalDateTime> existingSnapshots = historyRepository.findSnapshotTimesByStockCodeAndDate(stockCode, snapshotDate);
+        List<LocalDateTime> existingSnapshots =
+                historyRepository.findSnapshotTimesByStockCodeAndDate(stockCode, snapshotDate);
 
         HourlyProgramTradeTrendResponse.TradeTick krxTick = null;
         HourlyProgramTradeTrendResponse.TradeTick nxtTick = null;

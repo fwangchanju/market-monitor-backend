@@ -1,5 +1,7 @@
 package dev.eolmae.marketmonitor.domain.marketmap.service;
 
+import dev.eolmae.marketmonitor.common.exception.ErrorCode;
+import dev.eolmae.marketmonitor.common.exception.NotFoundException;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryTreeNode;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.VersionItem;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategory;
@@ -8,10 +10,8 @@ import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRep
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryVersionRepository;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 /** 카테고리 버전(백업) 저장/덮어쓰기/불러오기/삭제. */
 @Service
@@ -41,7 +41,10 @@ public class MarketMapCategoryVersionService {
         if (versionId == null) {
             return null;
         }
-        return marketMapCategoryVersionRepository.findById(versionId).map(this::toItem).orElse(null);
+        return marketMapCategoryVersionRepository
+                .findById(versionId)
+                .map(this::toItem)
+                .orElse(null);
     }
 
     public VersionItem save(String label) {
@@ -55,7 +58,7 @@ public class MarketMapCategoryVersionService {
     public VersionItem overwrite(Long versionId, String label) {
         MarketMapCategoryVersion version = marketMapCategoryVersionRepository
                 .findById(versionId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.VERSION_NOT_FOUND, versionId));
         String snapshotJson = marketMapCategoryTreeService.serializeCurrentSnapshot();
         version.overwrite(label, snapshotJson);
         tagLiveCategories(versionId);
@@ -65,7 +68,7 @@ public class MarketMapCategoryVersionService {
     public void restore(Long versionId) {
         MarketMapCategoryVersion version = marketMapCategoryVersionRepository
                 .findById(versionId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.VERSION_NOT_FOUND, versionId));
         List<CategoryTreeNode> tree = marketMapCategoryTreeService.parseJson(version.getSnapshotJson());
         marketMapCategoryTreeService.restore(tree, versionId);
     }

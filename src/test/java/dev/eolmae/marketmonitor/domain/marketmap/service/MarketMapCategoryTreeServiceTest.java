@@ -16,7 +16,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 class MarketMapCategoryTreeServiceTest {
 
-    private final MarketMapCategoryRepository marketMapCategoryRepository = Mockito.mock(MarketMapCategoryRepository.class);
+    private final MarketMapCategoryRepository marketMapCategoryRepository =
+            Mockito.mock(MarketMapCategoryRepository.class);
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository =
             Mockito.mock(MarketMapStockCategoryRepository.class);
     private final MarketMapCategoryTreeService service = new MarketMapCategoryTreeService(

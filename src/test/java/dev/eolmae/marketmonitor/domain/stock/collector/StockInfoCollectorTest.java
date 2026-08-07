@@ -37,7 +37,8 @@ class StockInfoCollectorTest {
                 List.of(
                         new StockInfoResponse.StockItem("005930", "삼성전자", "0", "반도체", "100", "10000"),
                         new StockInfoResponse.StockItem("051910", "LG화학", "0", "", "50", "20000")));
-        when(kiwoomApiClient.post(any(StockInfoRequest.class), eq(StockInfoResponse.class))).thenReturn(response);
+        when(kiwoomApiClient.post(any(StockInfoRequest.class), eq(StockInfoResponse.class)))
+                .thenReturn(response);
         when(stockInfoRepository.findAll()).thenReturn(List.of());
 
         collector.sync();
@@ -58,13 +59,16 @@ class StockInfoCollectorTest {
                         new StockInfoResponse.StockItem("005930", "삼성전자", "0", "반도체", "100", "10000"),
                         new StockInfoResponse.StockItem("57JJJJ", "삼성전자ELW", "3", "ELW", "100", "1000"),
                         new StockInfoResponse.StockItem("069500", "KODEX200", "8", "ETF", "100", "30000")));
-        when(kiwoomApiClient.post(any(StockInfoRequest.class), eq(StockInfoResponse.class))).thenReturn(response);
+        when(kiwoomApiClient.post(any(StockInfoRequest.class), eq(StockInfoResponse.class)))
+                .thenReturn(response);
         when(stockInfoRepository.findAll()).thenReturn(List.of());
 
         collector.sync();
 
         ArgumentCaptor<StockInfoSyncedEvent> captor = ArgumentCaptor.forClass(StockInfoSyncedEvent.class);
         verify(eventPublisher).publishEvent(captor.capture());
-        assertThat(captor.getValue().newStocks()).extracting(NewStock::stockCode).containsExactly("005930");
+        assertThat(captor.getValue().newStocks())
+                .extracting(NewStock::stockCode)
+                .containsExactly("005930");
     }
 }

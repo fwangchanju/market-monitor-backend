@@ -1,5 +1,7 @@
 package dev.eolmae.marketmonitor.domain.marketmap.service;
 
+import dev.eolmae.marketmonitor.common.exception.ErrorCode;
+import dev.eolmae.marketmonitor.common.exception.NotFoundException;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.StockCategoryItem;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategory;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapStockCategory;
@@ -12,10 +14,8 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.server.ResponseStatusException;
 
 /** 종목의 카테고리 배정/재배정. */
 @Service
@@ -29,14 +29,15 @@ public class MarketMapStockCategoryService {
 
     public void assign(String stockCode, Long categoryId) {
         if (!marketMapCategoryRepository.existsById(categoryId)) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+            throw new NotFoundException(ErrorCode.CATEGORY_NOT_FOUND, categoryId);
         }
 
         marketMapStockCategoryRepository
                 .findById(stockCode)
                 .ifPresentOrElse(
                         stockCategory -> stockCategory.reassign(categoryId),
-                        () -> marketMapStockCategoryRepository.save(MarketMapStockCategory.create(stockCode, categoryId)));
+                        () -> marketMapStockCategoryRepository.save(
+                                MarketMapStockCategory.create(stockCode, categoryId)));
     }
 
     @Transactional(readOnly = true)

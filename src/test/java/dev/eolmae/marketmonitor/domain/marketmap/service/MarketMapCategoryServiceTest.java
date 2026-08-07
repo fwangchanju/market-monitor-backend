@@ -10,6 +10,8 @@ import static org.mockito.Mockito.when;
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.event.StockInfoSyncedEvent;
 import dev.eolmae.marketmonitor.common.event.StockInfoSyncedEvent.NewStock;
+import dev.eolmae.marketmonitor.common.exception.ConflictException;
+import dev.eolmae.marketmonitor.common.exception.NotFoundException;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryDeletePreview;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryItem;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategory;
@@ -25,16 +27,16 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.web.server.ResponseStatusException;
 
 class MarketMapCategoryServiceTest {
 
-    private final MarketMapCategoryRepository marketMapCategoryRepository = Mockito.mock(MarketMapCategoryRepository.class);
+    private final MarketMapCategoryRepository marketMapCategoryRepository =
+            Mockito.mock(MarketMapCategoryRepository.class);
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository =
             Mockito.mock(MarketMapStockCategoryRepository.class);
     private final StockInfoCacheService stockInfoCacheService = Mockito.mock(StockInfoCacheService.class);
-    private final MarketMapCategoryService service =
-            new MarketMapCategoryService(marketMapCategoryRepository, marketMapStockCategoryRepository, stockInfoCacheService);
+    private final MarketMapCategoryService service = new MarketMapCategoryService(
+            marketMapCategoryRepository, marketMapStockCategoryRepository, stockInfoCacheService);
 
     @Test
     void onStockInfoSynced_없는_카테고리는_생성하고_신규종목을_배정한다() {
@@ -51,12 +53,14 @@ class MarketMapCategoryServiceTest {
             return saved;
         });
 
-        service.onStockInfoSynced(new StockInfoSyncedEvent(
-                List.of(new NewStock("005930", "반도체"), new NewStock("051910", "화학"))));
+        service.onStockInfoSynced(
+                new StockInfoSyncedEvent(List.of(new NewStock("005930", "반도체"), new NewStock("051910", "화학"))));
 
         ArgumentCaptor<List<MarketMapCategory>> categoryCaptor = ArgumentCaptor.forClass(List.class);
         verify(marketMapCategoryRepository).saveAll(categoryCaptor.capture());
-        assertThat(categoryCaptor.getValue()).extracting(MarketMapCategory::getName).containsExactly("화학");
+        assertThat(categoryCaptor.getValue())
+                .extracting(MarketMapCategory::getName)
+                .containsExactly("화학");
         assertThat(categoryCaptor.getValue()).allMatch(category -> category.getParentId() == null);
         Long chemicalId = categoryCaptor.getValue().get(0).getId();
 
@@ -117,7 +121,9 @@ class MarketMapCategoryServiceTest {
 
         assertThat(preview.categoryName()).isEqualTo("반도체");
         assertThat(preview.deletable()).isFalse();
-        assertThat(preview.blockingStocks()).extracting("categoryName", "stockName").containsExactly(tuple("반도체", "삼성전자"));
+        assertThat(preview.blockingStocks())
+                .extracting("categoryName", "stockName")
+                .containsExactly(tuple("반도체", "삼성전자"));
     }
 
     @Test
@@ -125,7 +131,8 @@ class MarketMapCategoryServiceTest {
         MarketMapCategory electronics = category(1L, null, "전기/전자", 1);
         MarketMapCategory semiconductor = category(2L, 1L, "반도체", 1);
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(electronics, semiconductor));
-        when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L, 2L))).thenReturn(List.of());
+        when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L, 2L)))
+                .thenReturn(List.of());
 
         CategoryDeletePreview preview = service.deletePreview(1L);
 
@@ -138,7 +145,7 @@ class MarketMapCategoryServiceTest {
     void deletePreview_존재하지_않는_카테고리는_404를_반환한다() {
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of());
 
-        assertThatThrownBy(() -> service.deletePreview(1L)).isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> service.deletePreview(1L)).isInstanceOf(NotFoundException.class);
     }
 
     @Test
@@ -148,7 +155,7 @@ class MarketMapCategoryServiceTest {
         when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L)))
                 .thenReturn(List.of(MarketMapStockCategory.create("005930", 1L)));
 
-        assertThatThrownBy(() -> service.delete(1L)).isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> service.delete(1L)).isInstanceOf(ConflictException.class);
     }
 
     @Test
@@ -159,7 +166,8 @@ class MarketMapCategoryServiceTest {
         MarketMapCategory b = category(4L, 1L, "B", 3);
         MarketMapCategory child = category(5L, 3L, "자식", 1);
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(parent, a, target, b, child));
-        when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(3L, 5L))).thenReturn(List.of());
+        when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(3L, 5L)))
+                .thenReturn(List.of());
 
         service.delete(3L);
 
@@ -211,7 +219,7 @@ class MarketMapCategoryServiceTest {
         MarketMapCategory a = category(1L, null, "A", 1);
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(a));
 
-        assertThatThrownBy(() -> service.reparent(1L, 1L)).isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> service.reparent(1L, 1L)).isInstanceOf(ConflictException.class);
     }
 
     @Test
@@ -220,7 +228,7 @@ class MarketMapCategoryServiceTest {
         MarketMapCategory b = category(2L, 1L, "B", 1);
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(a, b));
 
-        assertThatThrownBy(() -> service.reparent(1L, 2L)).isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> service.reparent(1L, 2L)).isInstanceOf(ConflictException.class);
     }
 
     @Test
@@ -228,7 +236,7 @@ class MarketMapCategoryServiceTest {
         MarketMapCategory a = category(1L, null, "A", 1);
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(a));
 
-        assertThatThrownBy(() -> service.reparent(99L, 1L)).isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> service.reparent(99L, 1L)).isInstanceOf(NotFoundException.class);
     }
 
     private MarketMapCategory category(Long id, Long parentId, String name, int displayOrder) {

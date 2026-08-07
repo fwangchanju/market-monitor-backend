@@ -7,12 +7,13 @@ import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryNameRequest;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CreateCategoryRequest;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.ReorderCategoryRequest;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryService;
+import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -31,7 +32,7 @@ public class MarketMapCategoryController {
     }
 
     @PostMapping
-    public CategoryItem create(@RequestBody CreateCategoryRequest request) {
+    public CategoryItem create(@RequestBody @Valid CreateCategoryRequest request) {
         if (request.parentId() == null) {
             return marketMapCategoryService.createParent(request.name());
         }
@@ -39,7 +40,7 @@ public class MarketMapCategoryController {
     }
 
     @PatchMapping("/{id}/name")
-    public void rename(@PathVariable Long id, @RequestBody CategoryNameRequest request) {
+    public void rename(@PathVariable Long id, @RequestBody @Valid CategoryNameRequest request) {
         marketMapCategoryService.rename(id, request.name());
     }
 
@@ -49,7 +50,7 @@ public class MarketMapCategoryController {
     }
 
     @PatchMapping("/{id}/parent")
-    public void reparent(@PathVariable Long id, @RequestBody CategoryIdRequest request) {
+    public void reparent(@PathVariable Long id, @RequestBody @Valid CategoryIdRequest request) {
         marketMapCategoryService.reparent(id, request.categoryId());
     }
 

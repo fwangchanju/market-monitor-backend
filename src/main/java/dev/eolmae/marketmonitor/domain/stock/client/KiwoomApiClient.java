@@ -1,6 +1,6 @@
 package dev.eolmae.marketmonitor.domain.stock.client;
 
-import dev.eolmae.marketmonitor.common.exception.BusinessException;
+import dev.eolmae.marketmonitor.common.exception.BadRequestException;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.domain.stock.dto.KiwoomRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.KiwoomResponse;
@@ -55,7 +55,7 @@ public class KiwoomApiClient {
     @Recover
     public <T> T recoverFromRateLimit(KiwoomRateLimitException e, KiwoomRequest request, Class<T> dataClass) {
         log.warn("Kiwoom API rate limit 재시도 횟수 초과, 사이클 스킵: apiId={}", request.apiId());
-        throw new BusinessException(ErrorCode.KIWOOM_RATE_LIMIT, request.apiId());
+        throw new BadRequestException(ErrorCode.KIWOOM_RATE_LIMIT, request.apiId());
     }
 
     @SuppressWarnings("unchecked")
@@ -118,17 +118,17 @@ public class KiwoomApiClient {
         } catch (HttpClientErrorException e) {
             if (e.getStatusCode() == HttpStatus.TOO_MANY_REQUESTS) {
                 log.warn("Kiwoom API 429 rate limit: apiId={}", request.apiId());
-                throw new KiwoomRateLimitException(ErrorCode.KIWOOM_RATE_LIMIT, request.apiId());
+                throw new KiwoomRateLimitException();
             }
-            throw new BusinessException(ErrorCode.KIWOOM_HTTP_ERROR, e, request.apiId());
+            throw new BadRequestException(ErrorCode.KIWOOM_HTTP_ERROR, e, request.apiId());
         } catch (RestClientException e) {
-            throw new BusinessException(ErrorCode.KIWOOM_RESPONSE_PARSE_FAILED, e, request.apiId());
+            throw new BadRequestException(ErrorCode.KIWOOM_RESPONSE_PARSE_FAILED, e, request.apiId());
         }
     }
 
     private <T extends KiwoomResponse> PageResult<T> toPageResult(KiwoomRequest request, ResponseEntity<T> entity) {
         T validated = Optional.ofNullable(entity.getBody())
-                .orElseThrow(() -> new BusinessException(ErrorCode.KIWOOM_RESPONSE_PARSE_FAILED, request.apiId()));
+                .orElseThrow(() -> new BadRequestException(ErrorCode.KIWOOM_RESPONSE_PARSE_FAILED, request.apiId()));
 
         if (!SUCCESS_CODE.equals(validated.returnCode())) {
             log.warn(
@@ -136,7 +136,7 @@ public class KiwoomApiClient {
                     request.apiId(),
                     validated.returnCode(),
                     validated.returnMsg());
-            throw new BusinessException(ErrorCode.KIWOOM_ERROR_RESPONSE, request.apiId(), validated.returnMsg());
+            throw new BadRequestException(ErrorCode.KIWOOM_ERROR_RESPONSE, request.apiId(), validated.returnMsg());
         }
 
         return new PageResult<>(KiwoomResponseHeader.from(entity.getHeaders()), validated);

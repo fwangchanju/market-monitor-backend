@@ -23,6 +23,8 @@ public class AdminTokenController {
             @RequestParam(required = false, defaultValue = "/") String redirectTo,
             @RequestHeader("X-Real-IP") String currentIp) {
         adminTokenService.registerIp(token, currentIp);
-        return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(RedirectPaths.resolveInternal(redirectTo))).build();
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .location(URI.create(RedirectPaths.resolveInternal(redirectTo)))
+                .build();
     }
 }

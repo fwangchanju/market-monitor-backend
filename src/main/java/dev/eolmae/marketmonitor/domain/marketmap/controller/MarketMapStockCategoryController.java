@@ -3,6 +3,7 @@ package dev.eolmae.marketmonitor.domain.marketmap.controller;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryIdRequest;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.StockCategoryItem;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapStockCategoryService;
+import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,7 +26,7 @@ public class MarketMapStockCategoryController {
     }
 
     @PutMapping("/{stockCode}")
-    public void assign(@PathVariable String stockCode, @RequestBody CategoryIdRequest request) {
+    public void assign(@PathVariable String stockCode, @RequestBody @Valid CategoryIdRequest request) {
         marketMapStockCategoryService.assign(stockCode, request.categoryId());
     }
 }

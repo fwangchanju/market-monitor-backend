@@ -1,6 +1,6 @@
 package dev.eolmae.marketmonitor.domain.stock.service;
 
-import dev.eolmae.marketmonitor.common.exception.BusinessException;
+import dev.eolmae.marketmonitor.common.exception.BadRequestException;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.domain.stock.entity.WatchStock;
 import dev.eolmae.marketmonitor.domain.stock.repository.WatchStockRepository;
@@ -36,7 +36,7 @@ public class WatchStockService {
     public void designateAsPrimary(String stockCode) {
         WatchStock target = watchStockRepository
                 .findByStockCode(stockCode)
-                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_INPUT, stockCode));
+                .orElseThrow(() -> new BadRequestException(ErrorCode.INVALID_INPUT, stockCode));
         watchStockRepository.findByIsPrimaryTrue().ifPresent(WatchStock::clearPrimary);
         target.designateAsPrimary();
         watchStockCacheService.evict();
@@ -52,7 +52,7 @@ public class WatchStockService {
     public void clearPrimary(String stockCode) {
         WatchStock target = watchStockRepository
                 .findByStockCode(stockCode)
-                .orElseThrow(() -> new BusinessException(ErrorCode.INVALID_INPUT, stockCode));
+                .orElseThrow(() -> new BadRequestException(ErrorCode.INVALID_INPUT, stockCode));
         target.clearPrimary();
         watchStockCacheService.evict();
     }

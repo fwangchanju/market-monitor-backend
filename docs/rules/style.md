@@ -117,7 +117,7 @@ domain/<feature>/
 - **서브타입 3개만** — `BusinessException` / `EscalateException`(개발자 알림 카테고리) / `KiwoomRateLimitException`(@Retryable 전용).
 - **ErrorCode는 throw 지점에서 명시** — `new BusinessException(ErrorCode.KIWOOM_HTTP_ERROR, e, apiId)`.
 - **오버로드 2개** — `(ErrorCode, String... args)` + `(ErrorCode, Throwable, String... args)`. `null` 명시 전달 금지.
-- **메시지 조립은 예외 자신이** — `BusinessException.createMessage()` = `[CODE] 메시지 | context : a|b`.
+- **로그 메시지 조립은 예외 자신이** — `BusinessException.createLogMessage()` = `[CODE] 메시지 | context : a|b`. 화면 노출용 `detail`은 `getMessage()`(= `ErrorCode.getMessage()`)로 분리.
 - **ErrorCode 메시지는 문장형** — `"~실패."` ❌ → `"~에 실패했습니다."`.
 - **내부 코드에서 `IllegalStateException` 직접 사용 금지** — `EscalateException` + `ErrorCode` 사용.
 

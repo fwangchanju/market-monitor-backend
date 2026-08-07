@@ -7,20 +7,15 @@ import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRep
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapStockCategoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.entity.MarketMapExcludedStock;
 import dev.eolmae.marketmonitor.domain.stock.entity.SectorPriceSnapshot;
-// import dev.eolmae.marketmonitor.domain.stock.entity.StockCategory;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.enums.StockMarketCode;
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketMapExcludedStockRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.SectorPriceSnapshotRepository;
-import dev.eolmae.marketmonitor.domain.stock.repository.StockCategoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
-// import dev.eolmae.marketmonitor.domain.stock.util.CollectionChecker;
 import dev.eolmae.marketmonitor.domain.view.dto.ExcludedStockItem;
-// import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryGroup;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapItem;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
-import dev.eolmae.marketmonitor.domain.view.dto.StockCategoryItem;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -44,43 +39,10 @@ public class MarketMapQueryService {
     private static final long ROOT_KEY = 0L;
 
     private final StockInfoCacheService stockInfoCacheService;
-    private final StockCategoryRepository stockCategoryRepository;
     private final SectorPriceSnapshotRepository sectorPriceSnapshotRepository;
     private final MarketMapExcludedStockRepository marketMapExcludedStockRepository;
     private final MarketMapCategoryRepository marketMapCategoryRepository;
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository;
-
-    // TODO 화면 점검 후 이상 없으면 삭제
-    // /** 마켓맵: 카테고리별로 묶은 종목 시가총액(박스 크기용)/등락률(색상용) 반환 */
-    // public SnapshotResponse<MarketMapCategoryGroup> getMarketMap(Market market, boolean isExclude) {
-    //     LocalDateTime latestSnapshotTime = sectorPriceSnapshotRepository
-    //             .findFirstByMarketTypeOrderBySnapshotTimeDesc(market)
-    //             .map(SectorPriceSnapshot::getSnapshotTime)
-    //             .orElse(null);
-    //     if (latestSnapshotTime == null) {
-    //         return SnapshotResponse.empty();
-    //     }
-    //
-    //     List<StockInfo> candidates = filterCandidates(market, isExclude);
-    //     Map<String, StockCategory> categoryMap = stockCategoryRepository.findAll().stream()
-    //             .collect(Collectors.toMap(StockCategory::getStockCode, Function.identity()));
-    //     Map<String, SectorPriceSnapshot> priceMap =
-    //             sectorPriceSnapshotRepository.findByMarketTypeAndSnapshotTime(market, latestSnapshotTime).stream()
-    //                     .collect(Collectors.toMap(SectorPriceSnapshot::getStockCode, Function.identity()));
-    //
-    //     Map<String, List<MarketMapItem>> grouped = candidates.stream()
-    //             .collect(Collectors.groupingBy(
-    //                     stockInfo -> resolveCategoryName(stockInfo, categoryMap),
-    //                     Collectors.mapping(
-    //                             stockInfo -> toMarketMapItem(stockInfo, priceMap, latestSnapshotTime),
-    //                             Collectors.toList())));
-    //
-    //     List<MarketMapCategoryGroup> groups = grouped.entrySet().stream()
-    //             .map(entry -> new MarketMapCategoryGroup(entry.getKey(), entry.getValue()))
-    //             .toList();
-    //
-    //     return new SnapshotResponse<>(CollectionChecker.expectedSnapshotTime(), groups);
-    // }
 
     /** 기본 마켓맵: stock_info 카테고리 그대로(override 없이) 기준, 자식 없는 1뎁스 노드로 감싸서 반환 (getCustomMarketMap과 응답 모양 통일) */
     public SnapshotResponse<MarketMapCategoryNode> getDefaultMarketMap(Market market, boolean isExclude) {
@@ -205,13 +167,6 @@ public class MarketMapQueryService {
                 .toList();
     }
 
-    // TODO 화면 점검 후 이상 없으면 삭제
-    // private String resolveCategoryName(StockInfo stockInfo, Map<String, StockCategory> categoryMap) {
-    //     StockCategory category = categoryMap.get(stockInfo.getStockCode());
-    //     String categoryName = category != null ? category.getCategoryName() : stockInfo.getCategoryName();
-    //     return normalizeCategoryName(categoryName);
-    // }
-
     private String normalizeCategoryName(String categoryName) {
         if (categoryName == null || categoryName.isBlank()) {
             return UNCATEGORIZED;
@@ -243,17 +198,6 @@ public class MarketMapQueryService {
         return marketMapExcludedStockRepository.findByIsActiveTrue().stream()
                 .map(excluded -> new ExcludedStockItem(
                         excluded.getStockCode(), resolveStockName(excluded.getStockCode(), stockInfoCache)))
-                .toList();
-    }
-
-    /** 카테고리 재분류된 종목 목록 */
-    public List<StockCategoryItem> listStockCategories() {
-        Map<String, StockInfo> stockInfoCache = stockInfoCacheService.getCache();
-        return stockCategoryRepository.findAll().stream()
-                .map(category -> new StockCategoryItem(
-                        category.getStockCode(),
-                        resolveStockName(category.getStockCode(), stockInfoCache),
-                        category.getCategoryName()))
                 .toList();
     }
 

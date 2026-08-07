@@ -12,7 +12,6 @@ import dev.eolmae.marketmonitor.domain.stock.entity.SectorPriceSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketMapExcludedStockRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.SectorPriceSnapshotRepository;
-import dev.eolmae.marketmonitor.domain.stock.repository.StockCategoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
@@ -30,7 +29,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 class MarketMapQueryServiceTest {
 
     private final StockInfoCacheService stockInfoCacheService = Mockito.mock(StockInfoCacheService.class);
-    private final StockCategoryRepository stockCategoryRepository = Mockito.mock(StockCategoryRepository.class);
     private final SectorPriceSnapshotRepository sectorPriceSnapshotRepository =
             Mockito.mock(SectorPriceSnapshotRepository.class);
     private final MarketMapExcludedStockRepository marketMapExcludedStockRepository =
@@ -41,7 +39,6 @@ class MarketMapQueryServiceTest {
             Mockito.mock(MarketMapStockCategoryRepository.class);
     private final MarketMapQueryService service = new MarketMapQueryService(
             stockInfoCacheService,
-            stockCategoryRepository,
             sectorPriceSnapshotRepository,
             marketMapExcludedStockRepository,
             marketMapCategoryRepository,

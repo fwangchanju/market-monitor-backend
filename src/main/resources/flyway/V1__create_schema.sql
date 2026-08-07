@@ -12,15 +12,6 @@ CREATE TABLE stock_info (
     CONSTRAINT pk_stock_info PRIMARY KEY (stock_code)
 );
 
-CREATE TABLE stock_category (
-    stock_code VARCHAR(20) NOT NULL,
-    category_name VARCHAR(50) NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_stock_category PRIMARY KEY (stock_code),
-    CONSTRAINT fk_stock_category_stock FOREIGN KEY (stock_code) REFERENCES stock_info (stock_code)
-);
-
 CREATE TABLE market_map_excluded_stock (
     stock_code VARCHAR(20) NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,

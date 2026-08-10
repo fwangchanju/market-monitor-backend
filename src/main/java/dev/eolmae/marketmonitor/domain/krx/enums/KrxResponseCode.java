@@ -11,7 +11,7 @@ public enum KrxResponseCode {
         this.code = code;
     }
 
-    public boolean in(String body) {
+    public boolean includedIn(String body) {
         return body != null && body.contains(code);
     }
 

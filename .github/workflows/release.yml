@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - 'release/**'
+  repository_dispatch:
+    types: [frontend-assets-published]
   workflow_dispatch:
     inputs:
       target:
@@ -18,7 +20,44 @@ on:
           - all
 
 jobs:
-  release:
+  changes:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    permissions:
+      contents: read
+    outputs:
+      application: ${{ steps.filter.outputs.application }}
+      nginx: ${{ steps.filter.outputs.nginx }}
+      renderer: ${{ steps.filter.outputs.renderer }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Detect changed paths
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            application:
+              - 'Dockerfile'
+              - 'src/main/**'
+              - 'build.gradle'
+              - 'settings.gradle'
+              - 'gradle.properties'
+              - 'gradlew'
+              - 'gradle/**'
+            nginx:
+              - 'containers/nginx/**'
+              - 'infra/nginx.conf'
+            renderer:
+              - 'containers/renderer/**'
+
+  application:
+    needs: [changes]
+    if: |
+      always() &&
+      ((github.event_name == 'workflow_dispatch' && (inputs.target == 'application' || inputs.target == 'all')) ||
+       (github.event_name == 'push' && needs.changes.outputs.application == 'true'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -39,7 +78,6 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push application image
-        if: github.event_name == 'push' || inputs.target == 'application' || inputs.target == 'all'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -49,30 +87,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build and push nginx image
-        if: github.event_name == 'push' || inputs.target == 'nginx' || inputs.target == 'all'
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: containers/nginx/Dockerfile
-          push: true
-          tags: ghcr.io/fwangchanju/market-monitor-nginx:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build and push renderer image
-        if: github.event_name == 'push' || inputs.target == 'renderer' || inputs.target == 'all'
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: containers/renderer/Dockerfile
-          push: true
-          tags: ghcr.io/fwangchanju/market-monitor-renderer:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Deploy to server 1 (application/nginx)
-        if: github.event_name == 'push' || inputs.target == 'application' || inputs.target == 'nginx' || inputs.target == 'all'
+      - name: Deploy to server 1 (application)
         uses: appleboy/ssh-action@v1
         env:
           CR_PAT: ${{ secrets.CR_PAT }}
@@ -83,23 +98,97 @@ jobs:
           envs: CR_PAT
           script: |
             source ~/repo/market-monitor-backend/infra/scripts/env.sh
-            DEPLOY_DIR="$REPO_DIR/infra/scripts"
-            TARGET="${{ inputs.target }}"
-            EVENT="${{ github.event_name }}"
-
             git -C "$REPO_DIR" fetch origin main
             git -C "$REPO_DIR" reset --hard origin/main
+            bash "$REPO_DIR/infra/scripts/deploy-application.sh"
 
-            if [ "$EVENT" = "push" ] || [ "$TARGET" = "all" ]; then
-              bash "$DEPLOY_DIR/deploy.sh"
-            elif [ "$TARGET" = "application" ]; then
-              bash "$DEPLOY_DIR/deploy-application.sh"
-            elif [ "$TARGET" = "nginx" ]; then
-              bash "$DEPLOY_DIR/deploy-nginx.sh"
-            fi
+  nginx:
+    needs: [changes]
+    if: |
+      always() &&
+      ((github.event_name == 'workflow_dispatch' && (inputs.target == 'nginx' || inputs.target == 'all')) ||
+       github.event_name == 'repository_dispatch' ||
+       (github.event_name == 'push' && needs.changes.outputs.nginx == 'true'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push nginx image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: containers/nginx/Dockerfile
+          push: true
+          tags: ghcr.io/fwangchanju/market-monitor-nginx:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy to server 1 (nginx)
+        uses: appleboy/ssh-action@v1
+        env:
+          CR_PAT: ${{ secrets.CR_PAT }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          envs: CR_PAT
+          script: |
+            source ~/repo/market-monitor-backend/infra/scripts/env.sh
+            git -C "$REPO_DIR" fetch origin main
+            git -C "$REPO_DIR" reset --hard origin/main
+            bash "$REPO_DIR/infra/scripts/deploy-nginx.sh"
+
+  renderer:
+    needs: [changes]
+    if: |
+      always() &&
+      ((github.event_name == 'workflow_dispatch' && (inputs.target == 'renderer' || inputs.target == 'all')) ||
+       (github.event_name == 'push' && needs.changes.outputs.renderer == 'true'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push renderer image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: containers/renderer/Dockerfile
+          push: true
+          tags: ghcr.io/fwangchanju/market-monitor-renderer:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Deploy to server 2 (renderer)
-        if: github.event_name == 'push' || inputs.target == 'renderer' || inputs.target == 'all'
         uses: appleboy/ssh-action@v1
         env:
           CR_PAT: ${{ secrets.CR_PAT }}
@@ -110,9 +199,6 @@ jobs:
           envs: CR_PAT
           script: |
             source ~/repo/market-monitor-backend/infra/scripts/env.sh
-            DEPLOY_DIR="$REPO_DIR/infra/scripts"
-
             git -C "$REPO_DIR" fetch origin main
             git -C "$REPO_DIR" reset --hard origin/main
-
-            bash "$DEPLOY_DIR/deploy-renderer.sh"
+            bash "$REPO_DIR/infra/scripts/deploy-renderer.sh"

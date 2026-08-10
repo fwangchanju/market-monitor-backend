@@ -30,7 +30,8 @@ domain/<feature>/
  ├─ dto/         요청/응답 타입(KiwoomRequest/KiwoomResponse 베이스 포함)
  ├─ enums/       도메인 enum
  ├─ client/      외부 API 호출자만
- ├─ collector/   배치 수집기(실제 일)
+ ├─ collector/   배치 수집기(실제 일, 구조화된 API 폴링)
+ ├─ crawler/     쿠키 세션 기반 웹 스크래핑(구조화된 API가 없는 소스 대상)
  ├─ config/      도메인 종속 @Configuration
  ├─ properties/  도메인 @ConfigurationProperties
  └─ exception/   도메인 특화 예외
@@ -114,10 +115,11 @@ domain/<feature>/
 
 ## 6. 예외 모델
 
-- **서브타입 3개만** — `BusinessException` / `EscalateException`(개발자 알림 카테고리) / `KiwoomRateLimitException`(@Retryable 전용).
-- **ErrorCode는 throw 지점에서 명시** — `new BusinessException(ErrorCode.KIWOOM_HTTP_ERROR, e, apiId)`.
-- **오버로드 2개** — `(ErrorCode, String... args)` + `(ErrorCode, Throwable, String... args)`. `null` 명시 전달 금지.
+- **`BusinessException`은 sealed, 서브타입 4개** — `BadRequestException`(400) / `NotFoundException`(404) / `ConflictException`(409) / `EscalateException`(500, 개발자 알림 카테고리). 별도로 `KiwoomRateLimitException`(@Retryable 전용, `BusinessException`과 무관한 순수 시그널 타입)이 있음.
+- **ErrorCode는 throw 지점에서 구체 서브타입으로 명시** — `new BadRequestException(ErrorCode.KIWOOM_HTTP_ERROR, e, apiId)`.
+- **오버로드 2개** — `(ErrorCode, Object... args)` + `(ErrorCode, Throwable, Object... args)`. `null` 명시 전달 금지.
 - **로그 메시지 조립은 예외 자신이** — `BusinessException.createLogMessage()` = `[CODE] 메시지 | context : a|b`. 화면 노출용 `detail`은 `getMessage()`(= `ErrorCode.getMessage()`)로 분리.
+- **예외를 던지면 안 되는 컨텍스트는 `EscalateException.wrap()`** — 수집기의 `runSafely`처럼 예외를 던지면 이후 흐름(다른 수집기 실행 등)이 멈추는 경우, 던지는 대신 `EscalateException.wrap(ErrorCode, Exception, Object... args)`로 정규화(이미 `EscalateException`이면 그대로, 아니면 감싸기)해서 `EscalationPublisher.report()`에 직접 넘긴다.
 - **ErrorCode 메시지는 문장형** — `"~실패."` ❌ → `"~에 실패했습니다."`.
 - **내부 코드에서 `IllegalStateException` 직접 사용 금지** — `EscalateException` + `ErrorCode` 사용.
 

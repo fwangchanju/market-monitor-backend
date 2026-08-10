@@ -71,12 +71,12 @@ public class KrxAuthClient {
 
             String responseBody = doLoginRequest(client, false);
 
-            if (KrxResponseCode.DUPLICATE_LOGIN.in(responseBody)) {
+            if (KrxResponseCode.DUPLICATE_LOGIN.includedIn(responseBody)) {
                 log.info("KRX 중복 로그인 감지 — skipDup=Y 재시도");
                 responseBody = doLoginRequest(client, true);
             }
 
-            if (!KrxResponseCode.LOGIN_SUCCESS.in(responseBody)) {
+            if (!KrxResponseCode.LOGIN_SUCCESS.includedIn(responseBody)) {
                 throw new EscalateException(ErrorCode.KRX_LOGIN_FAILED, responseBody);
             }
 
@@ -87,10 +87,8 @@ public class KrxAuthClient {
             log.info("KRX 로그인 성공");
             return cookie;
 
-        } catch (EscalateException e) {
-            throw e;
         } catch (Exception e) {
-            throw new EscalateException(ErrorCode.KRX_LOGIN_FAILED, e);
+            throw EscalateException.wrap(ErrorCode.KRX_LOGIN_FAILED, e);
         }
     }
 
@@ -106,14 +104,14 @@ public class KrxAuthClient {
             form.add("skipDup", "Y");
         }
 
-        try (Response resp = client.newCall(new Request.Builder()
+        try (Response response = client.newCall(new Request.Builder()
                         .url(LOGIN_URL)
                         .post(form.build())
                         .header("User-Agent", USER_AGENT)
                         .header("Referer", LOGIN_PAGE)
                         .build())
                 .execute()) {
-            return resp.body().string();
+            return response.body().string();
         }
     }
 }

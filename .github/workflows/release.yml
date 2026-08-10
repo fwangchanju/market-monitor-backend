@@ -84,8 +84,8 @@ jobs:
           file: Dockerfile
           push: true
           tags: ghcr.io/fwangchanju/market-monitor:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=application
+          cache-to: type=gha,mode=max,scope=application
 
       - name: Deploy to server 1 (application)
         uses: appleboy/ssh-action@v1
@@ -135,8 +135,8 @@ jobs:
           file: containers/nginx/Dockerfile
           push: true
           tags: ghcr.io/fwangchanju/market-monitor-nginx:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=nginx
+          cache-to: type=gha,mode=max,scope=nginx
 
       - name: Deploy to server 1 (nginx)
         uses: appleboy/ssh-action@v1
@@ -185,8 +185,8 @@ jobs:
           file: containers/renderer/Dockerfile
           push: true
           tags: ghcr.io/fwangchanju/market-monitor-renderer:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=renderer
+          cache-to: type=gha,mode=max,scope=renderer
 
       - name: Deploy to server 2 (renderer)
         uses: appleboy/ssh-action@v1

@@ -26,6 +26,7 @@ public enum ErrorCode {
 
     // Stock 수집
     STOCK_INFO_SYNC_FAILED("종목 기준정보 동기화에 실패했습니다."),
+    COLLECTOR_EXECUTION_FAILED("수집기 실행에 실패했습니다."),
     PREV_MARKET_CAPITALIZATION_ZERO("유효 종목이 없어 지수기여도 연산에 실패했습니다."),
     COMPOSITE_INDEX_ROW_NOT_FOUND("투자자별매매종합 종합지수 행을 찾을 수 없습니다."),
     BASE_SNAPSHOT_NOT_FOUND("연산 기준 스냅샷 데이터가 없습니다."),

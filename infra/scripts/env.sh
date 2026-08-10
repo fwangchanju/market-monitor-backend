@@ -1,4 +1,5 @@
 REPO_DIR="$HOME/repo/market-monitor-backend"
 ENV_FILE="$HOME/env/market-monitor.env"
 export DB_DATA_DIR="$HOME/db"
+export LOG_DIR="$HOME/logs"
 GHCR_USER="fwangchanju"

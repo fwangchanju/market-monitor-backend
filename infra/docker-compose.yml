@@ -24,6 +24,8 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=prod
       - SERVER_PORT=8081
+    volumes:
+      - ${LOG_DIR}:/app/logs
     expose:
       - "8081"
     networks:

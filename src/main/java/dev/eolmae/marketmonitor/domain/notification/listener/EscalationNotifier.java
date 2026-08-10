@@ -1,4 +1,4 @@
-package dev.eolmae.marketmonitor.domain.notification.service;
+package dev.eolmae.marketmonitor.domain.notification.listener;
 
 import dev.eolmae.marketmonitor.common.event.EscalationEvent;
 import dev.eolmae.marketmonitor.domain.notification.client.TelegramClient;

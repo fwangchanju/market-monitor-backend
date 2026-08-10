@@ -1,6 +1,9 @@
 package dev.eolmae.marketmonitor.domain.stock.scheduler;
 
 import dev.eolmae.marketmonitor.common.enums.Zone;
+import dev.eolmae.marketmonitor.common.exception.ErrorCode;
+import dev.eolmae.marketmonitor.common.exception.EscalateException;
+import dev.eolmae.marketmonitor.domain.notification.listener.EscalationPublisher;
 import dev.eolmae.marketmonitor.domain.notification.service.MarketSummaryRenderService;
 import dev.eolmae.marketmonitor.domain.stock.collector.HoldingsSyncService;
 import dev.eolmae.marketmonitor.domain.stock.collector.IndexContributionRankingCollector;
@@ -33,6 +36,7 @@ public class CollectionScheduler {
     private final ShortSellingTrendCollector shortSellingTrendCollector;
     private final StockInfoCollector stockInfoCollector;
     private final MarketSummaryRenderService marketSummaryRenderService;
+    private final EscalationPublisher escalationPublisher;
 
     private static final String KST_ZONE_ID = "Asia/Seoul";
 
@@ -94,7 +98,7 @@ public class CollectionScheduler {
         try {
             task.run();
         } catch (Exception e) {
-            log.error("수집기 실행 실패: collector={}", collectorName, e);
+            escalationPublisher.report(EscalateException.wrap(ErrorCode.COLLECTOR_EXECUTION_FAILED, e, collectorName));
         }
     }
 }

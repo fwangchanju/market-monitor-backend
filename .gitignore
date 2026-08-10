@@ -41,3 +41,6 @@ out/
 
 ### env files ###
 infra/.env
+
+### app logs (로컬 실행 시 생성) ###
+/logs/

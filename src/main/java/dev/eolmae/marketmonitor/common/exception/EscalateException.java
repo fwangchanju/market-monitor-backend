@@ -13,4 +13,12 @@ public final class EscalateException extends BusinessException {
     public EscalateException(ErrorCode errorCode, Throwable cause, Object... args) {
         super(errorCode, cause, args);
     }
+
+    /** 이미 EscalateException이면 그대로, 아니면 fallbackErrorCode로 감싸서 반환. */
+    public static EscalateException wrap(ErrorCode fallbackErrorCode, Exception e, Object... fallbackArgs) {
+        if (e instanceof EscalateException escalateException) {
+            return escalateException;
+        }
+        return new EscalateException(fallbackErrorCode, e, fallbackArgs);
+    }
 }

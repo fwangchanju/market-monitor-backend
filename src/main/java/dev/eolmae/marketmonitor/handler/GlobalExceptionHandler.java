@@ -1,16 +1,15 @@
 package dev.eolmae.marketmonitor.handler;
 
-import dev.eolmae.marketmonitor.common.event.EscalationEvent;
 import dev.eolmae.marketmonitor.common.exception.BadRequestException;
 import dev.eolmae.marketmonitor.common.exception.BusinessException;
 import dev.eolmae.marketmonitor.common.exception.ConflictException;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.common.exception.NotFoundException;
+import dev.eolmae.marketmonitor.domain.notification.listener.EscalationPublisher;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -24,7 +23,7 @@ public class GlobalExceptionHandler {
 
     private static final String ERROR_CODE_PROPERTY = "errorCode";
 
-    private final ApplicationEventPublisher eventPublisher;
+    private final EscalationPublisher escalationPublisher;
 
     @ExceptionHandler(BusinessException.class)
     public ProblemDetail handleBusinessException(BusinessException e) {
@@ -36,10 +35,10 @@ public class GlobalExceptionHandler {
                     case EscalateException ignored -> HttpStatus.INTERNAL_SERVER_ERROR;
                 };
 
-        String logMessage = e.createLogMessage();
-        log.error(logMessage, e);
-        if (e instanceof EscalateException) {
-            eventPublisher.publishEvent(new EscalationEvent(logMessage));
+        if (e instanceof EscalateException escalateException) {
+            escalationPublisher.report(escalateException);
+        } else {
+            log.error(e.createLogMessage(), e);
         }
 
         return toProblemDetail(status, e.getErrorCode(), e.getMessage());

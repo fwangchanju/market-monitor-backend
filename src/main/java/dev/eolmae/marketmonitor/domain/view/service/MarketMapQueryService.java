@@ -60,9 +60,12 @@ public class MarketMapQueryService {
                         .collect(Collectors.toMap(SectorPriceSnapshot::getStockCode, Function.identity()));
 
         Map<String, List<MarketMapItem>> grouped = candidates.stream()
+                .filter(stockInfo -> priceMap.containsKey(stockInfo.getStockCode()))
                 .collect(Collectors.groupingBy(
                         stockInfo -> normalizeCategoryName(stockInfo.getCategoryName()),
-                        Collectors.mapping(stockInfo -> toMarketMapItem(stockInfo, priceMap), Collectors.toList())));
+                        Collectors.mapping(
+                                stockInfo -> toMarketMapItem(stockInfo, priceMap.get(stockInfo.getStockCode())),
+                                Collectors.toList())));
 
         List<MarketMapCategoryNode> nodes = grouped.entrySet().stream()
                 .map(entry -> {
@@ -105,9 +108,12 @@ public class MarketMapQueryService {
                         .collect(Collectors.toMap(SectorPriceSnapshot::getStockCode, Function.identity()));
 
         Map<Long, List<MarketMapItem>> itemsByCategoryId = candidates.stream()
+                .filter(stockInfo -> priceMap.containsKey(stockInfo.getStockCode()))
                 .collect(Collectors.groupingBy(
                         stockInfo -> resolveCategoryId(stockInfo, stockCategoryMap, categoryByName),
-                        Collectors.mapping(stockInfo -> toMarketMapItem(stockInfo, priceMap), Collectors.toList())));
+                        Collectors.mapping(
+                                stockInfo -> toMarketMapItem(stockInfo, priceMap.get(stockInfo.getStockCode())),
+                                Collectors.toList())));
 
         List<MarketMapCategoryNode> nodes = childrenByParentId.getOrDefault(ROOT_KEY, List.of()).stream()
                 .sorted(Comparator.comparingInt(MarketMapCategory::getDisplayOrder))
@@ -174,22 +180,19 @@ public class MarketMapQueryService {
         return categoryName;
     }
 
-    private MarketMapItem toMarketMapItem(StockInfo stockInfo, Map<String, SectorPriceSnapshot> priceMap) {
-        BigDecimal currentPrice = BigDecimal.ZERO;
-        BigDecimal changeRate = BigDecimal.ZERO;
-        SectorPriceSnapshot priceSnapshot = priceMap.get(stockInfo.getStockCode());
-        if (priceSnapshot != null) {
-            currentPrice = priceSnapshot.getCurrentPrice();
-            changeRate = priceSnapshot.getChangeRate();
-        }
+    private MarketMapItem toMarketMapItem(StockInfo stockInfo, SectorPriceSnapshot priceSnapshot) {
+        BigDecimal currentPrice = priceSnapshot.getCurrentPrice();
+        BigDecimal changeRate = priceSnapshot.getChangeRate();
         BigDecimal totalMarketValue = currentPrice.multiply(BigDecimal.valueOf(stockInfo.getListCount()));
 
         return new MarketMapItem(
                 stockInfo.getStockCode(),
                 stockInfo.getStockName(),
+                currentPrice,
                 stockInfo.getLastPrice(),
                 totalMarketValue,
-                changeRate);
+                changeRate,
+                priceSnapshot.getSnapshotTime());
     }
 
     /** 마켓맵 표시 제외 종목 목록 */

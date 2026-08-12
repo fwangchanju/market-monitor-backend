@@ -222,6 +222,7 @@ CREATE TABLE sector_price_snapshot (
     id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
     market_type VARCHAR(20) NOT NULL,
     stock_code VARCHAR(20) NOT NULL,
+    exchange_type VARCHAR(20) NOT NULL,
     stock_name VARCHAR(100) NOT NULL,
     current_price DECIMAL(19,4) NOT NULL,
     change_value DECIMAL(19,4) NOT NULL,
@@ -229,7 +230,7 @@ CREATE TABLE sector_price_snapshot (
     snapshot_time TIMESTAMP NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_sector_price_snapshot PRIMARY KEY (id),
-    CONSTRAINT uk_sector_price_snapshot UNIQUE (market_type, stock_code, snapshot_time)
+    CONSTRAINT uk_sector_price_snapshot UNIQUE (market_type, stock_code, exchange_type, snapshot_time)
 );
 
 CREATE INDEX idx_market_overview_snapshot_time ON market_overview_snapshot (snapshot_time);

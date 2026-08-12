@@ -15,6 +15,7 @@ import dev.eolmae.marketmonitor.domain.stock.entity.IndexContributionRankingSnap
 import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.SectorPriceSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
+import dev.eolmae.marketmonitor.domain.stock.enums.ExchangeType;
 import dev.eolmae.marketmonitor.domain.stock.enums.StexType;
 import dev.eolmae.marketmonitor.domain.stock.enums.StockMarketCode;
 import dev.eolmae.marketmonitor.domain.stock.repository.IndexContributionRankingSnapshotRepository;
@@ -28,6 +29,7 @@ import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -140,6 +142,7 @@ public class IndexContributionRankingCollector {
                 market,
                 snapshotTime,
                 StockCode.removeSuffix(item.stkCd()),
+                ExchangeType.from(item.stkCd()),
                 Strings.trimToEmpty(item.stkNm()),
                 KiwoomValueParser.parseBigDecimal(item.curPrc()).abs(),
                 KiwoomValueParser.parseBigDecimal(item.predPre()),
@@ -153,10 +156,21 @@ public class IndexContributionRankingCollector {
             BigDecimal prevIndexValue,
             LocalDateTime snapshotTime) {
 
+        // 같은 종목이 거래소(KRX/NXT/SOR)별로 여러 줄 올 수 있음 — 현재가는 합산 대상이 아니라
+        // 시가총액/기여도 중복 계산을 막기 위해 종목당 KRX 줄을 우선 채택(없으면 먼저 나온 줄)
+        Map<String, SectorPriceListResponse.StockItem> selectedByStock = new HashMap<>();
+        for (SectorPriceListResponse.StockItem item : items) {
+            String stockCode = StockCode.removeSuffix(item.stkCd());
+            SectorPriceListResponse.StockItem existing = selectedByStock.get(stockCode);
+            if (existing == null || ExchangeType.from(item.stkCd()).isKrx()) {
+                selectedByStock.put(stockCode, item);
+            }
+        }
+
         // 유효 종목 필터링 및 전일 시가총액 합산
         List<StockCandidate> candidates = new ArrayList<>();
         BigDecimal prevMarketCapitalization = BigDecimal.ZERO;
-        for (SectorPriceListResponse.StockItem item : items) {
+        for (SectorPriceListResponse.StockItem item : selectedByStock.values()) {
             String stockCode = StockCode.removeSuffix(item.stkCd());
             StockInfo stockInfo = stockInfoCache.get(stockCode);
             // API 응답 품질 문제로 필수 필드가 없는 종목 제외

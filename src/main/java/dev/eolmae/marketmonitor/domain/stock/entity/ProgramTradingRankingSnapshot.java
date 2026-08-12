@@ -3,6 +3,7 @@ package dev.eolmae.marketmonitor.domain.stock.entity;
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.enums.Zone;
 import dev.eolmae.marketmonitor.domain.stock.enums.AmtQty;
+import dev.eolmae.marketmonitor.domain.stock.enums.ExchangeType;
 import dev.eolmae.marketmonitor.domain.stock.enums.ProgramRanking;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -22,7 +23,9 @@ import lombok.Getter;
         uniqueConstraints =
                 @UniqueConstraint(
                         name = "uk_program_trading_ranking_snapshot",
-                        columnNames = {"market_type", "amt_qty_type", "ranking_type", "stock_code", "snapshot_time"}))
+                        columnNames = {
+                            "market_type", "amt_qty_type", "ranking_type", "stock_code", "exchange_type", "snapshot_time"
+                        }))
 @Entity
 @Getter
 public class ProgramTradingRankingSnapshot {
@@ -46,11 +49,12 @@ public class ProgramTradingRankingSnapshot {
     @Column(nullable = false)
     private LocalDateTime snapshotTime;
 
-    @Column(name = "rank_no", nullable = false)
-    private int rank;
-
     @Column(nullable = false, length = 20)
     private String stockCode;
+
+    @Column(nullable = false, length = 20)
+    @Enumerated(EnumType.STRING)
+    private ExchangeType exchangeType;
 
     @Column(nullable = false, length = 100)
     private String stockName;
@@ -74,8 +78,8 @@ public class ProgramTradingRankingSnapshot {
             AmtQty amtQty,
             ProgramRanking rankingType,
             LocalDateTime snapshotTime,
-            int rank,
             String stockCode,
+            ExchangeType exchangeType,
             String stockName,
             BigDecimal programBuyAmount,
             BigDecimal programSellAmount,
@@ -85,8 +89,8 @@ public class ProgramTradingRankingSnapshot {
         entity.amtQty = amtQty;
         entity.rankingType = rankingType;
         entity.snapshotTime = snapshotTime;
-        entity.rank = rank;
         entity.stockCode = stockCode;
+        entity.exchangeType = exchangeType;
         entity.stockName = stockName;
         entity.programBuyAmount = programBuyAmount;
         entity.programSellAmount = programSellAmount;

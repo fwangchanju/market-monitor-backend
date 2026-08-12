@@ -24,6 +24,7 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=prod
       - SERVER_PORT=8081
+      - TZ=Asia/Seoul
     volumes:
       - ${LOG_DIR}:/app/logs
     expose:

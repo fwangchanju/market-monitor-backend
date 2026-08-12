@@ -17,6 +17,6 @@ public interface ProgramTradingRankingSnapshotRepository extends JpaRepository<P
     Optional<ProgramTradingRankingSnapshot> findFirstByMarketTypeInAndRankingTypeAndAmtQtyOrderBySnapshotTimeDesc(
             List<Market> markets, ProgramRanking ranking, AmtQty amtQty);
 
-    List<ProgramTradingRankingSnapshot> findByMarketTypeInAndRankingTypeAndAmtQtyAndSnapshotTimeOrderByRankAsc(
+    List<ProgramTradingRankingSnapshot> findByMarketTypeInAndRankingTypeAndAmtQtyAndSnapshotTime(
             List<Market> markets, ProgramRanking ranking, AmtQty amtQty, LocalDateTime snapshotTime);
 }

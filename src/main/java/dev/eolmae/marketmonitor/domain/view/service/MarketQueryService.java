@@ -43,10 +43,12 @@ import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.enums.RankingType;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -206,30 +208,65 @@ public class MarketQueryService {
         }
 
         var snapshots =
-                programTradingRankingSnapshotRepository
-                        .findByMarketTypeInAndRankingTypeAndAmtQtyAndSnapshotTimeOrderByRankAsc(
-                                markets, ranking, amtQty, latestSnapshotTime);
+                programTradingRankingSnapshotRepository.findByMarketTypeInAndRankingTypeAndAmtQtyAndSnapshotTime(
+                        markets, ranking, amtQty, latestSnapshotTime);
 
-        // market=COMBINED(KOSPI+KOSDAQ)면 마켓별 rank를 합쳐 netBuyAmount 기준으로 다시 정렬
-        var sorted = snapshots.stream()
-                .sorted(Comparator.comparing(
-                        ProgramTradingRankingSnapshot::getProgramNetBuyAmount, ranking.valueComparator()))
+        // 종목당 거래소(exchangeType)별로 행이 나뉘어 있어 종목 기준으로 금액을 합산한 뒤,
+        // market=COMBINED(KOSPI+KOSDAQ)까지 포함해 netBuyAmount 기준으로 다시 정렬
+        Map<String, AggregatedProgramRanking> merged = snapshots.stream()
+                .collect(Collectors.toMap(
+                        ProgramTradingRankingSnapshot::getStockCode,
+                        MarketQueryService::toAggregated,
+                        MarketQueryService::mergeAggregated));
+
+        var sorted = merged.values().stream()
+                .sorted(Comparator.comparing(AggregatedProgramRanking::netBuyAmount, ranking.valueComparator()))
+                .limit(RANKING_LIMIT)
                 .toList();
 
-        return new SnapshotResponse<>(
-                CollectionChecker.expectedSnapshotTime(),
-                sorted.stream()
-                        .limit(RANKING_LIMIT)
-                        .map(item -> new ProgramTradingRankingItem(
-                                item.getRank(),
-                                item.getStockCode(),
-                                item.getStockName(),
-                                item.getProgramBuyAmount(),
-                                item.getProgramSellAmount(),
-                                ranking.normalize(item.getProgramNetBuyAmount()),
-                                item.getSnapshotTime()))
-                        .toList());
+        List<ProgramTradingRankingItem> items = new ArrayList<>();
+        int rank = 1;
+        for (AggregatedProgramRanking agg : sorted) {
+            items.add(new ProgramTradingRankingItem(
+                    rank++,
+                    agg.stockCode(),
+                    agg.stockName(),
+                    agg.buyAmount(),
+                    agg.sellAmount(),
+                    ranking.normalize(agg.netBuyAmount()),
+                    agg.snapshotTime()));
+        }
+
+        return new SnapshotResponse<>(CollectionChecker.expectedSnapshotTime(), items);
     }
+
+    private static AggregatedProgramRanking toAggregated(ProgramTradingRankingSnapshot snapshot) {
+        return new AggregatedProgramRanking(
+                snapshot.getStockCode(),
+                snapshot.getStockName(),
+                snapshot.getProgramBuyAmount(),
+                snapshot.getProgramSellAmount(),
+                snapshot.getProgramNetBuyAmount(),
+                snapshot.getSnapshotTime());
+    }
+
+    private static AggregatedProgramRanking mergeAggregated(AggregatedProgramRanking a, AggregatedProgramRanking b) {
+        return new AggregatedProgramRanking(
+                a.stockCode(),
+                a.stockName(),
+                a.buyAmount().add(b.buyAmount()),
+                a.sellAmount().add(b.sellAmount()),
+                a.netBuyAmount().add(b.netBuyAmount()),
+                a.snapshotTime());
+    }
+
+    private record AggregatedProgramRanking(
+            String stockCode,
+            String stockName,
+            BigDecimal buyAmount,
+            BigDecimal sellAmount,
+            BigDecimal netBuyAmount,
+            LocalDateTime snapshotTime) {}
 
     /** 지수 기여도 상위 종목 반환 */
     public SnapshotResponse<IndexContributionItem> getIndexContribution(Market market) {

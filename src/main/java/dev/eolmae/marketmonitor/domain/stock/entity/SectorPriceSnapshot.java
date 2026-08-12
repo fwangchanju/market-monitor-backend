@@ -2,6 +2,7 @@ package dev.eolmae.marketmonitor.domain.stock.entity;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.enums.Zone;
+import dev.eolmae.marketmonitor.domain.stock.enums.ExchangeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -20,7 +21,7 @@ import lombok.Getter;
         uniqueConstraints =
                 @UniqueConstraint(
                         name = "uk_sector_price_snapshot",
-                        columnNames = {"market_type", "stock_code", "snapshot_time"}))
+                        columnNames = {"market_type", "stock_code", "exchange_type", "snapshot_time"}))
 @Entity
 @Getter
 public class SectorPriceSnapshot {
@@ -38,6 +39,10 @@ public class SectorPriceSnapshot {
 
     @Column(nullable = false, length = 20)
     private String stockCode;
+
+    @Column(nullable = false, length = 20)
+    @Enumerated(EnumType.STRING)
+    private ExchangeType exchangeType;
 
     @Column(nullable = false, length = 100)
     private String stockName;
@@ -60,6 +65,7 @@ public class SectorPriceSnapshot {
             Market marketType,
             LocalDateTime snapshotTime,
             String stockCode,
+            ExchangeType exchangeType,
             String stockName,
             BigDecimal currentPrice,
             BigDecimal changeValue,
@@ -68,6 +74,7 @@ public class SectorPriceSnapshot {
         entity.marketType = marketType;
         entity.snapshotTime = snapshotTime;
         entity.stockCode = stockCode;
+        entity.exchangeType = exchangeType;
         entity.stockName = stockName;
         entity.currentPrice = currentPrice;
         entity.changeValue = changeValue;

@@ -8,6 +8,7 @@ import dev.eolmae.marketmonitor.domain.stock.dto.ProgramNetBuyRankingRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.ProgramNetBuyRankingResponse;
 import dev.eolmae.marketmonitor.domain.stock.entity.ProgramTradingRankingSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.enums.AmtQty;
+import dev.eolmae.marketmonitor.domain.stock.enums.ExchangeType;
 import dev.eolmae.marketmonitor.domain.stock.enums.ProgramRanking;
 import dev.eolmae.marketmonitor.domain.stock.enums.StexType;
 import dev.eolmae.marketmonitor.domain.stock.repository.ProgramTradingRankingSnapshotRepository;
@@ -65,17 +66,16 @@ public class ProgramNetBuyRankingCollector {
             return;
         }
 
-        int rank = 1;
         for (ProgramNetBuyRankingResponse.RankingItem item : response.items()) {
             String stockCode = StockCode.removeSuffix(item.stkCd());
             if (stockCode.isBlank()) {
                 log.warn("프로그램매매 랭킹 종목코드 없음, 스킵: market={}, ranking={}", market, ranking);
                 continue;
             }
-            rankingRepository.save(toEntity(market, amtQty, ranking, snapshotTime, rank++, item));
+            rankingRepository.save(toEntity(market, amtQty, ranking, snapshotTime, item));
         }
 
-        log.debug("프로그램매매 랭킹 수집 완료: market={}, ranking={}, amtQty={}, count={}", market, ranking, amtQty, rank - 1);
+        log.debug("프로그램매매 랭킹 수집 완료: market={}, ranking={}, amtQty={}", market, ranking, amtQty);
     }
 
     private static ProgramTradingRankingSnapshot toEntity(
@@ -83,15 +83,14 @@ public class ProgramNetBuyRankingCollector {
             AmtQty amtQty,
             ProgramRanking ranking,
             LocalDateTime snapshotTime,
-            int rank,
             ProgramNetBuyRankingResponse.RankingItem item) {
         return ProgramTradingRankingSnapshot.create(
                 market,
                 amtQty,
                 ranking,
                 snapshotTime,
-                rank,
                 StockCode.removeSuffix(item.stkCd()),
+                ExchangeType.from(item.stkCd()),
                 Strings.trimToEmpty(item.stkNm()),
                 KiwoomValueParser.parseBigDecimal(item.prmBuyAmt()),
                 KiwoomValueParser.parseBigDecimal(item.prmSellAmt()),

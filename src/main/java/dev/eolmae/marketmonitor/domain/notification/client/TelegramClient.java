@@ -1,13 +1,9 @@
 package dev.eolmae.marketmonitor.domain.notification.client;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
-import dev.eolmae.marketmonitor.domain.notification.dto.TelegramMediaItem;
 import dev.eolmae.marketmonitor.domain.notification.dto.TelegramRequest;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
-import java.util.ArrayList;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ByteArrayResource;
@@ -26,7 +22,6 @@ public class TelegramClient {
 
     private final TelegramProperties properties;
     private final RestClient restClient;
-    private final ObjectMapper objectMapper;
 
     public void sendMessage(String chatId, String text) {
         try {
@@ -59,37 +54,6 @@ public class TelegramClient {
                     .toBodilessEntity();
 
             log.debug("텔레그램 사진 발송 완료: chatId={}", chatId);
-        } catch (Exception e) {
-            throw new EscalateException(ErrorCode.TELEGRAM_IMAGE_SEND_FAILED, e);
-        }
-    }
-
-    public void sendMediaGroup(String chatId, List<byte[]> images) {
-        try {
-            List<TelegramMediaItem> mediaList = new ArrayList<>();
-            int index = 0;
-            for (byte[] image : images) {
-                mediaList.add(TelegramMediaItem.photo(index++));
-            }
-
-            MultiValueMap<String, Object> form = new LinkedMultiValueMap<>();
-            form.add("chat_id", chatId);
-            form.add("media", objectMapper.writeValueAsString(mediaList));
-            index = 0;
-            for (byte[] image : images) {
-                form.add("photo" + index, namedResource(image, "group_image_" + index + ".png"));
-                index++;
-            }
-
-            restClient
-                    .post()
-                    .uri(botUrl("/sendMediaGroup"))
-                    .contentType(MediaType.MULTIPART_FORM_DATA)
-                    .body(form)
-                    .retrieve()
-                    .toBodilessEntity();
-
-            log.debug("텔레그램 미디어그룹 발송 완료: chatId={}, count={}", chatId, images.size());
         } catch (Exception e) {
             throw new EscalateException(ErrorCode.TELEGRAM_IMAGE_SEND_FAILED, e);
         }

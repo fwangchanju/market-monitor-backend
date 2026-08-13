@@ -5,7 +5,7 @@ const app = express()
 app.use(express.json())
 
 const PORT = process.env.PORT || 3000
-const CAPTURE_URL = process.env.CAPTURE_URL || 'http://localhost:5173'
+const BASE_URL = process.env.CAPTURE_URL || 'http://localhost:5173'
 const CAPTURE_USER = process.env.CAPTURE_USER || ''
 const CAPTURE_PASS = process.env.CAPTURE_PASS || ''
 
@@ -13,7 +13,15 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' })
 })
 
+// path: BASE_URL 뒤에 붙일 프론트 경로(쿼리 포함 가능), selector: 캡처할 요소들의 CSS 셀렉터
 app.post('/capture', async (req, res) => {
+  const { path, selector } = req.body
+
+  if (!path || !selector) {
+    res.status(400).json({ error: 'path와 selector는 필수입니다' })
+    return
+  }
+
   let browser
   try {
     browser = await chromium.launch({
@@ -30,10 +38,10 @@ app.post('/capture', async (req, res) => {
     }
 
     const page = await context.newPage()
-    await page.goto(CAPTURE_URL, { waitUntil: 'networkidle', timeout: 30000 })
+    await page.goto(BASE_URL + path, { waitUntil: 'networkidle', timeout: 30000 })
     await page.waitForTimeout(2000)
 
-    const sections = await page.$$('section.section')
+    const sections = await page.$$(selector)
     const images = []
 
     for (let i = 0; i < sections.length; i++) {
@@ -54,5 +62,5 @@ app.post('/capture', async (req, res) => {
 })
 
 app.listen(PORT, () => {
-  console.log(`market-monitor-renderer 시작 — port ${PORT}, capture: ${CAPTURE_URL}`)
+  console.log(`market-monitor-renderer 시작 — port ${PORT}, base: ${BASE_URL}`)
 })

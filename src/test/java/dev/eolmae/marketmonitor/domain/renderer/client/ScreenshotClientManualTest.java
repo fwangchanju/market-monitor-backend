@@ -2,6 +2,7 @@ package dev.eolmae.marketmonitor.domain.renderer.client;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.eolmae.marketmonitor.domain.notification.enums.RenderTarget;
 import dev.eolmae.marketmonitor.domain.renderer.properties.RendererProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClient;
@@ -18,6 +19,7 @@ class ScreenshotClientManualTest {
         String rendererUrl = System.getenv().getOrDefault("RENDERER_URL", "http://market-monitor-renderer:3000");
         var client = new ScreenshotClient(new RendererProperties(rendererUrl), RestClient.create());
 
-        assertThat(client.captureAll()).isNotEmpty();
+        assertThat(client.capture(RenderTarget.MARKET_SUMMARY.path(), RenderTarget.MARKET_SUMMARY.selector()))
+                .isNotEmpty();
     }
 }

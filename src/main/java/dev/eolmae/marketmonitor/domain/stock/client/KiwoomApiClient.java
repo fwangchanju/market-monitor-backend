@@ -68,7 +68,7 @@ public class KiwoomApiClient {
             merged = (T) merged.mergeNext(page.body());
         }
 
-        return merged;
+        return (T) merged.dedupe();
     }
 
     private <T extends KiwoomResponse> PageResult<T> fetchPage(KiwoomRequest request, Class<T> dataClass) {

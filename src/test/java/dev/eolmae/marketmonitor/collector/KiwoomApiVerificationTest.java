@@ -288,7 +288,7 @@ class KiwoomApiVerificationTest {
      *   - 장외 시간대 응답 (null / 빈 배열 / 스탈 데이터)
      *   - stex_tp=3(통합) 응답이 실제 화면 수치와 일치하는지
      */
-    //    @Test
+    @Test
     void ka90003_프로그램매매순매수상위() {
         log.info("=== ka90003 프로그램매매순매수상위 | 현재시각={} ===", LocalDateTime.now(KST));
 

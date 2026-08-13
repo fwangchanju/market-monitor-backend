@@ -3,7 +3,9 @@ package dev.eolmae.marketmonitor.domain.stock.dto;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 // ka90003: 프로그램순매수상위50요청
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -32,5 +34,15 @@ public record ProgramNetBuyRankingResponse(
         List<RankingItem> mergedItems = new ArrayList<>(items);
         mergedItems.addAll(((ProgramNetBuyRankingResponse) next).items);
         return new ProgramNetBuyRankingResponse(returnCode, returnMsg, mergedItems);
+    }
+
+    @Override
+    public ProgramNetBuyRankingResponse dedupe() {
+        // 페이지 경계에서 동일 종목이 중복 반환되는 경우가 있어 stkCd 기준으로 중복 제거
+        Map<String, RankingItem> deduped = new HashMap<>();
+        for (RankingItem item : items) {
+            deduped.putIfAbsent(item.stkCd(), item);
+        }
+        return new ProgramNetBuyRankingResponse(returnCode, returnMsg, new ArrayList<>(deduped.values()));
     }
 }

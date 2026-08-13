@@ -10,6 +10,7 @@ import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRep
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapStockCategoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.entity.SectorPriceSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
+import dev.eolmae.marketmonitor.domain.stock.enums.ExchangeType;
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketMapExcludedStockRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.SectorPriceSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
@@ -221,6 +222,13 @@ class MarketMapQueryServiceTest {
 
     private SectorPriceSnapshot priceSnapshot(String stockCode, LocalDateTime snapshotTime, BigDecimal currentPrice) {
         return SectorPriceSnapshot.create(
-                Market.KOSPI, snapshotTime, stockCode, stockCode, currentPrice, BigDecimal.ZERO, BigDecimal.ZERO);
+                Market.KOSPI,
+                snapshotTime,
+                stockCode,
+                ExchangeType.KRX,
+                stockCode,
+                currentPrice,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO);
     }
 }

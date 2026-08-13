@@ -3,7 +3,9 @@ package dev.eolmae.marketmonitor.domain.stock.dto;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 // ka90013: 종목일별프로그램매매추이요청
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -36,5 +38,15 @@ public record DailyProgramTradeTrendResponse(
         List<DailyTick> mergedTicks = new ArrayList<>(ticks);
         mergedTicks.addAll(((DailyProgramTradeTrendResponse) next).ticks);
         return new DailyProgramTradeTrendResponse(returnCode, returnMsg, mergedTicks);
+    }
+
+    @Override
+    public DailyProgramTradeTrendResponse dedupe() {
+        // 페이지 경계에서 동일 날짜가 중복 반환되는 경우가 있어 dt 기준으로 중복 제거
+        Map<String, DailyTick> deduped = new HashMap<>();
+        for (DailyTick tick : ticks) {
+            deduped.putIfAbsent(tick.dt(), tick);
+        }
+        return new DailyProgramTradeTrendResponse(returnCode, returnMsg, new ArrayList<>(deduped.values()));
     }
 }

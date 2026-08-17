@@ -10,7 +10,7 @@ import dev.eolmae.marketmonitor.domain.stock.entity.SectorPriceSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.enums.StockMarketCode;
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketMapExcludedStockRepository;
-import dev.eolmae.marketmonitor.domain.stock.repository.SectorPriceSnapshotRepository;
+import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceSnapshotService;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketmonitor.domain.view.dto.ExcludedStockItem;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
@@ -39,25 +39,24 @@ public class MarketMapQueryService {
     private static final long ROOT_KEY = 0L;
 
     private final StockInfoCacheService stockInfoCacheService;
-    private final SectorPriceSnapshotRepository sectorPriceSnapshotRepository;
+    private final SectorPriceSnapshotService sectorPriceSnapshotService;
     private final MarketMapExcludedStockRepository marketMapExcludedStockRepository;
     private final MarketMapCategoryRepository marketMapCategoryRepository;
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository;
 
     /** 기본 마켓맵: stock_info 카테고리 그대로(override 없이) 기준, 자식 없는 1뎁스 노드로 감싸서 반환 (getCustomMarketMap과 응답 모양 통일) */
     public SnapshotResponse<MarketMapCategoryNode> getDefaultMarketMap(Market market, boolean isExclude) {
-        LocalDateTime latestSnapshotTime = sectorPriceSnapshotRepository
-                .findFirstByMarketTypeOrderBySnapshotTimeDesc(market)
-                .map(SectorPriceSnapshot::getSnapshotTime)
-                .orElse(null);
-        if (latestSnapshotTime == null) {
-            return SnapshotResponse.empty();
-        }
+        return sectorPriceSnapshotService
+                .findLatestSnapshotTime(market)
+                .map(latestSnapshotTime -> buildDefaultMarketMap(market, isExclude, latestSnapshotTime))
+                .orElseGet(SnapshotResponse::empty);
+    }
 
+    private SnapshotResponse<MarketMapCategoryNode> buildDefaultMarketMap(
+            Market market, boolean isExclude, LocalDateTime latestSnapshotTime) {
         List<StockInfo> candidates = filterCandidates(market, isExclude);
         Map<String, SectorPriceSnapshot> priceMap =
-                sectorPriceSnapshotRepository.findByMarketTypeAndSnapshotTime(market, latestSnapshotTime).stream()
-                        .collect(Collectors.toMap(SectorPriceSnapshot::getStockCode, Function.identity()));
+                sectorPriceSnapshotService.findPriceByStockCode(market, latestSnapshotTime);
 
         Map<String, List<MarketMapItem>> grouped = candidates.stream()
                 .filter(stockInfo -> priceMap.containsKey(stockInfo.getStockCode()))
@@ -82,14 +81,14 @@ public class MarketMapQueryService {
 
     /** 커스텀 마켓맵: 어드민이 구성한 카테고리 트리 기준. 트리에 배정 안 된 종목은 stock_info 카테고리로 묶은 노드를 같은 레벨에 섞어서 반환 */
     public SnapshotResponse<MarketMapCategoryNode> getCustomMarketMap(Market market, boolean isExclude) {
-        LocalDateTime latestSnapshotTime = sectorPriceSnapshotRepository
-                .findFirstByMarketTypeOrderBySnapshotTimeDesc(market)
-                .map(SectorPriceSnapshot::getSnapshotTime)
-                .orElse(null);
-        if (latestSnapshotTime == null) {
-            return SnapshotResponse.empty();
-        }
+        return sectorPriceSnapshotService
+                .findLatestSnapshotTime(market)
+                .map(latestSnapshotTime -> buildCustomMarketMap(market, isExclude, latestSnapshotTime))
+                .orElseGet(SnapshotResponse::empty);
+    }
 
+    private SnapshotResponse<MarketMapCategoryNode> buildCustomMarketMap(
+            Market market, boolean isExclude, LocalDateTime latestSnapshotTime) {
         List<StockInfo> candidates = filterCandidates(market, isExclude);
         List<MarketMapCategory> categories = marketMapCategoryRepository.findAll();
         Map<String, MarketMapCategory> categoryByName = new HashMap<>();
@@ -104,8 +103,7 @@ public class MarketMapQueryService {
         Map<String, MarketMapStockCategory> stockCategoryMap = marketMapStockCategoryRepository.findAll().stream()
                 .collect(Collectors.toMap(MarketMapStockCategory::getStockCode, Function.identity()));
         Map<String, SectorPriceSnapshot> priceMap =
-                sectorPriceSnapshotRepository.findByMarketTypeAndSnapshotTime(market, latestSnapshotTime).stream()
-                        .collect(Collectors.toMap(SectorPriceSnapshot::getStockCode, Function.identity()));
+                sectorPriceSnapshotService.findPriceByStockCode(market, latestSnapshotTime);
 
         Map<Long, List<MarketMapItem>> itemsByCategoryId = candidates.stream()
                 .filter(stockInfo -> priceMap.containsKey(stockInfo.getStockCode()))
@@ -118,6 +116,7 @@ public class MarketMapQueryService {
         List<MarketMapCategoryNode> nodes = childrenByParentId.getOrDefault(ROOT_KEY, List.of()).stream()
                 .sorted(Comparator.comparingInt(MarketMapCategory::getDisplayOrder))
                 .map(category -> toCategoryNode(category, childrenByParentId, itemsByCategoryId))
+                .filter(this::isNotEmpty)
                 .toList();
 
         return new SnapshotResponse<>(latestSnapshotTime, nodes);
@@ -130,6 +129,7 @@ public class MarketMapQueryService {
         List<MarketMapCategoryNode> children = childrenByParentId.getOrDefault(category.getId(), List.of()).stream()
                 .sorted(Comparator.comparingInt(MarketMapCategory::getDisplayOrder))
                 .map(child -> toCategoryNode(child, childrenByParentId, itemsByCategoryId))
+                .filter(this::isNotEmpty)
                 .toList();
         List<MarketMapItem> items = itemsByCategoryId.getOrDefault(category.getId(), List.of());
         BigDecimal itemsValue =
@@ -137,6 +137,11 @@ public class MarketMapQueryService {
         BigDecimal childrenValue =
                 children.stream().map(MarketMapCategoryNode::totalMarketValue).reduce(BigDecimal.ZERO, BigDecimal::add);
         return new MarketMapCategoryNode(category.getName(), itemsValue.add(childrenValue), children, items);
+    }
+
+    /** 소속 종목이 있거나(items) 하위 카테고리 중 남은 게 있으면(children) 유지 대상으로 판단 */
+    private boolean isNotEmpty(MarketMapCategoryNode node) {
+        return !node.items().isEmpty() || !node.children().isEmpty();
     }
 
     /** 명시적 배정(market_map_stock_category)이 있으면 그 카테고리, 없으면 stock_info 카테고리명(미분류 포함)으로 실제 카테고리에서 이름 매치. 수집기가 모든 카테고리명을 미리 생성해두므로 항상 매치된다고 전제한다. */

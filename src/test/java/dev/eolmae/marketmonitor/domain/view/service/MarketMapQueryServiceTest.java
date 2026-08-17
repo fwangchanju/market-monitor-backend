@@ -13,6 +13,7 @@ import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.enums.ExchangeType;
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketMapExcludedStockRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.SectorPriceSnapshotRepository;
+import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceSnapshotService;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
@@ -38,9 +39,11 @@ class MarketMapQueryServiceTest {
             Mockito.mock(MarketMapCategoryRepository.class);
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository =
             Mockito.mock(MarketMapStockCategoryRepository.class);
+    private final SectorPriceSnapshotService sectorPriceSnapshotService =
+            new SectorPriceSnapshotService(sectorPriceSnapshotRepository);
     private final MarketMapQueryService service = new MarketMapQueryService(
             stockInfoCacheService,
-            sectorPriceSnapshotRepository,
+            sectorPriceSnapshotService,
             marketMapExcludedStockRepository,
             marketMapCategoryRepository,
             marketMapStockCategoryRepository);

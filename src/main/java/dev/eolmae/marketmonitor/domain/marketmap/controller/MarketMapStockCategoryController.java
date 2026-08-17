@@ -1,7 +1,7 @@
 package dev.eolmae.marketmonitor.domain.marketmap.controller;
 
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryIdRequest;
-import dev.eolmae.marketmonitor.domain.marketmap.dto.StockCategoryItem;
+import dev.eolmae.marketmonitor.domain.marketmap.dto.StockCategoryListItem;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapStockCategoryService;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -21,7 +21,7 @@ public class MarketMapStockCategoryController {
     private final MarketMapStockCategoryService marketMapStockCategoryService;
 
     @GetMapping
-    public List<StockCategoryItem> getStockCategories() {
+    public List<StockCategoryListItem> getStockCategories() {
         return marketMapStockCategoryService.getStockCategories();
     }
 

@@ -43,7 +43,6 @@ CREATE TABLE market_map_category (
     parent_id BIGINT,
     version_id BIGINT,
     name VARCHAR(50) NOT NULL,
-    display_order INT NOT NULL,
     depth INT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -56,6 +55,7 @@ CREATE TABLE market_map_category (
 CREATE TABLE market_map_stock_category (
     stock_code VARCHAR(20) NOT NULL,
     category_id BIGINT NOT NULL,
+    alias VARCHAR(50),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_market_map_stock_category PRIMARY KEY (stock_code),

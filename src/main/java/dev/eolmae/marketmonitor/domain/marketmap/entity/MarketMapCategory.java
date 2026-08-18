@@ -28,9 +28,6 @@ public class MarketMapCategory {
     @Column(nullable = false, length = 50)
     private String name;
 
-    @Column(name = "display_order", nullable = false)
-    private int displayOrder;
-
     @Column(nullable = false)
     private int depth;
 
@@ -42,24 +39,22 @@ public class MarketMapCategory {
 
     protected MarketMapCategory() {}
 
-    public static MarketMapCategory createParent(String name, int displayOrder) {
+    public static MarketMapCategory createParent(String name) {
         var entity = new MarketMapCategory();
         entity.name = name;
         entity.parentId = null;
         entity.depth = 0;
-        entity.displayOrder = displayOrder;
         LocalDateTime now = LocalDateTime.now(Zone.KST.zoneId());
         entity.createdAt = now;
         entity.updatedAt = now;
         return entity;
     }
 
-    public static MarketMapCategory createChild(String name, MarketMapCategory parent, int displayOrder) {
+    public static MarketMapCategory createChild(String name, MarketMapCategory parent) {
         var entity = new MarketMapCategory();
         entity.name = name;
         entity.parentId = parent.id;
         entity.depth = parent.depth + 1;
-        entity.displayOrder = displayOrder;
         LocalDateTime now = LocalDateTime.now(Zone.KST.zoneId());
         entity.createdAt = now;
         entity.updatedAt = now;
@@ -71,19 +66,13 @@ public class MarketMapCategory {
         this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
     }
 
-    public void reorder(int displayOrder) {
-        this.displayOrder = displayOrder;
-        this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
-    }
-
     public void rename(String name) {
         this.name = name;
         this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
     }
 
-    public void changeParent(Long parentId, int displayOrder) {
+    public void changeParent(Long parentId) {
         this.parentId = parentId;
-        this.displayOrder = displayOrder;
         this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
     }
 

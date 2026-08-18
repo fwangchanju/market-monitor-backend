@@ -25,16 +25,11 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 카테고리 추가/삭제/순서 변경. 항상 라이브(현재 표시 중인) 트리만을 대상으로 한다. */
+/** 카테고리 추가/삭제/재부모화. 항상 라이브(현재 표시 중인) 트리만을 대상으로 한다. */
 @Service
 @Transactional
 @RequiredArgsConstructor
 public class MarketMapCategoryService {
-
-    private static final int INITIAL_DISPLAY_ORDER = 1;
-    private static final long ROOT_KEY = 0L;
-    private static final int SHIFT_FORWARD = 1;
-    private static final int SHIFT_BACKWARD = -1;
 
     private final MarketMapCategoryRepository marketMapCategoryRepository;
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository;
@@ -72,17 +67,11 @@ public class MarketMapCategoryService {
         marketMapStockCategoryRepository.saveAll(newStockCategories);
     }
 
-    /** 사용자가 직접 만드는 카테고리는 최상단에 추가되지만(createParent), 자동 생성은 최하단에 추가.
-     * 백그라운드 동기화로 인해 사용자가 정리해둔 기존 순서를 건드리지 않기 위함.
-     * 기존 + 신규 생성분을 합친 이름별 맵을 리턴해서, 호출부가 다시 전체 조회할 필요가 없게 한다. */
+    /** 기존 + 신규 생성분을 합친 이름별 맵을 리턴해서, 호출부가 다시 전체 조회할 필요가 없게 한다. */
     private Map<String, MarketMapCategory> syncCategories(Set<String> categoryNames) {
         Map<String, MarketMapCategory> existingByName = new HashMap<>();
-        int maxOrder = 0;
         for (MarketMapCategory category : findAllCategories()) {
             existingByName.put(category.getName(), category);
-            if (category.getParentId() == null && category.getDisplayOrder() > maxOrder) {
-                maxOrder = category.getDisplayOrder();
-            }
         }
 
         List<MarketMapCategory> newCategories = new ArrayList<>();
@@ -90,7 +79,7 @@ public class MarketMapCategoryService {
             if (existingByName.containsKey(categoryName)) {
                 continue;
             }
-            newCategories.add(MarketMapCategory.createParent(categoryName, ++maxOrder));
+            newCategories.add(MarketMapCategory.createParent(categoryName));
         }
         marketMapCategoryRepository.saveAll(newCategories);
         newCategories.forEach(category -> existingByName.put(category.getName(), category));
@@ -101,9 +90,7 @@ public class MarketMapCategoryService {
         if (marketMapCategoryRepository.existsByName(name)) {
             throw new ConflictException(ErrorCode.CATEGORY_NAME_DUPLICATE, name);
         }
-        // 최상위 카테고리는 부모 카테고리가 없다.
-        shiftSiblingsForInsert(findCategoriesByParentId(null));
-        MarketMapCategory category = MarketMapCategory.createParent(name, INITIAL_DISPLAY_ORDER);
+        MarketMapCategory category = MarketMapCategory.createParent(name);
         return toItem(marketMapCategoryRepository.save(category));
     }
 
@@ -114,17 +101,8 @@ public class MarketMapCategoryService {
         MarketMapCategory parent = marketMapCategoryRepository
                 .findById(parentId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.CATEGORY_NOT_FOUND, parentId));
-        shiftSiblingsForInsert(findCategoriesByParentId(parentId));
-        MarketMapCategory category = MarketMapCategory.createChild(name, parent, INITIAL_DISPLAY_ORDER);
+        MarketMapCategory category = MarketMapCategory.createChild(name, parent);
         return toItem(marketMapCategoryRepository.save(category));
-    }
-
-    private void shiftSiblingsForInsert(List<MarketMapCategory> siblings) {
-        siblings.forEach(sibling -> sibling.reorder(sibling.getDisplayOrder() + SHIFT_FORWARD));
-    }
-
-    private List<MarketMapCategory> findCategoriesByParentId(Long parentId) {
-        return marketMapCategoryRepository.findByParentId(parentId);
     }
 
     public void rename(Long categoryId, String name) {
@@ -140,60 +118,27 @@ public class MarketMapCategoryService {
         target.rename(name);
     }
 
-    public void reorder(Long categoryId, int newDisplayOrder) {
-        MarketMapCategory target = marketMapCategoryRepository
-                .findById(categoryId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.CATEGORY_NOT_FOUND, categoryId));
-        int oldDisplayOrder = target.getDisplayOrder();
-        List<MarketMapCategory> siblings = findCategoriesByParentId(target.getParentId());
-
-        // 카테고리를 앞으로 옮기면 그 사이에 있던 카테고리들이 한 칸씩 뒤로 밀리고,
-        // 뒤로 옮기면 그 사이에 있던 카테고리들이 한 칸씩 앞으로 밀린다.
-        int startOrder = Math.min(oldDisplayOrder, newDisplayOrder);
-        int endOrder = Math.max(oldDisplayOrder, newDisplayOrder);
-        int shiftDirection = oldDisplayOrder == startOrder ? SHIFT_BACKWARD : SHIFT_FORWARD;
-
-        shiftDisplayOrders(siblings, categoryId, startOrder, endOrder, shiftDirection);
-        target.reorder(newDisplayOrder);
-    }
-
-    private void shiftDisplayOrders(
-            List<MarketMapCategory> siblings, Long excludeId, int startOrder, int endOrder, int direction) {
-        siblings.stream()
-                .filter(category -> !category.getId().equals(excludeId))
-                .filter(category -> startOrder <= category.getDisplayOrder() && category.getDisplayOrder() <= endOrder)
-                .forEach(sibling -> sibling.reorder(sibling.getDisplayOrder() + direction));
-    }
-
-    /** 카테고리가 형제 그룹에서 빠져나간 뒤 남은 형제들의 순서를 당긴다(startOrder 이후 전부, 상한 없음). */
-    private void shiftDisplayOrdersBackward(List<MarketMapCategory> siblings, Long excludeId, int startOrder) {
-        shiftDisplayOrders(siblings, excludeId, startOrder, Integer.MAX_VALUE, SHIFT_BACKWARD);
-    }
-
-    /** categoryId를 newParentId의 자식으로 옮긴다. newParentId가 categoryId 자신이거나 그 하위 카테고리면 순환 구조가
-     * 되므로 409로 막는다. 기존 부모 밑의 형제들은 순서를 한 칸씩 당기고, 새 부모 밑에서는 맨 앞에 삽입된다.
+    /** categoryId를 newParentId의 자식으로 옮긴다. newParentId가 null이면 최상위(루트)로 옮긴다.
+     * newParentId가 categoryId 자신이거나 그 하위 카테고리면 순환 구조가 되므로 409로 막는다.
      * 하위 카테고리 전체는 depth 변화량만큼 함께 갱신한다. */
     public void reparent(Long categoryId, Long newParentId) {
         CategoryMaps maps = getCategoryMaps();
         Map<Long, MarketMapCategory> categoryById = maps.categoryById();
         Map<Long, List<MarketMapCategory>> categoryByParentId = maps.categoryByParentId();
         MarketMapCategory target = findCategory(categoryId, categoryById);
-        MarketMapCategory newParent = findCategory(newParentId, categoryById);
 
         List<Long> subCategoryIds = collectSubCategoryIds(categoryId, categoryByParentId);
         if (subCategoryIds.contains(newParentId)) {
             throw new ConflictException(ErrorCode.CATEGORY_CIRCULAR_REFERENCE, categoryId, newParentId);
         }
 
-        long targetParentKey = resolveParentKey(target);
-        shiftDisplayOrdersBackward(
-                categoryByParentId.getOrDefault(targetParentKey, List.of()),
-                target.getId(),
-                target.getDisplayOrder() + 1);
-
-        int depthDifference = (newParent.getDepth() + 1) - target.getDepth();
-        shiftSiblingsForInsert(categoryByParentId.getOrDefault(newParentId, List.of()));
-        target.changeParent(newParentId, INITIAL_DISPLAY_ORDER);
+        int newDepth = 0;
+        if (newParentId != null) {
+            MarketMapCategory newParent = findCategory(newParentId, categoryById);
+            newDepth = newParent.getDepth() + 1;
+        }
+        int depthDifference = newDepth - target.getDepth();
+        target.changeParent(newParentId);
 
         // target을 포함한 하위 카테고리 전체 depth를 depthDifference만큼 일괄 이동
         if (depthDifference != 0) {
@@ -201,10 +146,6 @@ public class MarketMapCategoryService {
                     .map(categoryById::get)
                     .forEach(category -> category.changeDepth(category.getDepth() + depthDifference));
         }
-    }
-
-    private long resolveParentKey(MarketMapCategory category) {
-        return category.getParentId() == null ? ROOT_KEY : category.getParentId();
     }
 
     @Transactional(readOnly = true)
@@ -227,10 +168,9 @@ public class MarketMapCategoryService {
     public void delete(Long categoryId) {
         CategoryMaps maps = getCategoryMaps();
         Map<Long, MarketMapCategory> categoryById = maps.categoryById();
-        Map<Long, List<MarketMapCategory>> categoryByParentId = maps.categoryByParentId();
-        MarketMapCategory target = findCategory(categoryId, categoryById);
+        findCategory(categoryId, categoryById);
 
-        List<Long> subCategoryIds = collectSubCategoryIds(categoryId, categoryByParentId);
+        List<Long> subCategoryIds = collectSubCategoryIds(categoryId, maps.categoryByParentId());
         if (!marketMapStockCategoryRepository.findByCategoryIdIn(subCategoryIds).isEmpty()) {
             throw new ConflictException(ErrorCode.CATEGORY_HAS_ASSIGNED_STOCK, categoryId);
         }
@@ -240,11 +180,6 @@ public class MarketMapCategoryService {
                 .sorted(Comparator.comparingInt(MarketMapCategory::getDepth).reversed())
                 .toList();
         marketMapCategoryRepository.deleteAll(subCategories);
-
-        shiftDisplayOrdersBackward(
-                categoryByParentId.getOrDefault(resolveParentKey(target), List.of()),
-                target.getId(),
-                target.getDisplayOrder() + 1);
     }
 
     /** 카테고리 전체 스냅샷을 id 조회용/parentId 그룹핑용 두 가지 형태로 함께 준비해둔다.
@@ -259,7 +194,7 @@ public class MarketMapCategoryService {
         for (MarketMapCategory category : categories) {
             categoryById.put(category.getId(), category);
             categoryByParentId
-                    .computeIfAbsent(resolveParentKey(category), key -> new ArrayList<>())
+                    .computeIfAbsent(category.getParentId(), key -> new ArrayList<>())
                     .add(category);
         }
         return new CategoryMaps(categoryById, categoryByParentId);
@@ -312,11 +247,6 @@ public class MarketMapCategoryService {
     }
 
     private CategoryItem toItem(MarketMapCategory category) {
-        return new CategoryItem(
-                category.getId(),
-                category.getName(),
-                category.getParentId(),
-                category.getDepth(),
-                category.getDisplayOrder());
+        return new CategoryItem(category.getId(), category.getName(), category.getParentId(), category.getDepth());
     }
 }

@@ -52,9 +52,9 @@ class MarketMapQueryServiceTest {
     void getCustomMarketMap_트리집계와_카테고리명_매칭이_정확히_반영된다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
 
-        MarketMapCategory electronics = category(1L, null, "전기/전자", 1);
-        MarketMapCategory semiconductor = category(2L, 1L, "반도체", 1);
-        MarketMapCategory chemical = category(3L, null, "화학", 2);
+        MarketMapCategory electronics = category(1L, null, "전기/전자");
+        MarketMapCategory semiconductor = category(2L, 1L, "반도체");
+        MarketMapCategory chemical = category(3L, null, "화학");
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(electronics, semiconductor, chemical));
 
         when(marketMapStockCategoryRepository.findAll())
@@ -117,8 +117,8 @@ class MarketMapQueryServiceTest {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
 
         // 어드민이 계층을 구성하기 전, 수집기가 stock_info 카테고리명으로 자동 생성한 직후의 상태(전부 root)
-        MarketMapCategory chemical = category(1L, null, "화학", 1);
-        MarketMapCategory semiconductor = category(2L, null, "반도체", 2);
+        MarketMapCategory chemical = category(1L, null, "화학");
+        MarketMapCategory semiconductor = category(2L, null, "반도체");
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(chemical, semiconductor));
         when(marketMapStockCategoryRepository.findAll()).thenReturn(List.of());
 
@@ -204,18 +204,17 @@ class MarketMapQueryServiceTest {
         assertThat(uncategorizedNode.totalMarketValue()).isEqualByComparingTo(BigDecimal.valueOf(500));
     }
 
-    private MarketMapCategory category(Long id, Long parentId, String name, int displayOrder) {
-        MarketMapCategory category = parentId == null
-                ? MarketMapCategory.createParent(name, displayOrder)
-                : categoryWithParent(parentId, name, displayOrder);
+    private MarketMapCategory category(Long id, Long parentId, String name) {
+        MarketMapCategory category =
+                parentId == null ? MarketMapCategory.createParent(name) : categoryWithParent(parentId, name);
         ReflectionTestUtils.setField(category, "id", id);
         return category;
     }
 
-    private MarketMapCategory categoryWithParent(Long parentId, String name, int displayOrder) {
-        MarketMapCategory parent = MarketMapCategory.createParent("parent-placeholder", 0);
+    private MarketMapCategory categoryWithParent(Long parentId, String name) {
+        MarketMapCategory parent = MarketMapCategory.createParent("parent-placeholder");
         ReflectionTestUtils.setField(parent, "id", parentId);
-        return MarketMapCategory.createChild(name, parent, displayOrder);
+        return MarketMapCategory.createChild(name, parent);
     }
 
     private StockInfo stockInfo(

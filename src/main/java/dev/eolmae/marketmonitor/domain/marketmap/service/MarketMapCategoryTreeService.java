@@ -10,7 +10,6 @@ import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategory;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapStockCategory;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapStockCategoryRepository;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -46,7 +45,6 @@ public class MarketMapCategoryTreeService {
                 stockCategories.stream().collect(Collectors.groupingBy(MarketMapStockCategory::getCategoryId));
 
         return childrenByParentId.getOrDefault(ROOT_KEY, List.of()).stream()
-                .sorted(Comparator.comparingInt(MarketMapCategory::getDisplayOrder))
                 .map(category -> toNode(category, childrenByParentId, stocksByCategoryId))
                 .toList();
     }
@@ -56,13 +54,12 @@ public class MarketMapCategoryTreeService {
             Map<Long, List<MarketMapCategory>> childrenByParentId,
             Map<Long, List<MarketMapStockCategory>> stocksByCategoryId) {
         List<CategoryTreeNode> children = childrenByParentId.getOrDefault(category.getId(), List.of()).stream()
-                .sorted(Comparator.comparingInt(MarketMapCategory::getDisplayOrder))
                 .map(child -> toNode(child, childrenByParentId, stocksByCategoryId))
                 .toList();
         List<String> stockCodes = stocksByCategoryId.getOrDefault(category.getId(), List.of()).stream()
                 .map(MarketMapStockCategory::getStockCode)
                 .toList();
-        return new CategoryTreeNode(category.getName(), category.getDisplayOrder(), children, stockCodes);
+        return new CategoryTreeNode(category.getName(), children, stockCodes);
     }
 
     @Transactional(readOnly = true)
@@ -98,8 +95,8 @@ public class MarketMapCategoryTreeService {
 
     private void insertNode(CategoryTreeNode node, MarketMapCategory parent, Long versionId) {
         MarketMapCategory category = parent == null
-                ? MarketMapCategory.createParent(node.categoryName(), node.displayOrder())
-                : MarketMapCategory.createChild(node.categoryName(), parent, node.displayOrder());
+                ? MarketMapCategory.createParent(node.categoryName())
+                : MarketMapCategory.createChild(node.categoryName(), parent);
         category.tagVersion(versionId);
         MarketMapCategory saved = marketMapCategoryRepository.save(category);
 

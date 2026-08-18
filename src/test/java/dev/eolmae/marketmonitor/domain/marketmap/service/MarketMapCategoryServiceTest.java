@@ -40,8 +40,8 @@ class MarketMapCategoryServiceTest {
 
     @Test
     void onStockInfoSynced_없는_카테고리는_생성하고_신규종목을_배정한다() {
-        MarketMapCategory semiconductor = category(1L, null, "반도체", 1);
-        MarketMapCategory electronics = category(2L, null, "전기/전자", 2);
+        MarketMapCategory semiconductor = category(1L, null, "반도체");
+        MarketMapCategory electronics = category(2L, null, "전기/전자");
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor, electronics));
         // IDENTITY 전략은 insert 시점에 즉시 id가 채워지므로, saveAll이 그 시점을 흉내내도록 stub
         when(marketMapCategoryRepository.saveAll(Mockito.anyList())).thenAnswer(invocation -> {
@@ -73,7 +73,7 @@ class MarketMapCategoryServiceTest {
 
     @Test
     void onStockInfoSynced_전부_이미_존재하면_새로_생성하지_않고_배정만_한다() {
-        MarketMapCategory semiconductor = category(1L, null, "반도체", 1);
+        MarketMapCategory semiconductor = category(1L, null, "반도체");
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
 
         service.onStockInfoSynced(new StockInfoSyncedEvent(List.of(new NewStock("005930", "반도체"))));
@@ -99,8 +99,8 @@ class MarketMapCategoryServiceTest {
 
     @Test
     void getCategories_카테고리_목록을_반환한다() {
-        MarketMapCategory semiconductor = category(1L, null, "반도체", 1);
-        MarketMapCategory chemical = category(2L, null, "화학", 2);
+        MarketMapCategory semiconductor = category(1L, null, "반도체");
+        MarketMapCategory chemical = category(2L, null, "화학");
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor, chemical));
 
         List<CategoryItem> items = service.getCategories();
@@ -110,7 +110,7 @@ class MarketMapCategoryServiceTest {
 
     @Test
     void deletePreview_배정된_종목이_있으면_종목_목록과_함께_차단된다() {
-        MarketMapCategory semiconductor = category(1L, null, "반도체", 1);
+        MarketMapCategory semiconductor = category(1L, null, "반도체");
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
         when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L)))
                 .thenReturn(List.of(MarketMapStockCategory.create("005930", 1L)));
@@ -128,8 +128,8 @@ class MarketMapCategoryServiceTest {
 
     @Test
     void deletePreview_배정된_종목이_없으면_삭제_가능하고_하위카테고리_목록을_반환한다() {
-        MarketMapCategory electronics = category(1L, null, "전기/전자", 1);
-        MarketMapCategory semiconductor = category(2L, 1L, "반도체", 1);
+        MarketMapCategory electronics = category(1L, null, "전기/전자");
+        MarketMapCategory semiconductor = category(2L, 1L, "반도체");
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(electronics, semiconductor));
         when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L, 2L)))
                 .thenReturn(List.of());
@@ -150,7 +150,7 @@ class MarketMapCategoryServiceTest {
 
     @Test
     void delete_배정된_종목이_있으면_409로_차단된다() {
-        MarketMapCategory semiconductor = category(1L, null, "반도체", 1);
+        MarketMapCategory semiconductor = category(1L, null, "반도체");
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
         when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L)))
                 .thenReturn(List.of(MarketMapStockCategory.create("005930", 1L)));
@@ -159,12 +159,12 @@ class MarketMapCategoryServiceTest {
     }
 
     @Test
-    void delete_성공하면_대상과_하위카테고리가_삭제되고_남은_형제_순서가_당겨진다() {
-        MarketMapCategory parent = category(1L, null, "부모", 1);
-        MarketMapCategory a = category(2L, 1L, "A", 1);
-        MarketMapCategory target = category(3L, 1L, "삭제대상", 2);
-        MarketMapCategory b = category(4L, 1L, "B", 3);
-        MarketMapCategory child = category(5L, 3L, "자식", 1);
+    void delete_성공하면_대상과_하위카테고리가_삭제된다() {
+        MarketMapCategory parent = category(1L, null, "부모");
+        MarketMapCategory a = category(2L, 1L, "A");
+        MarketMapCategory target = category(3L, 1L, "삭제대상");
+        MarketMapCategory b = category(4L, 1L, "B");
+        MarketMapCategory child = category(5L, 3L, "자식");
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(parent, a, target, b, child));
         when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(3L, 5L)))
                 .thenReturn(List.of());
@@ -174,36 +174,45 @@ class MarketMapCategoryServiceTest {
         ArgumentCaptor<List<MarketMapCategory>> captor = ArgumentCaptor.forClass(List.class);
         verify(marketMapCategoryRepository).deleteAll(captor.capture());
         assertThat(captor.getValue()).containsExactlyInAnyOrder(target, child);
-        assertThat(a.getDisplayOrder()).isEqualTo(1); // 삭제 대상보다 앞이라 영향 없음
-        assertThat(b.getDisplayOrder()).isEqualTo(2); // 한 칸 당겨짐
     }
 
     @Test
-    void reparent_기존_부모_밑_형제_순서가_당겨지고_새_부모_밑_맨_앞에_삽입된다() {
-        MarketMapCategory parentA = category(1L, null, "A", 1);
-        MarketMapCategory parentB = category(2L, null, "B", 2);
-        MarketMapCategory x = category(3L, 1L, "X", 1);
-        MarketMapCategory y = category(4L, 1L, "Y", 2);
-        MarketMapCategory z = category(5L, 2L, "Z", 1);
+    void reparent_부모와_depth가_바뀐다() {
+        MarketMapCategory parentA = category(1L, null, "A");
+        MarketMapCategory parentB = category(2L, null, "B");
+        MarketMapCategory x = category(3L, 1L, "X");
+        MarketMapCategory y = category(4L, 1L, "Y");
+        MarketMapCategory z = category(5L, 2L, "Z");
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(parentA, parentB, x, y, z));
-        when(marketMapCategoryRepository.findByParentId(2L)).thenReturn(List.of(z));
 
         service.reparent(4L, 2L);
 
         assertThat(y.getParentId()).isEqualTo(2L);
-        assertThat(y.getDisplayOrder()).isEqualTo(1);
         assertThat(y.getDepth()).isEqualTo(1);
-        assertThat(x.getDisplayOrder()).isEqualTo(1); // Y보다 앞이라 영향 없음
-        assertThat(z.getDisplayOrder()).isEqualTo(2); // 새 부모 밑에서 한 칸 밀림
+    }
+
+    @Test
+    void reparent_새_부모가_null이면_최상위로_이동한다() {
+        MarketMapCategory parent = category(1L, null, "부모");
+        MarketMapCategory child = category(2L, 1L, "자식");
+        MarketMapCategory grandchild = category(3L, 2L, "손자");
+        ReflectionTestUtils.setField(grandchild, "depth", 2); // 실제 부모(자식)는 depth 1인데, 헬퍼는 placeholder를 항상 depth 0으로 가정하므로 보정
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(parent, child, grandchild));
+
+        service.reparent(2L, null);
+
+        assertThat(child.getParentId()).isNull();
+        assertThat(child.getDepth()).isEqualTo(0);
+        assertThat(grandchild.getDepth()).isEqualTo(1);
     }
 
     @Test
     void reparent_이동한_카테고리의_하위_카테고리도_depth가_함께_바뀐다() {
-        MarketMapCategory e = category(1L, null, "E", 1);
-        MarketMapCategory d = category(2L, 1L, "D", 1);
-        MarketMapCategory a = category(3L, null, "A", 2);
-        MarketMapCategory b = category(4L, 3L, "B", 1);
-        MarketMapCategory c = category(5L, 4L, "C", 1);
+        MarketMapCategory e = category(1L, null, "E");
+        MarketMapCategory d = category(2L, 1L, "D");
+        MarketMapCategory a = category(3L, null, "A");
+        MarketMapCategory b = category(4L, 3L, "B");
+        MarketMapCategory c = category(5L, 4L, "C");
         ReflectionTestUtils.setField(c, "depth", 2); // 실제 부모(B)는 depth 1인데, 헬퍼는 placeholder를 항상 depth 0으로 가정하므로 보정
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(e, d, a, b, c));
 
@@ -216,7 +225,7 @@ class MarketMapCategoryServiceTest {
 
     @Test
     void reparent_새_부모가_자기_자신이면_409를_던진다() {
-        MarketMapCategory a = category(1L, null, "A", 1);
+        MarketMapCategory a = category(1L, null, "A");
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(a));
 
         assertThatThrownBy(() -> service.reparent(1L, 1L)).isInstanceOf(ConflictException.class);
@@ -224,8 +233,8 @@ class MarketMapCategoryServiceTest {
 
     @Test
     void reparent_새_부모가_자신의_하위_카테고리면_409를_던진다() {
-        MarketMapCategory a = category(1L, null, "A", 1);
-        MarketMapCategory b = category(2L, 1L, "B", 1);
+        MarketMapCategory a = category(1L, null, "A");
+        MarketMapCategory b = category(2L, 1L, "B");
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(a, b));
 
         assertThatThrownBy(() -> service.reparent(1L, 2L)).isInstanceOf(ConflictException.class);
@@ -233,23 +242,22 @@ class MarketMapCategoryServiceTest {
 
     @Test
     void reparent_존재하지_않는_카테고리면_404를_던진다() {
-        MarketMapCategory a = category(1L, null, "A", 1);
+        MarketMapCategory a = category(1L, null, "A");
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(a));
 
         assertThatThrownBy(() -> service.reparent(99L, 1L)).isInstanceOf(NotFoundException.class);
     }
 
-    private MarketMapCategory category(Long id, Long parentId, String name, int displayOrder) {
-        MarketMapCategory category = parentId == null
-                ? MarketMapCategory.createParent(name, displayOrder)
-                : categoryWithParent(parentId, name, displayOrder);
+    private MarketMapCategory category(Long id, Long parentId, String name) {
+        MarketMapCategory category =
+                parentId == null ? MarketMapCategory.createParent(name) : categoryWithParent(parentId, name);
         ReflectionTestUtils.setField(category, "id", id);
         return category;
     }
 
-    private MarketMapCategory categoryWithParent(Long parentId, String name, int displayOrder) {
-        MarketMapCategory parent = MarketMapCategory.createParent("parent-placeholder", 0);
+    private MarketMapCategory categoryWithParent(Long parentId, String name) {
+        MarketMapCategory parent = MarketMapCategory.createParent("parent-placeholder");
         ReflectionTestUtils.setField(parent, "id", parentId);
-        return MarketMapCategory.createChild(name, parent, displayOrder);
+        return MarketMapCategory.createChild(name, parent);
     }
 }

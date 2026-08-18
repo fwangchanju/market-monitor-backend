@@ -25,9 +25,9 @@ class MarketMapCategoryTreeServiceTest {
 
     @Test
     void buildTree_대분류_세부카테고리_직속종목_정확히_조립된다() {
-        MarketMapCategory electronics = category(1L, null, "전기/전자", 1);
-        MarketMapCategory semiconductor = category(2L, 1L, "반도체", 1);
-        MarketMapCategory chemical = category(3L, null, "화학", 2);
+        MarketMapCategory electronics = category(1L, null, "전기/전자");
+        MarketMapCategory semiconductor = category(2L, 1L, "반도체");
+        MarketMapCategory chemical = category(3L, null, "화학");
 
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(electronics, semiconductor, chemical));
         when(marketMapStockCategoryRepository.findAll())
@@ -39,15 +39,15 @@ class MarketMapCategoryTreeServiceTest {
         List<CategoryTreeNode> tree = service.buildTree();
 
         assertThat(tree).hasSize(2);
-        CategoryTreeNode electronicsNode = tree.get(0);
-        assertThat(electronicsNode.categoryName()).isEqualTo("전기/전자");
+        CategoryTreeNode electronicsNode =
+                tree.stream().filter(node -> node.categoryName().equals("전기/전자")).findFirst().orElseThrow();
         assertThat(electronicsNode.stockCodes()).containsExactly("009150");
         assertThat(electronicsNode.children()).hasSize(1);
         assertThat(electronicsNode.children().get(0).categoryName()).isEqualTo("반도체");
         assertThat(electronicsNode.children().get(0).stockCodes()).containsExactly("005930", "000660");
 
-        CategoryTreeNode chemicalNode = tree.get(1);
-        assertThat(chemicalNode.categoryName()).isEqualTo("화학");
+        CategoryTreeNode chemicalNode =
+                tree.stream().filter(node -> node.categoryName().equals("화학")).findFirst().orElseThrow();
         assertThat(chemicalNode.stockCodes()).isEmpty();
         assertThat(chemicalNode.children()).isEmpty();
     }
@@ -56,8 +56,7 @@ class MarketMapCategoryTreeServiceTest {
     void toJson_parseJson_왕복해도_구조가_동일하다() {
         List<CategoryTreeNode> original = List.of(new CategoryTreeNode(
                 "전기/전자",
-                1,
-                List.of(new CategoryTreeNode("반도체", 1, List.of(), List.of("005930", "000660"))),
+                List.of(new CategoryTreeNode("반도체", List.of(), List.of("005930", "000660"))),
                 List.of("009150")));
 
         String json = service.toJson(original);
@@ -66,17 +65,16 @@ class MarketMapCategoryTreeServiceTest {
         assertThat(parsed).isEqualTo(original);
     }
 
-    private MarketMapCategory category(Long id, Long parentId, String name, int displayOrder) {
-        MarketMapCategory category = parentId == null
-                ? MarketMapCategory.createParent(name, displayOrder)
-                : categoryWithParent(parentId, name, displayOrder);
+    private MarketMapCategory category(Long id, Long parentId, String name) {
+        MarketMapCategory category =
+                parentId == null ? MarketMapCategory.createParent(name) : categoryWithParent(parentId, name);
         ReflectionTestUtils.setField(category, "id", id);
         return category;
     }
 
-    private MarketMapCategory categoryWithParent(Long parentId, String name, int displayOrder) {
-        MarketMapCategory parent = MarketMapCategory.createParent("parent-placeholder", 0);
+    private MarketMapCategory categoryWithParent(Long parentId, String name) {
+        MarketMapCategory parent = MarketMapCategory.createParent("parent-placeholder");
         ReflectionTestUtils.setField(parent, "id", parentId);
-        return MarketMapCategory.createChild(name, parent, displayOrder);
+        return MarketMapCategory.createChild(name, parent);
     }
 }

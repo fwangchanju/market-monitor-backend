@@ -45,6 +45,7 @@ public enum ErrorCode {
     CATEGORY_NAME_DUPLICATE("이미 사용 중인 카테고리명입니다."),
     CATEGORY_CIRCULAR_REFERENCE("해당 위치로 카테고리 위치 변경이 불가능합니다."),
     CATEGORY_HAS_ASSIGNED_STOCK("배정된 종목이 있어 삭제할 수 없습니다."),
+    STOCK_CATEGORY_NOT_FOUND("카테고리 배정 정보가 없는 종목입니다."),
     VERSION_NOT_FOUND("이미 삭제되었거나 존재하지 않는 버전입니다.");
 
     private final String message;

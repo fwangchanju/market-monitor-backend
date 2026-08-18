@@ -19,7 +19,6 @@ import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -100,8 +99,7 @@ public class MarketMapQueryService {
                     .computeIfAbsent(parentKey, key -> new ArrayList<>())
                     .add(category);
         }
-        Map<String, MarketMapStockCategory> stockCategoryMap = marketMapStockCategoryRepository.findAll().stream()
-                .collect(Collectors.toMap(MarketMapStockCategory::getStockCode, Function.identity()));
+        Map<String, MarketMapStockCategory> stockCategoryMap = findStockCategoryMap();
         Map<String, SectorPriceSnapshot> priceMap =
                 sectorPriceSnapshotService.findPriceByStockCode(market, latestSnapshotTime);
 
@@ -110,11 +108,11 @@ public class MarketMapQueryService {
                 .collect(Collectors.groupingBy(
                         stockInfo -> resolveCategoryId(stockInfo, stockCategoryMap, categoryByName),
                         Collectors.mapping(
-                                stockInfo -> toMarketMapItem(stockInfo, priceMap.get(stockInfo.getStockCode())),
+                                stockInfo -> toMarketMapItem(
+                                        stockInfo, priceMap.get(stockInfo.getStockCode()), stockCategoryMap),
                                 Collectors.toList())));
 
         List<MarketMapCategoryNode> nodes = childrenByParentId.getOrDefault(ROOT_KEY, List.of()).stream()
-                .sorted(Comparator.comparingInt(MarketMapCategory::getDisplayOrder))
                 .map(category -> toCategoryNode(category, childrenByParentId, itemsByCategoryId))
                 .filter(this::isNotEmpty)
                 .toList();
@@ -127,7 +125,6 @@ public class MarketMapQueryService {
             Map<Long, List<MarketMapCategory>> childrenByParentId,
             Map<Long, List<MarketMapItem>> itemsByCategoryId) {
         List<MarketMapCategoryNode> children = childrenByParentId.getOrDefault(category.getId(), List.of()).stream()
-                .sorted(Comparator.comparingInt(MarketMapCategory::getDisplayOrder))
                 .map(child -> toCategoryNode(child, childrenByParentId, itemsByCategoryId))
                 .filter(this::isNotEmpty)
                 .toList();
@@ -185,19 +182,44 @@ public class MarketMapQueryService {
         return categoryName;
     }
 
+    private Map<String, MarketMapStockCategory> findStockCategoryMap() {
+        return marketMapStockCategoryRepository.findAll().stream()
+                .collect(Collectors.toMap(MarketMapStockCategory::getStockCode, Function.identity()));
+    }
+
+    /** 기본 마켓맵용: override 없이 stock_info 종목명 그대로 */
     private MarketMapItem toMarketMapItem(StockInfo stockInfo, SectorPriceSnapshot priceSnapshot) {
+        return toMarketMapItem(stockInfo, priceSnapshot, stockInfo.getStockName());
+    }
+
+    /** 커스텀 마켓맵용: market_map_stock_category에 alias가 있으면 그걸로 종목명 대체 */
+    private MarketMapItem toMarketMapItem(
+            StockInfo stockInfo, SectorPriceSnapshot priceSnapshot, Map<String, MarketMapStockCategory> stockCategoryMap) {
+        return toMarketMapItem(stockInfo, priceSnapshot, resolveDisplayName(stockInfo, stockCategoryMap));
+    }
+
+    private MarketMapItem toMarketMapItem(StockInfo stockInfo, SectorPriceSnapshot priceSnapshot, String displayName) {
         BigDecimal currentPrice = priceSnapshot.getCurrentPrice();
         BigDecimal changeRate = priceSnapshot.getChangeRate();
         BigDecimal totalMarketValue = currentPrice.multiply(BigDecimal.valueOf(stockInfo.getListCount()));
 
         return new MarketMapItem(
                 stockInfo.getStockCode(),
-                stockInfo.getStockName(),
+                displayName,
                 currentPrice,
                 stockInfo.getLastPrice(),
                 totalMarketValue,
                 changeRate,
                 priceSnapshot.getSnapshotTime());
+    }
+
+    /** alias가 배정되어 있으면 alias, 없으면 stock_info의 종목명을 그대로 노출 */
+    private String resolveDisplayName(StockInfo stockInfo, Map<String, MarketMapStockCategory> stockCategoryMap) {
+        MarketMapStockCategory stockCategory = stockCategoryMap.get(stockInfo.getStockCode());
+        if (stockCategory == null || stockCategory.getAlias() == null || stockCategory.getAlias().isBlank()) {
+            return stockInfo.getStockName();
+        }
+        return stockCategory.getAlias();
     }
 
     /** 마켓맵 표시 제외 종목 목록 */

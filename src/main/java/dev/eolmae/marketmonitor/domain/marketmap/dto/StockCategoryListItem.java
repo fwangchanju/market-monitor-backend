@@ -5,9 +5,11 @@ import java.math.BigDecimal;
 
 public record StockCategoryListItem(
         String stockCode,
-        String stockName,
         Market market,
+        String stockName,
+        String alias,
         BigDecimal totalMarketValue,
-        Long categoryId,
+        String originCategoryName,
         String parentCategoryName,
-        String categoryName) {}
+        String categoryName,
+        Long categoryId) {}

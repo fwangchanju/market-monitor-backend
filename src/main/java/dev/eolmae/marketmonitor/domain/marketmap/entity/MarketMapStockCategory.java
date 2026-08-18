@@ -20,6 +20,9 @@ public class MarketMapStockCategory {
     @Column(name = "category_id", nullable = false)
     private Long categoryId;
 
+    @Column(length = 50)
+    private String alias;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
@@ -40,6 +43,11 @@ public class MarketMapStockCategory {
 
     public void reassign(Long categoryId) {
         this.categoryId = categoryId;
+        this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
+    }
+
+    public void updateAlias(String alias) {
+        this.alias = alias;
         this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
     }
 }

@@ -1,11 +1,10 @@
 package dev.eolmae.marketmonitor.domain.marketmap.controller;
 
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryDeletePreview;
-import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryIdRequest;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryItem;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryNameRequest;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CreateCategoryRequest;
-import dev.eolmae.marketmonitor.domain.marketmap.dto.ReorderCategoryRequest;
+import dev.eolmae.marketmonitor.domain.marketmap.dto.ReparentRequest;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryService;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -44,13 +43,8 @@ public class MarketMapCategoryController {
         marketMapCategoryService.rename(id, request.name());
     }
 
-    @PatchMapping("/{id}/order")
-    public void reorder(@PathVariable Long id, @RequestBody ReorderCategoryRequest request) {
-        marketMapCategoryService.reorder(id, request.displayOrder());
-    }
-
     @PatchMapping("/{id}/parent")
-    public void reparent(@PathVariable Long id, @RequestBody @Valid CategoryIdRequest request) {
+    public void reparent(@PathVariable Long id, @RequestBody ReparentRequest request) {
         marketMapCategoryService.reparent(id, request.categoryId());
     }
 

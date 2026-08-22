@@ -165,10 +165,8 @@ class MarketMapQueryServiceTest {
     void getDefaultMarketMap_stock_info_카테고리_그대로_1뎁스_노드로_묶인다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
 
-        MarketMapCategory semiconductor = category(1L, null, "반도체");
-        MarketMapCategory uncategorized = category(2L, null, "미분류");
-        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor, uncategorized));
-
+        // 기본 마켓맵은 market_map_category를 아예 안 쓰므로, 매칭되는 카테고리가 없어도(예: 종목 업종이
+        // 나중에 바뀌어 자동생성된 카테고리가 없는 경우) 조회 자체가 깨지면 안 됨을 검증
         StockInfo samsung = stockInfo("005930", "삼성전자", "반도체", 100L, BigDecimal.TEN);
         StockInfo skHynix = stockInfo("000660", "SK하이닉스", "반도체", 50L, BigDecimal.valueOf(20));
         StockInfo lgChem = stockInfo("051910", "LG화학", "", 500L, BigDecimal.ONE);
@@ -198,6 +196,8 @@ class MarketMapQueryServiceTest {
         assertThat(semiconductorNode.children()).isEmpty();
         assertThat(semiconductorNode.items()).extracting("stockCode").containsExactlyInAnyOrder("005930", "000660");
         assertThat(semiconductorNode.totalMarketValue()).isEqualByComparingTo(BigDecimal.valueOf(2000));
+        assertThat(semiconductorNode.categoryId()).isEqualTo(0L);
+        assertThat(semiconductorNode.isExcluded()).isFalse();
 
         MarketMapCategoryNode uncategorizedNode = nodes.stream()
                 .filter(node -> node.categoryName().equals("미분류"))

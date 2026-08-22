@@ -19,6 +19,7 @@ services:
     image: ghcr.io/fwangchanju/market-monitor:latest
     container_name: market-monitor
     restart: always
+    user: "${DEPLOY_UID}:${DEPLOY_GID}"
     env_file:
       - ${HOME}/env/market-monitor.env
     environment:

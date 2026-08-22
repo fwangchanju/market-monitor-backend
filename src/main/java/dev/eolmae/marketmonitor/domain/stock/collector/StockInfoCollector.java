@@ -82,6 +82,9 @@ public class StockInfoCollector {
                         fetched.lastPrice()))
                 .toList();
         stockInfoRepository.saveAll(newStocks);
+        // 이벤트 핸들러(카테고리 자동 배정 등)가 이 시점의 stock_info 캐시를 참조할 수 있으므로,
+        // 신규 종목 저장 직후·이벤트 발행 전에 캐시를 비워서 핸들러가 최신 상태를 보게 한다.
+        stockInfoCacheService.evict();
 
         // 마켓맵은 주권(코스피/코스닥)만 다루므로 ELW/ETF 등은 이벤트 발행 단계에서 제외 (stock_info 저장 자체는 종류 무관하게 전부 유지)
         List<StockInfoSyncedEvent.NewStock> newStockEvents = newStocks.stream()
@@ -92,7 +95,6 @@ public class StockInfoCollector {
                 .toList();
         eventPublisher.publishEvent(new StockInfoSyncedEvent(newStockEvents));
 
-        stockInfoCacheService.evict();
         log.info("종목 정보 동기화 완료: 조회 종목 수={}", fetchedCount);
     }
 

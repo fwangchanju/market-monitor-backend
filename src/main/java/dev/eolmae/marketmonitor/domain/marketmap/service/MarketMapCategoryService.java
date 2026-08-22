@@ -105,6 +105,24 @@ public class MarketMapCategoryService {
         return toItem(marketMapCategoryRepository.save(category));
     }
 
+    public void exclude(Long categoryId) {
+        MarketMapCategory target = marketMapCategoryRepository
+                .findById(categoryId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.CATEGORY_NOT_FOUND, categoryId));
+        target.exclude();
+    }
+
+    public void include(Long categoryId) {
+        MarketMapCategory target = marketMapCategoryRepository
+                .findById(categoryId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.CATEGORY_NOT_FOUND, categoryId));
+        target.include();
+    }
+
+    public void resetExcludes() {
+        findAllCategories().forEach(MarketMapCategory::include);
+    }
+
     public void rename(Long categoryId, String name) {
         MarketMapCategory target = marketMapCategoryRepository
                 .findById(categoryId)

@@ -1,6 +1,7 @@
 package dev.eolmae.marketmonitor.domain.view.controller;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
+import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryService;
 import dev.eolmae.marketmonitor.domain.stock.service.MarketMapExcludedStockService;
 import dev.eolmae.marketmonitor.domain.view.dto.ExcludedStockItem;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
@@ -23,13 +24,12 @@ public class MarketMapController {
 
     private final MarketMapQueryService marketMapQueryService;
     private final MarketMapExcludedStockService marketMapExcludedStockService;
+    private final MarketMapCategoryService marketMapCategoryService;
 
     @GetMapping
     public SnapshotResponse<MarketMapCategoryNode> getMarketMap(
-            @RequestParam Market market, @RequestParam boolean isExclude, @RequestParam boolean isCustom) {
-        return isCustom
-                ? marketMapQueryService.getCustomMarketMap(market, isExclude)
-                : marketMapQueryService.getDefaultMarketMap(market, isExclude);
+            @RequestParam Market market, @RequestParam boolean isCustom) {
+        return isCustom ? marketMapQueryService.getCustomMarketMap(market) : marketMapQueryService.getDefaultMarketMap(market);
     }
 
     @GetMapping("/excluded-stocks")
@@ -52,8 +52,24 @@ public class MarketMapController {
         marketMapExcludedStockService.deleteAll();
     }
 
+    @PostMapping("/excluded-categories/{categoryId}")
+    public void registerExcludedCategory(@PathVariable Long categoryId) {
+        marketMapCategoryService.exclude(categoryId);
+    }
+
+    @DeleteMapping("/excluded-categories/{categoryId}")
+    public void unregisterExcludedCategory(@PathVariable Long categoryId) {
+        marketMapCategoryService.include(categoryId);
+    }
+
+    @DeleteMapping("/excluded-categories")
+    public void deleteExcludedCategories() {
+        marketMapCategoryService.resetExcludes();
+    }
+
     @DeleteMapping("/reset")
     public void resetMarketMapCustomizations() {
         marketMapExcludedStockService.deleteAll();
+        marketMapCategoryService.resetExcludes();
     }
 }

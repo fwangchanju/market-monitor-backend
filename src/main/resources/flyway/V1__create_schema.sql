@@ -44,6 +44,7 @@ CREATE TABLE market_map_category (
     version_id BIGINT,
     name VARCHAR(50) NOT NULL,
     depth INT NOT NULL,
+    is_excluded BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_market_map_category PRIMARY KEY (id),

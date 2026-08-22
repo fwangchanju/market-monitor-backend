@@ -31,6 +31,9 @@ public class MarketMapCategory {
     @Column(nullable = false)
     private int depth;
 
+    @Column(name = "is_excluded", nullable = false)
+    private boolean isExcluded;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
@@ -44,6 +47,7 @@ public class MarketMapCategory {
         entity.name = name;
         entity.parentId = null;
         entity.depth = 0;
+        entity.isExcluded = false;
         LocalDateTime now = LocalDateTime.now(Zone.KST.zoneId());
         entity.createdAt = now;
         entity.updatedAt = now;
@@ -55,6 +59,7 @@ public class MarketMapCategory {
         entity.name = name;
         entity.parentId = parent.id;
         entity.depth = parent.depth + 1;
+        entity.isExcluded = false;
         LocalDateTime now = LocalDateTime.now(Zone.KST.zoneId());
         entity.createdAt = now;
         entity.updatedAt = now;
@@ -78,6 +83,16 @@ public class MarketMapCategory {
 
     public void changeDepth(int depth) {
         this.depth = depth;
+        this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
+    }
+
+    public void exclude() {
+        this.isExcluded = true;
+        this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
+    }
+
+    public void include() {
+        this.isExcluded = false;
         this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
     }
 }

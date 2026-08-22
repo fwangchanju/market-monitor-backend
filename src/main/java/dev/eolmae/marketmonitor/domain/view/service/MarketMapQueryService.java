@@ -35,6 +35,8 @@ public class MarketMapQueryService {
 
     private static final String UNCATEGORIZED = "미분류";
     private static final long ROOT_KEY = 0L;
+    /** 기본 마켓맵은 어드민이 구성한 카테고리 트리를 안 쓰므로 exclude 판정 대상 자체가 아님 — id는 관례상 0 고정 */
+    private static final Long NO_CATEGORY_ID = 0L;
 
     private final StockInfoCacheService stockInfoCacheService;
     private final SectorPriceSnapshotService sectorPriceSnapshotService;
@@ -53,7 +55,6 @@ public class MarketMapQueryService {
     private SnapshotResponse<MarketMapCategoryNode> buildDefaultMarketMap(
             Market market, LocalDateTime latestSnapshotTime) {
         List<StockInfo> candidates = filterCandidates(market);
-        Map<String, MarketMapCategory> categoryByName = findCategoryByName();
         Map<String, SectorPriceSnapshot> priceMap =
                 sectorPriceSnapshotService.findPriceByStockCode(market, latestSnapshotTime);
 
@@ -71,14 +72,7 @@ public class MarketMapQueryService {
                     BigDecimal totalMarketValue = items.stream()
                             .map(MarketMapItem::totalMarketValue)
                             .reduce(BigDecimal.ZERO, BigDecimal::add);
-                    MarketMapCategory category = categoryByName.get(entry.getKey());
-                    return new MarketMapCategoryNode(
-                            category.getId(),
-                            entry.getKey(),
-                            category.isExcluded(),
-                            totalMarketValue,
-                            List.of(),
-                            items);
+                    return new MarketMapCategoryNode(NO_CATEGORY_ID, entry.getKey(), false, totalMarketValue, List.of(), items);
                 })
                 .toList();
 
@@ -166,12 +160,6 @@ public class MarketMapQueryService {
                 .filter(StockInfo::isActive)
                 .filter(stockInfo -> StockMarketCode.isOrdinaryShare(stockInfo.getMarketCode()))
                 .toList();
-    }
-
-    /** 카테고리명(stock_info 기준, 미분류 포함) → 실제 카테고리 매핑. 수집기가 모든 카테고리명을 미리 생성해두므로 항상 매치된다고 전제한다. */
-    private Map<String, MarketMapCategory> findCategoryByName() {
-        return marketMapCategoryRepository.findAll().stream()
-                .collect(Collectors.toMap(MarketMapCategory::getName, Function.identity()));
     }
 
     private String normalizeCategoryName(String categoryName) {

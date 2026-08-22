@@ -1,5 +1,6 @@
 package dev.eolmae.marketmonitor.domain.marketmap.service;
 
+import dev.eolmae.marketmonitor.common.enums.MarketValueTier;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.NotFoundException;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.BulkAssignResponse;
@@ -96,15 +97,20 @@ public class MarketMapStockCategoryService {
         MarketMapCategory parent = category.getParentId() == null ? null : categoryById.get(category.getParentId());
 
         SectorPriceSnapshot priceSnapshot = latestPriceByStockCode.get(stockCategory.getStockCode());
+        BigDecimal totalMarketValue = null;
+        MarketValueTier marketValueTier = null;
+        if (priceSnapshot != null) {
+            totalMarketValue = priceSnapshot.getCurrentPrice().multiply(BigDecimal.valueOf(stockInfo.getListCount()));
+            marketValueTier = MarketValueTier.from(totalMarketValue);
+        }
 
         return new StockCategoryListItem(
                 stockCategory.getStockCode(),
                 stockInfo.getMarketType(),
                 stockInfo.getStockName(),
                 stockCategory.getAlias(),
-                priceSnapshot == null
-                        ? null
-                        : priceSnapshot.getCurrentPrice().multiply(BigDecimal.valueOf(stockInfo.getListCount())),
+                totalMarketValue,
+                marketValueTier,
                 stockInfo.getCategoryName(),
                 parent == null ? null : parent.getName(),
                 category.getName(),

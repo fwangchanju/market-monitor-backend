@@ -23,6 +23,7 @@ import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
@@ -238,6 +239,48 @@ class MarketMapCategoryServiceTest {
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(a, b));
 
         assertThatThrownBy(() -> service.reparent(1L, 2L)).isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    void exclude_카테고리를_제외_상태로_바꾼다() {
+        MarketMapCategory semiconductor = category(1L, null, "반도체");
+        when(marketMapCategoryRepository.findById(1L)).thenReturn(Optional.of(semiconductor));
+
+        service.exclude(1L);
+
+        assertThat(semiconductor.isExcluded()).isTrue();
+    }
+
+    @Test
+    void include_카테고리를_제외_해제한다() {
+        MarketMapCategory semiconductor = category(1L, null, "반도체");
+        semiconductor.exclude();
+        when(marketMapCategoryRepository.findById(1L)).thenReturn(Optional.of(semiconductor));
+
+        service.include(1L);
+
+        assertThat(semiconductor.isExcluded()).isFalse();
+    }
+
+    @Test
+    void exclude_존재하지_않는_카테고리면_404를_던진다() {
+        when(marketMapCategoryRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.exclude(99L)).isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void resetExcludes_전체_카테고리의_제외_상태를_해제한다() {
+        MarketMapCategory semiconductor = category(1L, null, "반도체");
+        MarketMapCategory chemical = category(2L, null, "화학");
+        semiconductor.exclude();
+        chemical.exclude();
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor, chemical));
+
+        service.resetExcludes();
+
+        assertThat(semiconductor.isExcluded()).isFalse();
+        assertThat(chemical.isExcluded()).isFalse();
     }
 
     @Test

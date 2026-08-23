@@ -6,8 +6,8 @@ import dev.eolmae.marketmonitor.domain.marketmap.dto.BulkAssignResponse;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryIdRequest;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.StockCategoryListItem;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapStockCategoryService;
+import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
 import jakarta.validation.Valid;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -25,7 +25,7 @@ public class MarketMapStockCategoryController {
     private final MarketMapStockCategoryService marketMapStockCategoryService;
 
     @GetMapping
-    public List<StockCategoryListItem> getStockCategories() {
+    public SnapshotResponse<StockCategoryListItem> getStockCategories() {
         return marketMapStockCategoryService.getStockCategories();
     }
 

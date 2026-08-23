@@ -13,7 +13,9 @@ import dev.eolmae.marketmonitor.domain.stock.entity.SectorPriceSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceSnapshotService;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
+import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -74,17 +76,23 @@ public class MarketMapStockCategoryService {
     }
 
     @Transactional(readOnly = true)
-    public List<StockCategoryListItem> getStockCategories() {
+    public SnapshotResponse<StockCategoryListItem> getStockCategories() {
         Map<Long, MarketMapCategory> categoryById = marketMapCategoryRepository.findAll().stream()
                 .collect(Collectors.toMap(MarketMapCategory::getId, Function.identity()));
         Map<String, StockInfo> stockInfoCache = stockInfoCacheService.getCache();
         Map<String, SectorPriceSnapshot> latestPriceByStockCode =
                 sectorPriceSnapshotService.findLatestPriceByStockCode();
 
-        return marketMapStockCategoryRepository.findAll().stream()
+        List<StockCategoryListItem> items = marketMapStockCategoryRepository.findAll().stream()
                 .map(stockCategory ->
                         toStockCategoryListItem(stockCategory, categoryById, stockInfoCache, latestPriceByStockCode))
                 .toList();
+
+        LocalDateTime snapshotTime = latestPriceByStockCode.values().stream()
+                .findFirst()
+                .map(SectorPriceSnapshot::getSnapshotTime)
+                .orElse(null);
+        return new SnapshotResponse<>(snapshotTime, items);
     }
 
     private StockCategoryListItem toStockCategoryListItem(

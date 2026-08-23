@@ -3,6 +3,7 @@ package dev.eolmae.marketmonitor.domain.stock.scheduler;
 import dev.eolmae.marketmonitor.common.enums.Zone;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
+import dev.eolmae.marketmonitor.domain.notification.enums.RenderTarget;
 import dev.eolmae.marketmonitor.domain.notification.listener.EscalationPublisher;
 import dev.eolmae.marketmonitor.domain.notification.service.RenderService;
 import dev.eolmae.marketmonitor.domain.stock.collector.HoldingsSyncService;
@@ -54,7 +55,7 @@ public class CollectionScheduler {
         runSafely("프로그램매매랭킹", () -> programNetBuyRankingCollector.collect(snapshotTime));
         runSafely("프로그램매매히스토리", () -> programTradeIntradayCollector.collect(snapshotTime));
         runSafely("지수기여도랭킹", () -> indexContributionRankingCollector.collect(snapshotTime));
-        // runSafely("시장현황텔레그램발송", () -> renderService.send(RenderTarget.MARKET_SUMMARY));
+        runSafely("마켓맵텔레그램발송", () -> renderService.send(RenderTarget.MARKET_MAP));
 
         log.info("장중 시장 데이터 수집 완료: snapshotTime={}", snapshotTime);
     }

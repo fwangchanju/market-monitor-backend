@@ -84,6 +84,7 @@ public class MarketMapStockCategoryService {
                 sectorPriceSnapshotService.findLatestPriceByStockCode();
 
         List<StockCategoryListItem> items = marketMapStockCategoryRepository.findAll().stream()
+                .filter(stockCategory -> stockInfoCache.get(stockCategory.getStockCode()).isActive())
                 .map(stockCategory ->
                         toStockCategoryListItem(stockCategory, categoryById, stockInfoCache, latestPriceByStockCode))
                 .toList();

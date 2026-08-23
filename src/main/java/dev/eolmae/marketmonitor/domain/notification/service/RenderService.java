@@ -25,7 +25,7 @@ public class RenderService {
     public void send(RenderTarget target) {
         List<byte[]> images = screenshotClient.capture(target.path(), target.selector());
         byte[] combinedImage = ImageStitcher.stitchVertically(images);
-        telegramClient.sendMessage(telegramProperties.chatId(), buildAccessUrl(target));
+        // telegramClient.sendMessage(telegramProperties.chatId(), buildAccessUrl(target));
         telegramClient.sendPhoto(telegramProperties.chatId(), combinedImage);
         log.info("{} 이미지 발송 완료: {}장 결합", target, images.size());
     }

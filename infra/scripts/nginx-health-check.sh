@@ -8,11 +8,14 @@ elapsed=0
 
 echo "=== [nginx-health-check] market-monitor-nginx 크래시 루프 확인 시작 ==="
 
+docker logs -f market-monitor-nginx &
+LOGS_PID=$!
+trap 'kill "$LOGS_PID" 2>/dev/null' EXIT
+
 while [ "$elapsed" -lt "$TIMEOUT" ]; do
   restart_count=$(docker inspect --format='{{.RestartCount}}' market-monitor-nginx)
   if [ "$restart_count" -ge "$MAX_RESTART_COUNT" ]; then
     echo "=== [nginx-health-check] 재시작 ${restart_count}회, 크래시 루프로 판단하여 실패 처리 ==="
-    docker logs market-monitor-nginx
     exit 1
   fi
 

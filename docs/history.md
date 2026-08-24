@@ -24,6 +24,41 @@
 
 ---
 
+## 백엔드 배포 롤백 플로우
+
+프론트는 "브랜치 push → 배포해서 확인 → 문제 있으면 main으로 재배포해서 롤백"이 가능한데, 백엔드는 DB(Flyway 마이그레이션)가 껴있어서 그대로 가져올 수 없었다. 논의 끝에 프론트와 동일한 모델로 통일하기로 하고, `release.yml`/`infra/scripts/*`에 구현 완료.
+
+### 플로우
+
+1. 코드 작성 → 특정 브랜치로 push → **자동으로 빌드만 진행**(배포는 안 함). `changes` job의 경로 필터(`Dockerfile`, `src/main/**`, `build.gradle` 등)에 걸리는 변경일 때만 빌드되고, 아니면 스킵. 이미지는 `:sha-<커밋SHA>`(고정 참조용)와 `:branch-<브랜치명>`(편의용, `/`는 `-`로 치환) 두 태그로 GHCR에 푸시됨. 이 단계는 GitHub Actions 러너에서만 일어나고 서버는 전혀 안 건드림(서버 무영향).
+2. 그 브랜치를 `workflow_dispatch`(`deploy_ref` 입력)로 지정해서 배포(시험 배포) — main이 아니어도 프로덕션에 바로 띄워서 확인. 빌드는 이미 1번에서 끝났으므로 이 단계는 이미지 pull + 컨테이너 재기동뿐.
+3. 문제 발견 시 → `deploy_ref=main`으로 재배포해서 롤백. 시험 배포 동안 main은 건드리지 않았으므로 "되돌린다"기보다 그냥 원래 있던 안전한 상태를 다시 트는 것에 가깝다. 이 배포도 빌드 없이 이미 존재하는 `:main` 이미지를 pull하는 것뿐이라 빠름.
+4. 문제없으면 → main으로 PR 머지. main push(브랜치 보호 규칙으로 항상 머지 커밋)를 감지해 `promote-main` job이 **재빌드 없이** 그 머지 커밋의 두 번째 부모(`HEAD^2`, 즉 머지된 브랜치의 tip)에 해당하는 `:sha-<그SHA>` 이미지를 찾아 `docker buildx imagetools create`로 레지스트리 안에서만 `:main`으로 재태깅(레이어를 러너로 내려받았다 다시 올리는 게 아니라 레지스트리 API 레벨 처리)하고 배포까지 자동 진행. `:sha-<HEAD^2>` 이미지가 없으면(그 PR이 application과 무관한 변경이었으면) 조용히 스킵.
+
+**main 브랜치 보호 설정 필요**(GitHub Rulesets): "Require a pull request before merging"(직접 push 금지) + 저장소 Pull Requests 설정에서 "Allow merge commits"만 켜고 Squash/Rebase merge는 끔. 이 두 조건이 있어야 main에 올라오는 커밋이 항상 머지 커밋이라는 게 보장되고, `HEAD^2` 기반 승격 로직이 예외 처리 없이 항상 성립한다.
+
+- 배포 스크립트(`deploy-application.sh`)는 하나로 통합, "어떤 이미지 태그를 pull할지"를 `IMAGE_TAG` 환경변수로 받는다. 기본값(`latest` 등)은 두지 않고 `: "${IMAGE_TAG:?...}"`로 미지정 시 즉시 실패 — 모든 호출 경로(Actions)가 항상 명시적으로 태그를 넘기게 설계했으므로, 값이 없다는 건 호출부 버그라 조용히 넘어가지 않고 바로 드러내는 게 맞다고 판단. `docker-compose.yml`의 이미지 태그도 `${IMAGE_TAG}`로 변수화.
+- 서버에서 매 배포마다 하는 `git fetch && git reset --hard origin/main`은 **앱 코드를 가져오는 게 아니다** — 앱 코드는 Docker 이미지 안의 jar가 100% 결정하고, 이 git 체크아웃은 오직 배포 스크립트/`docker-compose.yml` 파일 자체를 최신으로 유지하기 위한 것. 그래서 이 fetch/reset 단계는 일반 배포든 롤백이든 항상 동일하게 origin/main 최신을 가리키면 되고, 바뀌는 건 오직 `IMAGE_TAG` 값뿐이다.
+- 기존 `application` job(수동 전체 재빌드+배포, `target=application`/`all`)은 push 트리거 없이 긴급/복구용으로 남겨둠 — 브랜치/main push 흐름과 별개.
+- **이미지 정리**: 서버 로컬은 배포 스크립트가 매번 "지금 실행 중인 것 + 생성 시각 기준 최근 2개"만 남기고 나머지 삭제(서버 디스크가 넉넉하지 않아서 타이트하게). GHCR 쪽은 `promote-main` 성공 후 `actions/delete-package-versions`로 최근 5개 버전만 유지(레지스트리 저장 공간은 여유 있어서 로컬보다 넉넉하게). 지금까지 실제 작업 패턴이 "한 브랜치 작업 → 트라이얼 → main 머지, 그 다음에야 새 브랜치 시작"인 순차적 흐름이라 "트라이얼 중인 이미지가 오래됐다는 이유로 삭제되는" 위험은 없다고 판단하고 결정한 수치.
+- **헬스체크**: Spring Boot Actuator(`spring-boot-starter-actuator`) 도입, `/actuator/health`를 배포 직후 폴링(`infra/scripts/health-check.sh`). 컨테이너가 `restart: always`라 크래시해도 즉시 재시작되어 "Exited" 상태를 붙잡기 어려우므로, `docker inspect`의 `RestartCount`가 3 이상이면 크래시 루프로 간주해 타임아웃(10분) 전에 조기 실패 처리. 실패 시 `docker logs`(태그 새로 배포할 때마다 컨테이너가 재생성되므로 이번 배포의 첫 줄부터) 출력 — SSH 스크립트의 stdout이 Actions 로그에 그대로 찍히므로, 실패 원인 확인을 위해 서버에 직접 SSH로 들어가 로그를 볼 필요가 없어짐. Actions 화면에서 배포 step과 분리해서 보이도록 별도 `appleboy/ssh-action` step(= 별도 SSH 연결)으로 구성.
+- 헬스체크가 `curl localhost:8081`로 서버 로컬에서 직접 확인해야 해서, `docker-compose.yml`의 `market-monitor` 서비스를 `expose`(컨테이너 간 통신만 허용)에서 `ports: "127.0.0.1:8081:8081"`(호스트 루프백에만 바인딩, 외부 노출 없음)로 변경. nginx는 도커 네트워크 안에서 서비스명(`market-monitor:8081`)으로 접근하므로 이 변경과 무관.
+- **nginx도 `restart: always`라 같은 크래시 루프 위험이 있어서**, `infra/scripts/nginx-health-check.sh`로 RestartCount(3 이상) 감지만 별도 추가(`release.yml`의 `nginx` job에도 분리된 Health check step, 타임아웃 30초 — nginx는 워밍업 없이 즉시 뜨거나 즉시 실패하는 이진적 실패 모드라 짧아도 충분). 다만 config 문법 오류면 즉시 기동 실패하는 구조라 스프링만큼 다양한 "일부만 고장" 상태가 없고, HTTPS(도메인+인증서) 응답 확인까지 하는 건 SNI/인증서 처리 번거로움 대비 실익이 적다고 판단해 RestartCount 체크만 넣고 HTTP 응답 내용 확인은 생략함. nginx는 상태(DB 마이그레이션 등)가 없어 롤백이 항상 깨끗하고 변경 빈도도 낮아, 브랜치 트라이얼/SHA 사전 태깅 같은 무거운 구조는 필요 없다고 판단해 도입 안 함 — main push에만 반응하는 기존 방식 유지.
+
+### Flyway 마이그레이션 규칙 (필수, 예외 없음)
+
+이 플로우에서 가장 위험한 지점은 마이그레이션이다. Flyway는 기본 설정(`spring.flyway.ignore-missing-migrations`가 기본값 `false`)상, DB의 `flyway_schema_history`에 "적용됨"으로 기록된 마이그레이션 파일이 지금 앱의 classpath(`src/main/resources/flyway/`)에 없으면 **시작 자체를 거부**한다.
+
+그래서 브랜치에서 새 마이그레이션까지 같이 시험 배포했다가 문제를 발견해 main으로 롤백하면, main의 jar엔 그 마이그레이션 파일이 없으니 앱이 아예 못 뜬다 — "롤백하려다 전체 장애"가 되는 최악의 시나리오. 이를 막기 위한 규칙:
+
+1. **마이그레이션이 포함된 작업은 항상 2단계로 나눠 진행한다.** ① 마이그레이션 스크립트만 먼저 main에 머지하고 실제로 배포해서 DB에 적용해둔다. ② 그 스키마를 사용하는 기능 코드는 그 다음에 별도 브랜치에서 개발/시험배포한다. 이러면 브랜치를 아무리 굴리다 main으로 롤백해도, main은 항상 그 마이그레이션을 이미 알고 있는 상태라 위 실패가 발생하지 않는다.
+2. **마이그레이션은 항상 하위호환(추가만)되게 작성한다.** nullable 컬럼 추가, 새 테이블 추가는 안전. 기존 컬럼 삭제, 타입 변경, 기존 컬럼에 기본값 없이 NOT NULL 강제하는 것은 금지 — 이런 변경이 섞이면 어떤 롤백 방식을 쓰든(브랜치든 SHA든) 예전 코드가 깨진다.
+   - 근거: JPA/Hibernate는 엔티티가 매핑한 컬럼만 명시적으로 `SELECT`하므로(`SELECT *` 안 씀), DB에 엔티티가 모르는 컬럼이 더 있어도 조회는 완전히 무해하다. `ddl-auto=validate`도 "엔티티가 필요로 하는 컬럼이 DB에 있는지"만 검사하지 그 반대는 안 본다. 문제가 생기는 유일한 지점은 쓰기(INSERT)인데, 새 컬럼이 NOT NULL이면서 기본값이 없을 때만 예전 코드의 INSERT가 제약 위반으로 실패한다. 그래서 "nullable/기본값 있게 추가"만 지키면 이 위험이 사라진다.
+
+이 두 규칙(마이그레이션 선-머지, 하위호환 추가만)은 이번 배포 플로우가 성립하기 위한 전제 조건이라 예외를 두지 않는다.
+
+---
+
 ## KrxCrawler(KRX 데이터마켓 크롤링) 미채용 배경
 
 - `domain/krx/crawler/KrxCrawler`는 로그인 테스트 정도까지만 진행됐고, 실제 데이터 수집 경로로는 채용되지 않았다. `krx.enabled=true`로 기본 비활성화 상태.

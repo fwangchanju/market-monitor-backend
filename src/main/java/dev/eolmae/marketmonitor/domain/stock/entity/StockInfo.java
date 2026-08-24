@@ -2,6 +2,7 @@ package dev.eolmae.marketmonitor.domain.stock.entity;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.enums.Zone;
+import dev.eolmae.marketmonitor.domain.stock.enums.StockMarketCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -93,5 +94,10 @@ public class StockInfo {
     public void markInactive() {
         this.active = false;
         this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
+    }
+
+    /** 마켓맵이 다루는 대상인지: 활성 + 주권(코스피/코스닥)인 종목만 해당. */
+    public boolean isActiveAndOrdinary() {
+        return active && StockMarketCode.isOrdinaryShare(marketCode);
     }
 }

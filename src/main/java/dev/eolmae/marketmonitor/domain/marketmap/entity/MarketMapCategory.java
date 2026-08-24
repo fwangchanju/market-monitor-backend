@@ -95,4 +95,8 @@ public class MarketMapCategory {
         this.isExcluded = false;
         this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
     }
+
+    public boolean hasNoParent() {
+        return parentId == null;
+    }
 }

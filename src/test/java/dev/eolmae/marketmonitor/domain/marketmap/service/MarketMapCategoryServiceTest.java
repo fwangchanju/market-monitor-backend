@@ -44,26 +44,21 @@ class MarketMapCategoryServiceTest {
         MarketMapCategory semiconductor = category(1L, null, "반도체");
         MarketMapCategory electronics = category(2L, null, "전기/전자");
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor, electronics));
-        // IDENTITY 전략은 insert 시점에 즉시 id가 채워지므로, saveAll이 그 시점을 흉내내도록 stub
-        when(marketMapCategoryRepository.saveAll(Mockito.anyList())).thenAnswer(invocation -> {
-            List<MarketMapCategory> saved = invocation.getArgument(0);
-            long nextId = 100L;
-            for (MarketMapCategory category : saved) {
-                ReflectionTestUtils.setField(category, "id", nextId++);
-            }
+        // IDENTITY 전략은 insert 시점에 즉시 id가 채워지므로, save가 그 시점을 흉내내도록 stub
+        when(marketMapCategoryRepository.save(Mockito.any())).thenAnswer(invocation -> {
+            MarketMapCategory saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "id", 100L);
             return saved;
         });
 
         service.onStockInfoSynced(
                 new StockInfoSyncedEvent(List.of(new NewStock("005930", "반도체"), new NewStock("051910", "화학"))));
 
-        ArgumentCaptor<List<MarketMapCategory>> categoryCaptor = ArgumentCaptor.forClass(List.class);
-        verify(marketMapCategoryRepository).saveAll(categoryCaptor.capture());
-        assertThat(categoryCaptor.getValue())
-                .extracting(MarketMapCategory::getName)
-                .containsExactly("화학");
-        assertThat(categoryCaptor.getValue()).allMatch(category -> category.getParentId() == null);
-        Long chemicalId = categoryCaptor.getValue().get(0).getId();
+        ArgumentCaptor<MarketMapCategory> categoryCaptor = ArgumentCaptor.forClass(MarketMapCategory.class);
+        verify(marketMapCategoryRepository).save(categoryCaptor.capture());
+        assertThat(categoryCaptor.getValue().getName()).isEqualTo("화학");
+        assertThat(categoryCaptor.getValue().getParentId()).isNull();
+        Long chemicalId = categoryCaptor.getValue().getId();
 
         ArgumentCaptor<List<MarketMapStockCategory>> assignmentCaptor = ArgumentCaptor.forClass(List.class);
         verify(marketMapStockCategoryRepository).saveAll(assignmentCaptor.capture());
@@ -79,9 +74,7 @@ class MarketMapCategoryServiceTest {
 
         service.onStockInfoSynced(new StockInfoSyncedEvent(List.of(new NewStock("005930", "반도체"))));
 
-        ArgumentCaptor<List<MarketMapCategory>> categoryCaptor = ArgumentCaptor.forClass(List.class);
-        verify(marketMapCategoryRepository).saveAll(categoryCaptor.capture());
-        assertThat(categoryCaptor.getValue()).isEmpty();
+        verify(marketMapCategoryRepository, never()).save(Mockito.any());
 
         ArgumentCaptor<List<MarketMapStockCategory>> assignmentCaptor = ArgumentCaptor.forClass(List.class);
         verify(marketMapStockCategoryRepository).saveAll(assignmentCaptor.capture());
@@ -94,7 +87,7 @@ class MarketMapCategoryServiceTest {
     void onStockInfoSynced_신규종목이_없으면_아무것도_하지_않는다() {
         service.onStockInfoSynced(new StockInfoSyncedEvent(List.of()));
 
-        verify(marketMapCategoryRepository, never()).saveAll(Mockito.anyList());
+        verify(marketMapCategoryRepository, never()).save(Mockito.any());
         verify(marketMapStockCategoryRepository, never()).saveAll(Mockito.anyList());
     }
 

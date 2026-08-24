@@ -8,7 +8,6 @@ import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRep
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapStockCategoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.entity.SectorPriceSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
-import dev.eolmae.marketmonitor.domain.stock.enums.StockMarketCode;
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketMapExcludedStockRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceSnapshotService;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
@@ -34,7 +33,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class MarketMapQueryService {
 
     private static final String UNCATEGORIZED = "미분류";
-    private static final long ROOT_KEY = 0L;
+    private static final long NO_PARENT_KEY = 0L;
     /** 기본 마켓맵은 어드민이 구성한 카테고리 트리를 안 쓰므로 exclude 판정 대상 자체가 아님 — id는 관례상 0 고정 */
     private static final Long NO_CATEGORY_ID = 0L;
 
@@ -90,11 +89,9 @@ public class MarketMapQueryService {
     private SnapshotResponse<MarketMapCategoryNode> buildCustomMarketMap(Market market, LocalDateTime latestSnapshotTime) {
         List<StockInfo> candidates = filterCandidates(market);
         List<MarketMapCategory> categories = marketMapCategoryRepository.findAll();
-        Map<String, MarketMapCategory> categoryByName = new HashMap<>();
         Map<Long, List<MarketMapCategory>> childrenByParentId = new HashMap<>();
         for (MarketMapCategory category : categories) {
-            categoryByName.put(category.getName(), category);
-            Long parentKey = category.getParentId() == null ? ROOT_KEY : category.getParentId();
+            Long parentKey = category.hasNoParent() ? NO_PARENT_KEY : category.getParentId();
             childrenByParentId
                     .computeIfAbsent(parentKey, key -> new ArrayList<>())
                     .add(category);
@@ -106,13 +103,13 @@ public class MarketMapQueryService {
         Map<Long, List<MarketMapItem>> itemsByCategoryId = candidates.stream()
                 .filter(stockInfo -> priceMap.containsKey(stockInfo.getStockCode()))
                 .collect(Collectors.groupingBy(
-                        stockInfo -> resolveCategoryId(stockInfo, stockCategoryMap, categoryByName),
+                        stockInfo -> stockCategoryMap.get(stockInfo.getStockCode()).getCategoryId(),
                         Collectors.mapping(
                                 stockInfo -> toMarketMapItem(
                                         stockInfo, priceMap.get(stockInfo.getStockCode()), stockCategoryMap),
                                 Collectors.toList())));
 
-        List<MarketMapCategoryNode> nodes = childrenByParentId.getOrDefault(ROOT_KEY, List.of()).stream()
+        List<MarketMapCategoryNode> nodes = childrenByParentId.getOrDefault(NO_PARENT_KEY, List.of()).stream()
                 .map(category -> toCategoryNode(category, childrenByParentId, itemsByCategoryId))
                 .toList();
 
@@ -140,25 +137,10 @@ public class MarketMapQueryService {
                 items);
     }
 
-    /** 명시적 배정(market_map_stock_category)이 있으면 그 카테고리, 없으면 stock_info 카테고리명(미분류 포함)으로 실제 카테고리에서 이름 매치. 수집기가 모든 카테고리명을 미리 생성해두므로 항상 매치된다고 전제한다. */
-    private Long resolveCategoryId(
-            StockInfo stockInfo,
-            Map<String, MarketMapStockCategory> stockCategoryMap,
-            Map<String, MarketMapCategory> categoryByName) {
-        MarketMapStockCategory assignment = stockCategoryMap.get(stockInfo.getStockCode());
-        if (assignment != null) {
-            return assignment.getCategoryId();
-        }
-        return categoryByName
-                .get(normalizeCategoryName(stockInfo.getCategoryName()))
-                .getId();
-    }
-
     private List<StockInfo> filterCandidates(Market market) {
         return stockInfoCacheService.getCache().values().stream()
                 .filter(stockInfo -> stockInfo.getMarketType() == market)
-                .filter(StockInfo::isActive)
-                .filter(stockInfo -> StockMarketCode.isOrdinaryShare(stockInfo.getMarketCode()))
+                .filter(StockInfo::isActiveAndOrdinary)
                 .toList();
     }
 

@@ -61,12 +61,12 @@ class MarketMapQueryServiceTest {
                 .thenReturn(List.of(
                         MarketMapStockCategory.create("005930", 2L),
                         MarketMapStockCategory.create("000660", 2L),
-                        MarketMapStockCategory.create("009150", 1L)));
+                        MarketMapStockCategory.create("009150", 1L),
+                        MarketMapStockCategory.create("051910", 3L)));
 
         StockInfo samsung = stockInfo("005930", "삼성전자", null, 100L, BigDecimal.TEN);
         StockInfo skHynix = stockInfo("000660", "SK하이닉스", null, 50L, BigDecimal.valueOf(20));
         StockInfo lgElectronics = stockInfo("009150", "삼성전기", null, 200L, BigDecimal.valueOf(5));
-        // market_map_stock_category에 배정 없음 -> stock_info 카테고리명("화학")으로 매치
         StockInfo lgChem = stockInfo("051910", "LG화학", "화학", 500L, BigDecimal.ONE);
 
         Map<String, StockInfo> stockInfoCache = List.of(samsung, skHynix, lgElectronics, lgChem).stream()
@@ -110,55 +110,6 @@ class MarketMapQueryServiceTest {
         assertThat(chemicalNode.children()).isEmpty();
         assertThat(chemicalNode.items()).extracting("stockCode").containsExactly("051910");
         assertThat(chemicalNode.totalMarketValue()).isEqualByComparingTo(BigDecimal.valueOf(500));
-    }
-
-    @Test
-    void getCustomMarketMap_카테고리가_전부_평평하게_자동생성된_상태에서도_이름매칭으로_그룹핑된다() {
-        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
-
-        // 어드민이 계층을 구성하기 전, 수집기가 stock_info 카테고리명으로 자동 생성한 직후의 상태(전부 root)
-        MarketMapCategory chemical = category(1L, null, "화학");
-        MarketMapCategory semiconductor = category(2L, null, "반도체");
-        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(chemical, semiconductor));
-        when(marketMapStockCategoryRepository.findAll()).thenReturn(List.of());
-
-        StockInfo lgChem = stockInfo("051910", "LG화학", "화학", 500L, BigDecimal.ONE);
-        StockInfo samsung = stockInfo("005930", "삼성전자", "반도체", 100L, BigDecimal.TEN);
-        StockInfo skHynix = stockInfo("000660", "SK하이닉스", "반도체", 50L, BigDecimal.valueOf(20));
-
-        Map<String, StockInfo> stockInfoCache = List.of(lgChem, samsung, skHynix).stream()
-                .collect(Collectors.toMap(StockInfo::getStockCode, Function.identity()));
-        when(stockInfoCacheService.getCache()).thenReturn(stockInfoCache);
-
-        when(sectorPriceSnapshotRepository.findFirstByMarketTypeOrderBySnapshotTimeDesc(Market.KOSPI))
-                .thenReturn(Optional.of(priceSnapshot("051910", snapshotTime, BigDecimal.ONE)));
-        when(sectorPriceSnapshotRepository.findByMarketTypeAndSnapshotTime(Market.KOSPI, snapshotTime))
-                .thenReturn(List.of(
-                        priceSnapshot("051910", snapshotTime, BigDecimal.ONE),
-                        priceSnapshot("005930", snapshotTime, BigDecimal.TEN),
-                        priceSnapshot("000660", snapshotTime, BigDecimal.valueOf(20))));
-
-        SnapshotResponse<MarketMapCategoryNode> response = service.getCustomMarketMap(Market.KOSPI);
-
-        assertThat(response.snapshotTime()).isEqualTo(snapshotTime);
-        List<MarketMapCategoryNode> nodes = response.items();
-        assertThat(nodes).hasSize(2);
-
-        MarketMapCategoryNode chemicalNode = nodes.stream()
-                .filter(node -> node.categoryName().equals("화학"))
-                .findFirst()
-                .orElseThrow();
-        assertThat(chemicalNode.children()).isEmpty();
-        assertThat(chemicalNode.items()).extracting("stockCode").containsExactly("051910");
-        assertThat(chemicalNode.totalMarketValue()).isEqualByComparingTo(BigDecimal.valueOf(500));
-
-        MarketMapCategoryNode semiconductorNode = nodes.stream()
-                .filter(node -> node.categoryName().equals("반도체"))
-                .findFirst()
-                .orElseThrow();
-        assertThat(semiconductorNode.children()).isEmpty();
-        assertThat(semiconductorNode.items()).extracting("stockCode").containsExactlyInAnyOrder("005930", "000660");
-        assertThat(semiconductorNode.totalMarketValue()).isEqualByComparingTo(BigDecimal.valueOf(2000));
     }
 
     @Test

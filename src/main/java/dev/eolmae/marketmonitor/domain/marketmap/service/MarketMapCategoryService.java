@@ -19,6 +19,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.event.EventListener;
@@ -40,21 +41,29 @@ public class MarketMapCategoryService {
         return findAllCategories().stream().map(this::toItem).toList();
     }
 
-    /** 신규 종목(이벤트 발행 단계에서 이미 주권만 필터링됨) 기준으로, 카테고리명 중 아직 없는 것만 최상위 카테고리로
-     * 생성한 뒤 market_map_stock_category에 배정한다.
-     * stock -> marketmap 순환 의존을 피하려고 이벤트로 수신(StockInfoSyncedEvent 참고). */
+    /** stock -> marketmap 순환 의존을 피하려고 이벤트로 수신(StockInfoSyncedEvent 참고). */
     @EventListener
     public void onStockInfoSynced(StockInfoSyncedEvent event) {
-        List<StockInfoSyncedEvent.NewStock> newStocks = event.newStocks();
-        if (newStocks.isEmpty()) {
+        syncStockCategories(event.newStocks());
+    }
+
+    /** 버전 복원(MarketMapCategoryTreeService.restore) 후 스냅샷에 없던(=배정이 빠진) 종목을 채워넣는 진입점.
+     * 실제 로직은 라이브 동기화(onStockInfoSynced)와 동일한 syncStockCategories를 그대로 재사용한다. */
+    public void restoreMissingStockCategories(List<StockInfoSyncedEvent.NewStock> stocks) {
+        syncStockCategories(stocks);
+    }
+
+    /** 주어진 종목 중 카테고리명이 아직 없는 것만 최상위 카테고리로 생성한 뒤 market_map_stock_category에 배정한다. */
+    private void syncStockCategories(List<StockInfoSyncedEvent.NewStock> stocks) {
+        if (stocks.isEmpty()) {
             return;
         }
 
-        Set<String> categoryNames = newStocks.stream()
+        Set<String> categoryNames = stocks.stream()
                 .map(StockInfoSyncedEvent.NewStock::categoryName)
                 .collect(Collectors.toSet());
-        Map<String, MarketMapCategory> categoryByName = syncCategories(categoryNames);
-        createNewStockCategories(newStocks, categoryByName);
+        Map<String, MarketMapCategory> categoryByName = createMissingCategories(categoryNames);
+        createNewStockCategories(stocks, categoryByName);
     }
 
     private void createNewStockCategories(
@@ -68,21 +77,18 @@ public class MarketMapCategoryService {
     }
 
     /** 기존 + 신규 생성분을 합친 이름별 맵을 리턴해서, 호출부가 다시 전체 조회할 필요가 없게 한다. */
-    private Map<String, MarketMapCategory> syncCategories(Set<String> categoryNames) {
-        Map<String, MarketMapCategory> existingByName = new HashMap<>();
-        for (MarketMapCategory category : findAllCategories()) {
-            existingByName.put(category.getName(), category);
-        }
+    private Map<String, MarketMapCategory> createMissingCategories(Set<String> categoryNames) {
+        Map<String, MarketMapCategory> existingByName = findAllCategories().stream()
+                .collect(Collectors.toMap(MarketMapCategory::getName, Function.identity()));
 
-        List<MarketMapCategory> newCategories = new ArrayList<>();
-        for (String categoryName : categoryNames) {
-            if (existingByName.containsKey(categoryName)) {
-                continue;
-            }
-            newCategories.add(MarketMapCategory.createParent(categoryName));
-        }
-        marketMapCategoryRepository.saveAll(newCategories);
-        newCategories.forEach(category -> existingByName.put(category.getName(), category));
+        categoryNames.stream()
+                .filter(name -> !existingByName.containsKey(name))
+                .map(MarketMapCategory::createParent)
+                .forEach(category -> {
+                    marketMapCategoryRepository.save(category);
+                    existingByName.put(category.getName(), category);
+                });
+
         return existingByName;
     }
 

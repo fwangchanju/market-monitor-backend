@@ -79,14 +79,15 @@ public class MarketMapStockCategoryService {
     public SnapshotResponse<StockCategoryListItem> getStockCategories() {
         Map<Long, MarketMapCategory> categoryById = marketMapCategoryRepository.findAll().stream()
                 .collect(Collectors.toMap(MarketMapCategory::getId, Function.identity()));
-        Map<String, StockInfo> stockInfoCache = stockInfoCacheService.getCache();
+        Map<String, MarketMapStockCategory> stockCategoryByStockCode = marketMapStockCategoryRepository.findAll().stream()
+                .collect(Collectors.toMap(MarketMapStockCategory::getStockCode, Function.identity()));
         Map<String, SectorPriceSnapshot> latestPriceByStockCode =
                 sectorPriceSnapshotService.findLatestPriceByStockCode();
 
-        List<StockCategoryListItem> items = marketMapStockCategoryRepository.findAll().stream()
-                .filter(stockCategory -> stockInfoCache.get(stockCategory.getStockCode()).isActive())
-                .map(stockCategory ->
-                        toStockCategoryListItem(stockCategory, categoryById, stockInfoCache, latestPriceByStockCode))
+        List<StockCategoryListItem> items = stockInfoCacheService.getCache().values().stream()
+                .filter(StockInfo::isActiveAndOrdinary)
+                .map(stockInfo -> toStockCategoryListItem(
+                        stockInfo, stockCategoryByStockCode.get(stockInfo.getStockCode()), categoryById, latestPriceByStockCode))
                 .toList();
 
         LocalDateTime snapshotTime = latestPriceByStockCode.values().stream()
@@ -97,15 +98,14 @@ public class MarketMapStockCategoryService {
     }
 
     private StockCategoryListItem toStockCategoryListItem(
+            StockInfo stockInfo,
             MarketMapStockCategory stockCategory,
             Map<Long, MarketMapCategory> categoryById,
-            Map<String, StockInfo> stockInfoCache,
             Map<String, SectorPriceSnapshot> latestPriceByStockCode) {
-        StockInfo stockInfo = stockInfoCache.get(stockCategory.getStockCode());
         MarketMapCategory category = categoryById.get(stockCategory.getCategoryId());
-        MarketMapCategory parent = category.getParentId() == null ? null : categoryById.get(category.getParentId());
+        MarketMapCategory parent = category.hasNoParent() ? null : categoryById.get(category.getParentId());
 
-        SectorPriceSnapshot priceSnapshot = latestPriceByStockCode.get(stockCategory.getStockCode());
+        SectorPriceSnapshot priceSnapshot = latestPriceByStockCode.get(stockInfo.getStockCode());
         BigDecimal totalMarketValue = null;
         MarketValueTier marketValueTier = null;
         if (priceSnapshot != null) {
@@ -114,7 +114,7 @@ public class MarketMapStockCategoryService {
         }
 
         return new StockCategoryListItem(
-                stockCategory.getStockCode(),
+                stockInfo.getStockCode(),
                 stockInfo.getMarketType(),
                 stockInfo.getStockName(),
                 stockCategory.getAlias(),

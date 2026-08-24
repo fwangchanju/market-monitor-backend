@@ -56,6 +56,7 @@ jobs:
               - 'infra/scripts/health-check.sh'
               - 'infra/scripts/env.sh'
               - 'infra/docker-compose.yml'
+              - '.github/workflows/release.yml'
             nginx:
               - 'containers/nginx/**'
               - 'infra/nginx.conf'

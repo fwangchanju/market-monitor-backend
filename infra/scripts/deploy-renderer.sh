@@ -14,4 +14,7 @@ docker pull "ghcr.io/$GHCR_USER/market-monitor-renderer:latest"
 echo "=== [renderer] Restarting market-monitor-renderer ==="
 docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d
 
+echo "=== [renderer] 로컬 이미지 정리 ==="
+docker image prune -f
+
 echo "=== [renderer] Done ==="

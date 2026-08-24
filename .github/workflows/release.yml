@@ -31,6 +31,7 @@ jobs:
       contents: read
     outputs:
       application: ${{ steps.filter.outputs.application }}
+      application_scripts: ${{ steps.filter.outputs.application_scripts }}
       nginx: ${{ steps.filter.outputs.nginx }}
       renderer: ${{ steps.filter.outputs.renderer }}
     steps:
@@ -50,11 +51,21 @@ jobs:
               - 'gradle.properties'
               - 'gradlew'
               - 'gradle/**'
+            application_scripts:
+              - 'infra/scripts/deploy-application.sh'
+              - 'infra/scripts/health-check.sh'
+              - 'infra/scripts/env.sh'
+              - 'infra/docker-compose.yml'
             nginx:
               - 'containers/nginx/**'
               - 'infra/nginx.conf'
+              - 'infra/nginx-docker-compose.yml'
+              - 'infra/scripts/deploy-nginx.sh'
+              - 'infra/scripts/nginx-health-check.sh'
             renderer:
               - 'containers/renderer/**'
+              - 'infra/renderer-docker-compose.yml'
+              - 'infra/scripts/deploy-renderer.sh'
 
   # 브랜치(main 제외) push: application 관련 변경이 있으면 빌드해서 sha/브랜치 태그로만 푸시. 배포는 안 함.
   build:
@@ -104,11 +115,16 @@ jobs:
           cache-to: type=gha,mode=max,scope=application
 
   # main push(항상 머지 커밋): 재빌드 없이, 머지된 브랜치(HEAD^2)용으로 이미 빌드된 이미지를 :main으로 승격시키고 배포.
+  # application(코드) 변경 시: 이미지 존재 확인(빌드 대기)→승격→배포→헬스체크→정리 전부 수행.
+  # application_scripts(배포/헬스체크 스크립트)만 변경 시: 재빌드 대상이 없으므로 승격/정리는 건너뛰고
+  # 재빌드 없이 이미 있는 :main 이미지를 그대로 재배포 + 새 스크립트로 헬스체크만 수행.
   promote-main:
+    needs: [changes]
     if: |
       always() &&
       github.event_name == 'push' &&
-      github.ref == 'refs/heads/main'
+      github.ref == 'refs/heads/main' &&
+      (needs.changes.outputs.application == 'true' || needs.changes.outputs.application_scripts == 'true')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -121,13 +137,14 @@ jobs:
           fetch-depth: 0
 
       - name: Resolve merged branch commit
+        if: needs.changes.outputs.application == 'true'
         id: resolve
         run: |
           MERGED_SHA=$(git rev-parse HEAD^2 2>/dev/null || echo "")
           echo "merged_sha=$MERGED_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Log in to GHCR
-        if: steps.resolve.outputs.merged_sha != ''
+        if: needs.changes.outputs.application == 'true' && steps.resolve.outputs.merged_sha != ''
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -135,7 +152,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check image exists for merged commit (build job이 아직 안 끝났으면 완료까지 대기)
-        if: steps.resolve.outputs.merged_sha != ''
+        if: needs.changes.outputs.application == 'true' && steps.resolve.outputs.merged_sha != ''
         id: check
         run: |
           TIMEOUT=600
@@ -159,7 +176,7 @@ jobs:
             ghcr.io/fwangchanju/market-monitor:sha-${{ steps.resolve.outputs.merged_sha }}
 
       - name: Deploy to server 1 (application)
-        if: steps.check.outputs.exists == 'true'
+        if: steps.check.outputs.exists == 'true' || (needs.changes.outputs.application != 'true' && needs.changes.outputs.application_scripts == 'true')
         uses: appleboy/ssh-action@v1
         env:
           CR_PAT: ${{ secrets.CR_PAT }}
@@ -176,7 +193,7 @@ jobs:
             bash "$REPO_DIR/infra/scripts/deploy-application.sh"
 
       - name: Health check
-        if: steps.check.outputs.exists == 'true'
+        if: steps.check.outputs.exists == 'true' || (needs.changes.outputs.application != 'true' && needs.changes.outputs.application_scripts == 'true')
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_HOST }}

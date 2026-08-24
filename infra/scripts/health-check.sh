@@ -10,11 +10,14 @@ elapsed=0
 
 echo "=== [health-check] market-monitor 정상 기동 확인 시작 ==="
 
+docker logs -f market-monitor &
+LOGS_PID=$!
+trap 'kill "$LOGS_PID" 2>/dev/null' EXIT
+
 while [ "$elapsed" -lt "$TIMEOUT" ]; do
   restart_count=$(docker inspect --format='{{.RestartCount}}' market-monitor)
   if [ "$restart_count" -ge "$MAX_RESTART_COUNT" ]; then
     echo "=== [health-check] 재시작 ${restart_count}회, 크래시 루프로 판단하여 실패 처리 ==="
-    docker logs market-monitor
     exit 1
   fi
 
@@ -28,5 +31,4 @@ while [ "$elapsed" -lt "$TIMEOUT" ]; do
 done
 
 echo "=== [health-check] 타임아웃(${TIMEOUT}s) 내에 정상 기동 확인 실패 ==="
-docker logs market-monitor
 exit 1

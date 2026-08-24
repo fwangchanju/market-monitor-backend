@@ -134,15 +134,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check image exists for merged commit
+      - name: Check image exists for merged commit (build job이 아직 안 끝났으면 완료까지 대기)
         if: steps.resolve.outputs.merged_sha != ''
         id: check
         run: |
-          if docker manifest inspect "ghcr.io/fwangchanju/market-monitor:sha-${{ steps.resolve.outputs.merged_sha }}" > /dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
+          TIMEOUT=600
+          INTERVAL=10
+          elapsed=0
+          while [ "$elapsed" -lt "$TIMEOUT" ]; do
+            if docker manifest inspect "ghcr.io/fwangchanju/market-monitor:sha-${{ steps.resolve.outputs.merged_sha }}" > /dev/null 2>&1; then
+              echo "exists=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            sleep "$INTERVAL"
+            elapsed=$((elapsed + INTERVAL))
+          done
+          echo "exists=false" >> "$GITHUB_OUTPUT"
 
       - name: Promote image to :main (재빌드 없이 레지스트리에서 재태깅)
         if: steps.check.outputs.exists == 'true'

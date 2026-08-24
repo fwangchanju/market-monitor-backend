@@ -3,13 +3,13 @@ name: Release
 on:
   push:
     branches:
-      - 'release/**'
+      - '**'
   repository_dispatch:
     types: [frontend-assets-published]
   workflow_dispatch:
     inputs:
       target:
-        description: '빌드 대상'
+        description: '빌드 대상 (전체 재빌드+배포용, 브랜치 지정 배포는 deploy_ref 사용)'
         required: true
         default: 'application'
         type: choice
@@ -18,6 +18,10 @@ on:
           - nginx
           - renderer
           - all
+      deploy_ref:
+        description: '배포할 브랜치명 (트라이얼 배포/롤백용). main을 입력하면 현재 승격된 이미지로 롤백. 비워두면 target 기준 전체 재빌드+배포만 수행.'
+        required: false
+        type: string
 
 jobs:
   changes:
@@ -52,12 +56,193 @@ jobs:
             renderer:
               - 'containers/renderer/**'
 
-  application:
+  # 브랜치(main 제외) push: application 관련 변경이 있으면 빌드해서 sha/브랜치 태그로만 푸시. 배포는 안 함.
+  build:
     needs: [changes]
     if: |
       always() &&
-      ((github.event_name == 'workflow_dispatch' && (inputs.target == 'application' || inputs.target == 'all')) ||
-       (github.event_name == 'push' && needs.changes.outputs.application == 'true'))
+      github.event_name == 'push' &&
+      github.ref != 'refs/heads/main' &&
+      needs.changes.outputs.application == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compute image tags
+        id: tag
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          echo "sha_tag=sha-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "branch_tag=branch-$(echo "$REF_NAME" | tr '/' '-')" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push application image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          tags: |
+            ghcr.io/fwangchanju/market-monitor:${{ steps.tag.outputs.sha_tag }}
+            ghcr.io/fwangchanju/market-monitor:${{ steps.tag.outputs.branch_tag }}
+          cache-from: type=gha,scope=application
+          cache-to: type=gha,mode=max,scope=application
+
+  # main push(항상 머지 커밋): 재빌드 없이, 머지된 브랜치(HEAD^2)용으로 이미 빌드된 이미지를 :main으로 승격시키고 배포.
+  promote-main:
+    if: |
+      always() &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve merged branch commit
+        id: resolve
+        run: |
+          MERGED_SHA=$(git rev-parse HEAD^2 2>/dev/null || echo "")
+          echo "merged_sha=$MERGED_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        if: steps.resolve.outputs.merged_sha != ''
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check image exists for merged commit
+        if: steps.resolve.outputs.merged_sha != ''
+        id: check
+        run: |
+          if docker manifest inspect "ghcr.io/fwangchanju/market-monitor:sha-${{ steps.resolve.outputs.merged_sha }}" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Promote image to :main (재빌드 없이 레지스트리에서 재태깅)
+        if: steps.check.outputs.exists == 'true'
+        run: |
+          docker buildx imagetools create \
+            -t ghcr.io/fwangchanju/market-monitor:main \
+            ghcr.io/fwangchanju/market-monitor:sha-${{ steps.resolve.outputs.merged_sha }}
+
+      - name: Deploy to server 1 (application)
+        if: steps.check.outputs.exists == 'true'
+        uses: appleboy/ssh-action@v1
+        env:
+          CR_PAT: ${{ secrets.CR_PAT }}
+          IMAGE_TAG: main
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          envs: CR_PAT,IMAGE_TAG
+          script: |
+            source ~/repo/market-monitor-backend/infra/scripts/env.sh
+            git -C "$REPO_DIR" fetch origin main
+            git -C "$REPO_DIR" reset --hard origin/main
+            bash "$REPO_DIR/infra/scripts/deploy-application.sh"
+
+      - name: Health check
+        if: steps.check.outputs.exists == 'true'
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            bash "$HOME/repo/market-monitor-backend/infra/scripts/health-check.sh"
+
+      - name: Clean up old GHCR package versions (최근 5개만 유지)
+        if: steps.check.outputs.exists == 'true'
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: 'market-monitor'
+          package-type: 'container'
+          min-versions-to-keep: 5
+          token: ${{ secrets.CR_PAT }}
+
+  # workflow_dispatch로 브랜치(또는 main) 지정 배포: 빌드 없이 이미 존재하는 이미지를 pull해서 배포 (트라이얼 배포/롤백 겸용).
+  deploy:
+    if: github.event_name == 'workflow_dispatch' && inputs.deploy_ref != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: resolve
+        env:
+          DEPLOY_REF: ${{ inputs.deploy_ref }}
+        run: |
+          REF="$DEPLOY_REF"
+          if [ "$REF" = "main" ]; then
+            echo "image_tag=main" >> "$GITHUB_OUTPUT"
+          else
+            SHA=$(git ls-remote origin "refs/heads/$REF" | cut -f1)
+            if [ -z "$SHA" ]; then
+              echo "브랜치를 찾을 수 없습니다: $REF" >&2
+              exit 1
+            fi
+            echo "image_tag=sha-$SHA" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy to server 1 (application)
+        uses: appleboy/ssh-action@v1
+        env:
+          CR_PAT: ${{ secrets.CR_PAT }}
+          IMAGE_TAG: ${{ steps.resolve.outputs.image_tag }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          envs: CR_PAT,IMAGE_TAG
+          script: |
+            source ~/repo/market-monitor-backend/infra/scripts/env.sh
+            git -C "$REPO_DIR" fetch origin main
+            git -C "$REPO_DIR" reset --hard origin/main
+            bash "$REPO_DIR/infra/scripts/deploy-application.sh"
+
+      - name: Health check
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            bash "$HOME/repo/market-monitor-backend/infra/scripts/health-check.sh"
+
+  # 수동 전체 재빌드+배포 (target=application 또는 all). 긴급/복구용, 브랜치·main push 흐름과 별개.
+  application:
+    if: github.event_name == 'workflow_dispatch' && (inputs.target == 'application' || inputs.target == 'all')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -83,7 +268,7 @@ jobs:
           context: .
           file: Dockerfile
           push: true
-          tags: ghcr.io/fwangchanju/market-monitor:latest
+          tags: ghcr.io/fwangchanju/market-monitor:main
           cache-from: type=gha,scope=application
           cache-to: type=gha,mode=max,scope=application
 
@@ -91,16 +276,26 @@ jobs:
         uses: appleboy/ssh-action@v1
         env:
           CR_PAT: ${{ secrets.CR_PAT }}
+          IMAGE_TAG: main
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          envs: CR_PAT
+          envs: CR_PAT,IMAGE_TAG
           script: |
             source ~/repo/market-monitor-backend/infra/scripts/env.sh
             git -C "$REPO_DIR" fetch origin main
             git -C "$REPO_DIR" reset --hard origin/main
             bash "$REPO_DIR/infra/scripts/deploy-application.sh"
+
+      - name: Health check
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            bash "$HOME/repo/market-monitor-backend/infra/scripts/health-check.sh"
 
   nginx:
     needs: [changes]
@@ -108,7 +303,7 @@ jobs:
       always() &&
       ((github.event_name == 'workflow_dispatch' && (inputs.target == 'nginx' || inputs.target == 'all')) ||
        github.event_name == 'repository_dispatch' ||
-       (github.event_name == 'push' && needs.changes.outputs.nginx == 'true'))
+       (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.nginx == 'true'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -153,12 +348,21 @@ jobs:
             git -C "$REPO_DIR" reset --hard origin/main
             bash "$REPO_DIR/infra/scripts/deploy-nginx.sh"
 
+      - name: Health check
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            bash "$HOME/repo/market-monitor-backend/infra/scripts/nginx-health-check.sh"
+
   renderer:
     needs: [changes]
     if: |
       always() &&
       ((github.event_name == 'workflow_dispatch' && (inputs.target == 'renderer' || inputs.target == 'all')) ||
-       (github.event_name == 'push' && needs.changes.outputs.renderer == 'true'))
+       (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.renderer == 'true'))
     runs-on: ubuntu-latest
     permissions:
       contents: read

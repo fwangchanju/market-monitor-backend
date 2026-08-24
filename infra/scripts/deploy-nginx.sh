@@ -15,4 +15,7 @@ echo "=== [nginx] Restarting nginx ==="
 docker compose -f "$NGINX_COMPOSE_FILE" down
 docker compose -f "$NGINX_COMPOSE_FILE" up -d
 
+echo "=== [nginx] 로컬 이미지 정리 ==="
+docker image prune -f
+
 echo "=== [nginx] Done ==="

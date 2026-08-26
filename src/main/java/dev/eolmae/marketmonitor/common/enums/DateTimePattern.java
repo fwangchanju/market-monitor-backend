@@ -5,7 +5,8 @@ import java.time.format.DateTimeFormatter;
 public enum DateTimePattern {
     DATE("yyyyMMdd"),
     TIME("HHmmss"),
-    DATETIME("yyyyMMddHHmmss");
+    DATETIME("yyyyMMddHHmmss"),
+    DATETIME_MINUTE("yyyy-MM-dd HH:mm");
 
     private final DateTimeFormatter formatter;
 

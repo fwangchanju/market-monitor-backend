@@ -39,11 +39,14 @@ public class TelegramClient {
         }
     }
 
-    public void sendPhoto(String chatId, byte[] imageData) {
+    public void sendPhoto(String chatId, byte[] imageData, String caption) {
         try {
             MultiValueMap<String, Object> form = new LinkedMultiValueMap<>();
             form.add("chat_id", chatId);
             form.add("photo", namedResource(imageData, "single_image.png"));
+            if (caption != null && !caption.isBlank()) {
+                form.add("caption", caption);
+            }
 
             restClient
                     .post()

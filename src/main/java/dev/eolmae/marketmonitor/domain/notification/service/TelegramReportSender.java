@@ -21,13 +21,19 @@ public abstract class TelegramReportSender {
 
     protected abstract RenderTarget target();
 
-    protected abstract String buildText(LocalDateTime snapshotTime);
+    protected abstract String buildText(LocalDateTime dataTime);
 
     protected boolean isNotSendTime(LocalDateTime snapshotTime) {
         return snapshotTime.getMinute() != telegramProperties.sendMinute();
     }
 
     public void send(LocalDateTime snapshotTime) {
+        send(snapshotTime, snapshotTime);
+    }
+
+    // snapshotTime: 발송 여부 판단 기준(실제 시각). dataTime: 캡션에 찍을 데이터 기준 시각 — 마감 이후엔
+    // 수집이 스킵되어 실제 시각과 달라질 수 있어(예: 20:10에 발송되지만 데이터는 20:00 기준), 둘을 분리했다.
+    public void send(LocalDateTime snapshotTime, LocalDateTime dataTime) {
         if (isNotSendTime(snapshotTime)) {
             return;
         }
@@ -35,7 +41,7 @@ public abstract class TelegramReportSender {
         RenderTarget target = target();
         List<byte[]> images = screenshotClient.capture(target.path(), target.selector());
         byte[] combinedImage = ImageStitcher.stitchVertically(images);
-        telegramClient.sendPhoto(telegramProperties.chatId(), combinedImage, buildText(snapshotTime));
+        telegramClient.sendPhoto(telegramProperties.chatId(), combinedImage, buildText(dataTime));
         log.info("{} 이미지 발송 완료: {}장 결합", target, images.size());
     }
 }

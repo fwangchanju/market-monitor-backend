@@ -22,7 +22,7 @@ public class MarketMapTelegramReportSender extends TelegramReportSender {
     }
 
     @Override
-    protected String buildText(LocalDateTime snapshotTime) {
-        return "CUSTOM KOSPI MAP\n" + snapshotTime.format(DateTimePattern.DATETIME_MINUTE.formatter());
+    protected String buildText(LocalDateTime dataTime) {
+        return "CUSTOM KOSPI MAP\n" + dataTime.format(DateTimePattern.DATETIME_MINUTE_WITH_WEEKDAY.formatter()) + " (5분 간격)";
     }
 }

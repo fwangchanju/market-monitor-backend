@@ -1,17 +1,18 @@
 package dev.eolmae.marketmonitor.common.enums;
 
 import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 
 public enum DateTimePattern {
     DATE("yyyyMMdd"),
     TIME("HHmmss"),
     DATETIME("yyyyMMddHHmmss"),
-    DATETIME_MINUTE("yyyy-MM-dd HH:mm");
+    DATETIME_MINUTE_WITH_WEEKDAY("yyyy-MM-dd (E) HH:mm");
 
     private final DateTimeFormatter formatter;
 
     DateTimePattern(String pattern) {
-        this.formatter = DateTimeFormatter.ofPattern(pattern);
+        this.formatter = DateTimeFormatter.ofPattern(pattern, Locale.KOREAN);
     }
 
     public DateTimeFormatter formatter() {

@@ -1,13 +1,11 @@
 package dev.eolmae.marketmonitor.domain.notification.service;
 
-import dev.eolmae.marketmonitor.domain.access.properties.AdminProperties;
 import dev.eolmae.marketmonitor.domain.notification.client.TelegramClient;
 import dev.eolmae.marketmonitor.domain.notification.enums.RenderTarget;
-import dev.eolmae.marketmonitor.domain.notification.properties.MarketMonitorProperties;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
 import dev.eolmae.marketmonitor.domain.renderer.client.ScreenshotClient;
 import dev.eolmae.marketmonitor.domain.renderer.properties.RendererProperties;
-import java.util.List;
+import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClient;
 
@@ -27,21 +25,15 @@ class RenderServiceManualTest {
             System.getenv("TELEGRAM_BOT_TOKEN"), System.getenv("TELEGRAM_CHAT_ID"), System.getenv("DEVELOPER_CHAT_ID"));
     private final TelegramClient telegramClient = new TelegramClient(telegramProperties, RestClient.create());
 
-    private final MarketMonitorProperties marketMonitorProperties =
-            new MarketMonitorProperties("https://eolmae.duckdns.org");
-    private final AdminProperties adminProperties =
-            new AdminProperties(List.of(System.getenv("ADMIN_TOKENS").split(",")));
-
-    private final RenderService renderService = new RenderService(
-            screenshotClient, telegramClient, telegramProperties, marketMonitorProperties, adminProperties);
+    private final RenderService renderService = new RenderService(screenshotClient, telegramClient, telegramProperties);
 
     @Test
     void sendsStitchedMarketSummaryImageToTelegram() {
-        renderService.send(RenderTarget.MARKET_SUMMARY);
+        renderService.send(RenderTarget.MARKET_SUMMARY, LocalDateTime.now());
     }
 
     @Test
     void sendsMarketMapImageToTelegram() {
-        renderService.send(RenderTarget.MARKET_MAP);
+        renderService.send(RenderTarget.MARKET_MAP, LocalDateTime.now());
     }
 }

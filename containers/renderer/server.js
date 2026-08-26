@@ -29,7 +29,7 @@ app.post('/capture', async (req, res) => {
       args: ['--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
     })
     const context = await browser.newContext({
-      viewport: { width: 1440, height: 900 },
+      viewport: { width: 1920, height: 1080 },
     })
 
     if (CAPTURE_USER && CAPTURE_PASS) {

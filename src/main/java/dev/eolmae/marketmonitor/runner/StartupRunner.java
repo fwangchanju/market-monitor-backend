@@ -32,17 +32,13 @@ public class StartupRunner implements ApplicationRunner {
         // 1. 전종목 캐싱
         loadStockInfoCache();
 
-        // 2. 보유종목 동기화 및 캐싱(kt00018)
-        syncHoldings();
-
-        // 3. 관심종목 캐시 read
-        List<WatchStock> watchStockCache = getWatchStockCache();
-
-        // 4. 전체 watch_stock 백필 가드 확인 (비동기 — 기동 지연 최소화)
-        for (WatchStock watchStock : watchStockCache) {
-            watchStockBackfillService.backfill(watchStock);
-        }
-        log.info("[startup] 백필 요청 완료: {}종목 (비동기 처리 중)", watchStockCache.size());
+        // 2·3·4. 보유종목 동기화/관심종목 캐시/백필: 관심종목 구조 정리 전까지 비활성화
+        // syncHoldings();
+        // List<WatchStock> watchStockCache = getWatchStockCache();
+        // for (WatchStock watchStock : watchStockCache) {
+        //     watchStockBackfillService.backfill(watchStock);
+        // }
+        // log.info("[startup] 백필 요청 완료: {}종목 (비동기 처리 중)", watchStockCache.size());
 
         // 5. 관리자 토큰 동기화
         syncAdminTokens();

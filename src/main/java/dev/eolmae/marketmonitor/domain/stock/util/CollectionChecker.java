@@ -12,6 +12,7 @@ public final class CollectionChecker {
 
     private static final LocalTime COLLECTION_START_TIME = LocalTime.of(8, 0);
     private static final LocalTime COLLECTION_END_TIME = LocalTime.of(20, 0);
+    private static final int COLLECTION_INTERVAL_MINUTES = 5;
 
     private CollectionChecker() {}
 
@@ -56,11 +57,12 @@ public final class CollectionChecker {
         return isWeekday(now) && !nowTime.isBefore(COLLECTION_START_TIME) && !nowTime.isAfter(COLLECTION_END_TIME);
     }
 
-    /** 수집 시간대면 현재 시각을 시 단위로 절삭, 아니면 직전 수집일의 종료 시각. */
+    /** 수집 시간대면 현재 시각을 수집 주기(5분) 단위로 절삭, 아니면 직전 수집일의 종료 시각. */
     public static LocalDateTime expectedSnapshotTime() {
         LocalDateTime now = LocalDateTime.now(Zone.KST.zoneId());
         if (isTradingTime()) {
-            return now.truncatedTo(ChronoUnit.HOURS);
+            int flooredMinute = (now.getMinute() / COLLECTION_INTERVAL_MINUTES) * COLLECTION_INTERVAL_MINUTES;
+            return now.withMinute(flooredMinute).truncatedTo(ChronoUnit.MINUTES);
         }
 
         LocalDate today = now.toLocalDate();

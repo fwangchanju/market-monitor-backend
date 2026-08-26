@@ -314,24 +314,31 @@ public class MarketQueryService {
                 .toList();
     }
 
-    /** 종목별 프로그램매매 이력 최신 20건 반환 */
+    /**
+     * 종목별 프로그램매매 이력 최신 20건 반환.
+     * programTradeIntradayCollector 비활성화(관심종목 구조 정리 전까지)로 신규 데이터가 없어, 오래된
+     * 데이터를 최신인 것처럼 계속 보여주지 않도록 조회 없이 항상 빈 값을 반환한다.
+     */
     public StockHistoryResponse<ProgramTradingHistoryItem> getProgramTradingHistory(String stockCode) {
-        return new StockHistoryResponse<>(
-                stockCode,
-                CollectionChecker.expectedSnapshotTime(),
-                programTradingHistoryRepository.findRecentByStockCode(stockCode).stream()
-                        .map(item -> new ProgramTradingHistoryItem(
-                                item.getSnapshotTime(),
-                                item.getProgramBuyAmount(),
-                                item.getProgramSellAmount(),
-                                item.getProgramNetBuyAmount()))
-                        .toList());
+        // programTradingHistoryRepository.findRecentByStockCode(stockCode).stream()
+        //         .map(item -> new ProgramTradingHistoryItem(
+        //                 item.getSnapshotTime(),
+        //                 item.getProgramBuyAmount(),
+        //                 item.getProgramSellAmount(),
+        //                 item.getProgramNetBuyAmount()))
+        //         .toList();
+        return StockHistoryResponse.empty();
     }
 
-    /** 종목별 프로그램매매 이력(일별) 최신 20건 반환 */
+    /**
+     * 종목별 프로그램매매 이력(일별) 최신 20건 반환.
+     * programTradeDailyCollector 비활성화(관심종목 구조 정리 전까지)로 신규 데이터가 없어, 오래된
+     * 데이터를 최신인 것처럼 계속 보여주지 않도록 조회 없이 항상 빈 값을 반환한다.
+     */
     public StockHistoryResponse<ProgramTradingDailyHistoryItem> getProgramTradingDailyHistory(String stockCode) {
-        return toProgramTradingDailyHistoryResponse(
-                stockCode, programTradingDailyHistoryRepository.findRecentByStockCode(stockCode));
+        // return toProgramTradingDailyHistoryResponse(
+        //         stockCode, programTradingDailyHistoryRepository.findRecentByStockCode(stockCode));
+        return StockHistoryResponse.empty();
     }
 
     private StockHistoryResponse<ProgramTradingDailyHistoryItem> toProgramTradingDailyHistoryResponse(
@@ -348,24 +355,26 @@ public class MarketQueryService {
                         .toList());
     }
 
-    /** 공매도 추이 최신 20건 반환 */
+    /**
+     * 공매도 추이 최신 20건 반환.
+     * shortSellingTrendCollector 비활성화(관심종목 구조 정리 전까지)로 신규 데이터가 없어, 오래된
+     * 데이터를 최신인 것처럼 계속 보여주지 않도록 조회 없이 항상 빈 값을 반환한다.
+     */
     public StockHistoryResponse<ShortSellingHistoryItem> getShortSellingHistory(String stockCode) {
-        return new StockHistoryResponse<>(
-                stockCode,
-                CollectionChecker.expectedSnapshotTime(),
-                shortSellingDailyHistoryRepository.findRecentByStockCode(stockCode).stream()
-                        .map(item -> new ShortSellingHistoryItem(
-                                item.getTradeDate(),
-                                item.getClosePrice(),
-                                item.getPriceChange(),
-                                item.getChangeRate(),
-                                item.getTradingVolume(),
-                                item.getShortVolume(),
-                                item.getCumulativeShortVolume(),
-                                item.getShortRatio(),
-                                item.getShortAmount(),
-                                item.getShortAvgPrice()))
-                        .toList());
+        // shortSellingDailyHistoryRepository.findRecentByStockCode(stockCode).stream()
+        //         .map(item -> new ShortSellingHistoryItem(
+        //                 item.getTradeDate(),
+        //                 item.getClosePrice(),
+        //                 item.getPriceChange(),
+        //                 item.getChangeRate(),
+        //                 item.getTradingVolume(),
+        //                 item.getShortVolume(),
+        //                 item.getCumulativeShortVolume(),
+        //                 item.getShortRatio(),
+        //                 item.getShortAmount(),
+        //                 item.getShortAvgPrice()))
+        //         .toList();
+        return StockHistoryResponse.empty();
     }
 
     public SnapshotResponse<IntradayInvestorSummaryItem> getIntradayTop(
@@ -373,46 +382,51 @@ public class MarketQueryService {
         return getIntradayTop(market.toMarkets(), investor.toInvestors(), IntradayRanking.from(ranking), amtQty);
     }
 
-    /** 장중 투자자별 매매 상위 top 10 반환 */
+    /**
+     * 장중 투자자별 매매 상위 top 10 반환.
+     * intradayInvestorRankingCollector 비활성화(관심종목 구조 정리 전까지)로 신규 데이터가 없어, 오래된
+     * 데이터를 최신인 것처럼 계속 보여주지 않도록 조회 없이 항상 빈 값을 반환한다.
+     */
     private SnapshotResponse<IntradayInvestorSummaryItem> getIntradayTop(
             List<Market> markets, List<IntradayInvestor> investors, IntradayRanking ranking, AmtQty amtQty) {
-        record StockNet(String stockCode, String stockName, BigDecimal netAmount) {}
-
-        LocalDateTime latestSnapshotTime = intradayInvestorRankingSnapshotRepository
-                .findFirstByMarketTypeInAndInvestorInAndRankingTypeAndAmtQtyOrderBySnapshotTimeDesc(
-                        markets, investors, ranking, amtQty)
-                .map(IntradayInvestorRankingSnapshot::getSnapshotTime)
-                .orElse(null);
-        if (latestSnapshotTime == null) {
-            return SnapshotResponse.empty();
-        }
-
-        List<IntradayInvestorRankingSnapshot> snapshots =
-                intradayInvestorRankingSnapshotRepository
-                        .findByMarketTypeInAndInvestorInAndRankingTypeAndAmtQtyAndSnapshotTimeOrderByRankAsc(
-                                markets, investors, ranking, amtQty, latestSnapshotTime);
-
-        // investor=FOREIGN_COMBINED(외국인+외국계)처럼 같은 stockCode가 여러 row로 들어올 때 stockCode 기준 합산
-        Map<String, BigDecimal> netByStock = new HashMap<>();
-        Map<String, String> nameByStock = new HashMap<>();
-        snapshots.forEach(s -> {
-            netByStock.merge(s.getStockCode(), s.getNetBuyAmount(), BigDecimal::add);
-            nameByStock.putIfAbsent(s.getStockCode(), s.getStockName());
-        });
-
-        List<StockNet> netList = netByStock.entrySet().stream()
-                .map(e -> new StockNet(e.getKey(), nameByStock.get(e.getKey()), e.getValue()))
-                .toList();
-
-        // ranking=NET_SELL이면 정렬 방향 반전 + netBuyAmount 절댓값 변환
-        List<IntradayInvestorSummaryItem> items = netList.stream()
-                .sorted(Comparator.comparing(StockNet::netAmount, ranking.valueComparator()))
-                .limit(RANKING_LIMIT)
-                .map(s -> new IntradayInvestorSummaryItem(
-                        s.stockCode(), s.stockName(), ranking.normalize(s.netAmount()), latestSnapshotTime))
-                .toList();
-
-        return new SnapshotResponse<>(CollectionChecker.expectedSnapshotTime(), items);
+        // record StockNet(String stockCode, String stockName, BigDecimal netAmount) {}
+        //
+        // LocalDateTime latestSnapshotTime = intradayInvestorRankingSnapshotRepository
+        //         .findFirstByMarketTypeInAndInvestorInAndRankingTypeAndAmtQtyOrderBySnapshotTimeDesc(
+        //                 markets, investors, ranking, amtQty)
+        //         .map(IntradayInvestorRankingSnapshot::getSnapshotTime)
+        //         .orElse(null);
+        // if (latestSnapshotTime == null) {
+        //     return SnapshotResponse.empty();
+        // }
+        //
+        // List<IntradayInvestorRankingSnapshot> snapshots =
+        //         intradayInvestorRankingSnapshotRepository
+        //                 .findByMarketTypeInAndInvestorInAndRankingTypeAndAmtQtyAndSnapshotTimeOrderByRankAsc(
+        //                         markets, investors, ranking, amtQty, latestSnapshotTime);
+        //
+        // // investor=FOREIGN_COMBINED(외국인+외국계)처럼 같은 stockCode가 여러 row로 들어올 때 stockCode 기준 합산
+        // Map<String, BigDecimal> netByStock = new HashMap<>();
+        // Map<String, String> nameByStock = new HashMap<>();
+        // snapshots.forEach(s -> {
+        //     netByStock.merge(s.getStockCode(), s.getNetBuyAmount(), BigDecimal::add);
+        //     nameByStock.putIfAbsent(s.getStockCode(), s.getStockName());
+        // });
+        //
+        // List<StockNet> netList = netByStock.entrySet().stream()
+        //         .map(e -> new StockNet(e.getKey(), nameByStock.get(e.getKey()), e.getValue()))
+        //         .toList();
+        //
+        // // ranking=NET_SELL이면 정렬 방향 반전 + netBuyAmount 절댓값 변환
+        // List<IntradayInvestorSummaryItem> items = netList.stream()
+        //         .sorted(Comparator.comparing(StockNet::netAmount, ranking.valueComparator()))
+        //         .limit(RANKING_LIMIT)
+        //         .map(s -> new IntradayInvestorSummaryItem(
+        //                 s.stockCode(), s.stockName(), ranking.normalize(s.netAmount()), latestSnapshotTime))
+        //         .toList();
+        //
+        // return new SnapshotResponse<>(CollectionChecker.expectedSnapshotTime(), items);
+        return SnapshotResponse.empty();
     }
 
     /** 활성 종목 전체 반환 — 관심종목 등록 화면 자동완성용 */

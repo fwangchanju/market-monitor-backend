@@ -58,7 +58,7 @@ public class MarketController {
         return marketQueryService.getIndexContribution(market);
     }
 
-    // ── 종목 마스터 ───────────────────────────────────────────────────────
+    // ── 종목 정보 ───────────────────────────────────────────────────────
 
     /** 활성 종목 전체 반환 — 관심종목 등록 화면 진입 시 1회 호출, 프론트 캐시 후 자동완성 */
     @GetMapping("/stocks")

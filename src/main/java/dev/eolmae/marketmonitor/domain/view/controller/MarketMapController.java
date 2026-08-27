@@ -1,7 +1,9 @@
 package dev.eolmae.marketmonitor.domain.view.controller;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
+import dev.eolmae.marketmonitor.domain.marketmap.dto.MarketMapScaleResponse;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryService;
+import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapScaleService;
 import dev.eolmae.marketmonitor.domain.stock.service.MarketMapExcludedStockService;
 import dev.eolmae.marketmonitor.domain.view.dto.ExcludedStockItem;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
@@ -25,11 +27,17 @@ public class MarketMapController {
     private final MarketMapQueryService marketMapQueryService;
     private final MarketMapExcludedStockService marketMapExcludedStockService;
     private final MarketMapCategoryService marketMapCategoryService;
+    private final MarketMapScaleService marketMapScaleService;
 
     @GetMapping
     public SnapshotResponse<MarketMapCategoryNode> getMarketMap(
             @RequestParam Market market, @RequestParam boolean isCustom) {
         return isCustom ? marketMapQueryService.getCustomMarketMap(market) : marketMapQueryService.getDefaultMarketMap(market);
+    }
+
+    @GetMapping("/scale")
+    public MarketMapScaleResponse getScale() {
+        return marketMapScaleService.getScale();
     }
 
     @GetMapping("/excluded-stocks")

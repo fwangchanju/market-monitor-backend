@@ -3,7 +3,20 @@
 대화 중 반복 설명하기 번거로운 배경·맥락·의사결정을 기록하는 문서.
 새로운 중요한 맥락이 쌓이면 이 문서에 계속 추가한다.
 
----
+## 마켓맵 등락률 범례 커스텀 기능 (2026-08-27)
+
+마켓맵 종목 박스 색상(등락률 임계값별)을 사용자가 직접 구성할 수 있게 만드는 기능. 상세 설계(UX 플로우, 프론트 라이브 프리뷰, 보간 로직 등)는 market-monitor-frontend의 `docs/history.md` 같은 날짜 섹션 참고 — 프론트 위주 논의였고 엔티티 설계도 거기서 같이 정했음.
+
+**백엔드 구현 완료.** 최초 설계 초안엔 `side`(+/-) 필드가 있었으나, 최종적으로는 별도 필드 없이 `thresholdPercent`의 부호로만 side를 표현하는 쪽으로 정리됨(음수=하락/0=기준/양수=상승) — "side와 부호가 서로 다른 값을 가리키는" 상태 자체를 구조적으로 불가능하게 만들기 위함. `displayOrder`도 없음(`thresholdPercent`가 곧 정렬 기준).
+
+- **명명**: "Stop"이 아니라 "Threshold"로 통일(`MarketMapScaleThreshold` 엔티티, `market_map_scale_threshold` 테이블, `ScaleThresholdItem`/`ScaleThresholdRequest` DTO, `MarketMapScaleThresholdRepository`) — 초안 단계에서 "stop"(그라데이션 색상 정지점)이라는 이름을 썼었는데, 이 도메인에서 실제로 의미 있는 건 등락률 기준값이라 "threshold"가 더 정확함.
+- **테이블**: `market_map_scale_threshold`(`V2__add_market_map_scale_tables.sql`) — `threshold_percent NUMERIC(5,2)`(−30~30, `ScaleThresholdRequest`의 `@DecimalMin/@DecimalMax`로 검증), `color VARCHAR(20) NOT NULL`, `color_label VARCHAR(50)`(nullable — 프론트에서 톤을 아직 안 고른 "미지정" 행도 그대로 표현 가능해야 해서 필수값 아님), `created_at`/`updated_at`. KOSPI/KOSDAQ 구분 없이 앱 전체 단일 설정.
+- **API — 개별 CRUD로 설계(전체 교체 방식에서 전환)**: `GET /api/market-map/scale`(공개, `MarketMapController`에 추가, 응답은 `{ thresholds: [...] }`) / `POST /api/admin/market-map/scale`(단건 생성) / `PUT /api/admin/market-map/scale/{id}`(단건 수정) / `DELETE /api/admin/market-map/scale/{id}`(단건 삭제). 전부 `MarketMapScaleController`, 다른 `/api/admin/market-map/**` 컨트롤러들과 동일하게 경로 기반으로만 admin 게이팅(별도 `@PreAuthorize` 없음, 기존 컨벤션과 동일).
+  - **처음엔 "PUT으로 전체 배열을 통째로 교체"(delete-all-then-recreate) 방식으로 만들었다가 되짚어서 폐기함** — 삭제 하나 하려고 안 건드린 row까지 매번 다 지웠다 다시 만드는 게 낭비였고, 결정적으로 id를 프론트에 내려주는 순간 그 id가 다음 PUT마다 전부 새로 발급돼버려서 "id로 개별 삭제"가 애초에 불안정해짐. 그래서 `id` 있는 row는 그 row만 update, 없는(새로 만든) row만 insert하는 개별 CRUD로 전환.
+  - `MarketMapScaleService`: `getScale()`(id 포함해서 반환) / `createThreshold(request)` / `updateThreshold(id, request)` / `deleteThreshold(id)`(둘 다 없는 id면 `ErrorCode.SCALE_THRESHOLD_NOT_FOUND`로 `NotFoundException`). 엔티티에 `update(thresholdPercent, color, colorLabel)` 메서드 추가(다른 엔티티들의 `rename`/`tagVersion` 같은 의미 있는 mutator 패턴과 동일).
+  - **`threshold_percent`에 `UNIQUE` 제약 추가**(`uk_market_map_scale_threshold_percent`) — 세션 안에서 임계값이 겹치는 새 row들끼리는 여전히 프론트가 적용 직전에 마지막 값 우선으로 정리(중복 생성 방지)하지만, 세션과 무관한 기존 row와 우연히 겹치는 경우는 이제 DB/서비스 레벨에서 막는다. `createThreshold`/`updateThreshold`(자기 자신은 제외 — `existsByThresholdPercentAndIdNot`) 둘 다 저장 전에 `existsByThresholdPercent` 검사 후 겹치면 `ConflictException(SCALE_THRESHOLD_DUPLICATE)`(409). 굳이 sign enum을 되살릴 필요는 없었음 — `threshold_percent` 하나가 이미 부호+크기를 전부 담는 유일한 값이라 그 컬럼 하나에 UNIQUE만 걸면 충분.
+  - **`color`/`colorLabel` 검증도 함께 정리**: `color`는 자유 텍스트가 아니라 hex라서 `@Size(20자 이하)` 대신 `@Pattern("^#[0-9a-fA-F]{6}$")`로, `colorLabel`은 프론트 톤 프리셋 버튼(빨강/주황/노랑/초록/파랑/네이비/보라/회색)과 1:1 대응하는 `ColorLabel` enum(RED/ORANGE/YELLOW/GREEN/BLUE/NAVY/PURPLE/GRAY)으로 바꿔서, 임의 문자열이 들어가 프리셋 하이라이트 로직이 조용히 깨지는 걸 구조적으로 막음(컬럼명이 `color_label`이라 enum 타입명도 `ColorLabel`로 맞춤 — `ColorTone`으로 지었다가 컬럼명과 안 맞아서 수정). 다만 `color`(hex) 자체는 없애지 않았음 — 명도(lightness) 슬라이더로 같은 톤 안에서도 값이 계속 달라져서 `colorLabel`(어느 버튼을 눌렀나) 하나만으로는 최종 렌더 색을 못 구하기 때문.
+- 프론트 `MarketMapScaleThreshold`(zod) 스키마와 필드명 1:1 일치(`id`/`thresholdPercent`/`color`/`colorLabel`), `./gradlew compileJava`/`compileTestJava` 클린 확인.
 
 ## 예외 에스컬레이션(EscalateException/텔레그램 노티) 기준
 

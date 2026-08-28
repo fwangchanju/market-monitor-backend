@@ -3,7 +3,9 @@ package dev.eolmae.marketmonitor.domain.view.service;
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.enums.MarketValueTier;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategory;
+import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategoryChangeRateSnapshot;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapStockCategory;
+import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryChangeRateSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapStockCategoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.entity.SectorPriceSnapshot;
@@ -42,6 +44,7 @@ public class MarketMapQueryService {
     private final MarketMapExcludedStockRepository marketMapExcludedStockRepository;
     private final MarketMapCategoryRepository marketMapCategoryRepository;
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository;
+    private final MarketMapCategoryChangeRateSnapshotRepository marketMapCategoryChangeRateSnapshotRepository;
 
     /** 기본 마켓맵: stock_info 카테고리 그대로(override 없이) 기준, 자식 없는 1뎁스 노드로 감싸서 반환 (getCustomMarketMap과 응답 모양 통일) */
     public SnapshotResponse<MarketMapCategoryNode> getDefaultMarketMap(Market market) {
@@ -71,7 +74,7 @@ public class MarketMapQueryService {
                     BigDecimal totalMarketValue = items.stream()
                             .map(MarketMapItem::totalMarketValue)
                             .reduce(BigDecimal.ZERO, BigDecimal::add);
-                    return new MarketMapCategoryNode(NO_CATEGORY_ID, entry.getKey(), false, totalMarketValue, List.of(), items);
+                    return MarketMapCategoryNode.leaf(NO_CATEGORY_ID, entry.getKey(), totalMarketValue, items);
                 })
                 .toList();
 
@@ -87,6 +90,34 @@ public class MarketMapQueryService {
     }
 
     private SnapshotResponse<MarketMapCategoryNode> buildCustomMarketMap(Market market, LocalDateTime latestSnapshotTime) {
+        Map<Long, MarketMapCategoryChangeRateSnapshot> changeRateByCategoryId =
+                findLatestChangeRates(market, latestSnapshotTime);
+        List<MarketMapCategoryNode> tree = buildCategoryTree(market, latestSnapshotTime, changeRateByCategoryId);
+        return new SnapshotResponse<>(latestSnapshotTime, tree);
+    }
+
+    /**
+     * 카테고리 등락률 스냅샷 캡처(CollectionScheduler)용 원본 트리. 변화율 데코레이션은 필요 없어서(어차피
+     * 안 쓰임) buildCategoryTree만 노출한다. snapshotTime은 호출부(지수기여도 수집 직후)가 이미 들고 있는
+     * 값을 그대로 받는다 — "최신 시각"을 다시 조회하면, 이번 사이클에 특정 market 수집이 실패했을 때 예전
+     * 시각 데이터를 지금 시각 라벨로 잘못 저장하게 된다. 대신 정확히 이 snapshotTime에 데이터가 없으면 빈
+     * 트리를 반환해서 호출부가 스킵하도록 한다.
+     */
+    public List<MarketMapCategoryNode> getCustomMarketMapTree(Market market, LocalDateTime snapshotTime) {
+        if (sectorPriceSnapshotService.notExistsSnapshot(market, snapshotTime)) {
+            return List.of();
+        }
+        return buildCategoryTree(market, snapshotTime);
+    }
+
+    private List<MarketMapCategoryNode> buildCategoryTree(Market market, LocalDateTime latestSnapshotTime) {
+        return buildCategoryTree(market, latestSnapshotTime, Map.of());
+    }
+
+    private List<MarketMapCategoryNode> buildCategoryTree(
+            Market market,
+            LocalDateTime latestSnapshotTime,
+            Map<Long, MarketMapCategoryChangeRateSnapshot> changeRateByCategoryId) {
         List<StockInfo> candidates = filterCandidates(market);
         List<MarketMapCategory> categories = marketMapCategoryRepository.findAll();
         Map<Long, List<MarketMapCategory>> childrenByParentId = new HashMap<>();
@@ -109,30 +140,46 @@ public class MarketMapQueryService {
                                         stockInfo, priceMap.get(stockInfo.getStockCode()), stockCategoryMap),
                                 Collectors.toList())));
 
-        List<MarketMapCategoryNode> nodes = childrenByParentId.getOrDefault(NO_PARENT_KEY, List.of()).stream()
-                .map(category -> toCategoryNode(category, childrenByParentId, itemsByCategoryId))
+        return childrenByParentId.getOrDefault(NO_PARENT_KEY, List.of()).stream()
+                .map(category -> toCategoryNode(category, childrenByParentId, itemsByCategoryId, changeRateByCategoryId))
                 .toList();
+    }
 
-        return new SnapshotResponse<>(latestSnapshotTime, nodes);
+    /**
+     * 이 market의 정확히 latestSnapshotTime 시각 카테고리별 가중/산술평균 등락률 스냅샷 — "최신"을 따로
+     * 다시 조회하지 않고 가격 데이터와 정확히 같은 시각으로만 조회한다. 그 시각에 카테고리 스냅샷 캡처가
+     * 실패해서 없으면(가격 데이터는 있는데) 빈 맵(전부 null 처리됨) — 예전 시각 값을 조용히 섞어서 마치
+     * 지금 시각 값인 것처럼 보여주지 않는다.
+     */
+    private Map<Long, MarketMapCategoryChangeRateSnapshot> findLatestChangeRates(
+            Market market, LocalDateTime latestSnapshotTime) {
+        return marketMapCategoryChangeRateSnapshotRepository
+                .findByMarketTypeAndSnapshotTime(market, latestSnapshotTime)
+                .stream()
+                .collect(Collectors.toMap(MarketMapCategoryChangeRateSnapshot::getCategoryId, Function.identity()));
     }
 
     private MarketMapCategoryNode toCategoryNode(
             MarketMapCategory category,
             Map<Long, List<MarketMapCategory>> childrenByParentId,
-            Map<Long, List<MarketMapItem>> itemsByCategoryId) {
+            Map<Long, List<MarketMapItem>> itemsByCategoryId,
+            Map<Long, MarketMapCategoryChangeRateSnapshot> changeRateByCategoryId) {
         List<MarketMapCategoryNode> children = childrenByParentId.getOrDefault(category.getId(), List.of()).stream()
-                .map(child -> toCategoryNode(child, childrenByParentId, itemsByCategoryId))
+                .map(child -> toCategoryNode(child, childrenByParentId, itemsByCategoryId, changeRateByCategoryId))
                 .toList();
         List<MarketMapItem> items = itemsByCategoryId.getOrDefault(category.getId(), List.of());
         BigDecimal itemsValue =
                 items.stream().map(MarketMapItem::totalMarketValue).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal childrenValue =
                 children.stream().map(MarketMapCategoryNode::totalMarketValue).reduce(BigDecimal.ZERO, BigDecimal::add);
+        MarketMapCategoryChangeRateSnapshot changeRate = changeRateByCategoryId.get(category.getId());
         return new MarketMapCategoryNode(
                 category.getId(),
                 category.getName(),
                 category.isExcluded(),
                 itemsValue.add(childrenValue),
+                changeRate != null ? changeRate.getWeightedAvgChangeRate() : null,
+                changeRate != null ? changeRate.getSimpleAvgChangeRate() : null,
                 children,
                 items);
     }

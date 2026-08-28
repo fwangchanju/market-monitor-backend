@@ -64,6 +64,17 @@ CREATE TABLE market_map_stock_category (
     CONSTRAINT fk_market_map_stock_category_category FOREIGN KEY (category_id) REFERENCES market_map_category (id)
 );
 
+CREATE TABLE market_map_scale_threshold (
+    id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
+    threshold_percent NUMERIC(5,2) NOT NULL,
+    color VARCHAR(7) NOT NULL,
+    color_label VARCHAR(20),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_market_map_scale_threshold PRIMARY KEY (id),
+    CONSTRAINT uk_market_map_scale_threshold_percent UNIQUE (threshold_percent)
+);
+
 CREATE TABLE admin_token (
     token VARCHAR(64) NOT NULL,
     last_ip VARCHAR(45),
@@ -232,6 +243,19 @@ CREATE TABLE sector_price_snapshot (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_sector_price_snapshot PRIMARY KEY (id),
     CONSTRAINT uk_sector_price_snapshot UNIQUE (market_type, stock_code, exchange_type, snapshot_time)
+);
+
+CREATE TABLE market_map_category_change_rate_snapshot (
+    id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
+    market_type VARCHAR(20) NOT NULL,
+    category_id BIGINT NOT NULL,
+    snapshot_time TIMESTAMP NOT NULL,
+    weighted_avg_change_rate DECIMAL(9,4) NOT NULL,
+    simple_avg_change_rate DECIMAL(9,4) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_market_map_category_change_rate_snapshot PRIMARY KEY (id),
+    CONSTRAINT uk_market_map_category_change_rate_snapshot UNIQUE (market_type, category_id, snapshot_time),
+    CONSTRAINT fk_market_map_category_change_rate_snapshot_category FOREIGN KEY (category_id) REFERENCES market_map_category (id)
 );
 
 CREATE INDEX idx_market_overview_snapshot_time ON market_overview_snapshot (snapshot_time);

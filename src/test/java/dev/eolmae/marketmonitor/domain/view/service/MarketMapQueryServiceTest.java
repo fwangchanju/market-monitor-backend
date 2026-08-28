@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategory;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapStockCategory;
+import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryChangeRateSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapStockCategoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.entity.SectorPriceSnapshot;
@@ -39,6 +40,8 @@ class MarketMapQueryServiceTest {
             Mockito.mock(MarketMapCategoryRepository.class);
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository =
             Mockito.mock(MarketMapStockCategoryRepository.class);
+    private final MarketMapCategoryChangeRateSnapshotRepository marketMapCategoryChangeRateSnapshotRepository =
+            Mockito.mock(MarketMapCategoryChangeRateSnapshotRepository.class);
     private final SectorPriceSnapshotService sectorPriceSnapshotService =
             new SectorPriceSnapshotService(sectorPriceSnapshotRepository);
     private final MarketMapQueryService service = new MarketMapQueryService(
@@ -46,7 +49,8 @@ class MarketMapQueryServiceTest {
             sectorPriceSnapshotService,
             marketMapExcludedStockRepository,
             marketMapCategoryRepository,
-            marketMapStockCategoryRepository);
+            marketMapStockCategoryRepository,
+            marketMapCategoryChangeRateSnapshotRepository);
 
     @Test
     void getCustomMarketMap_트리집계와_카테고리명_매칭이_정확히_반영된다() {

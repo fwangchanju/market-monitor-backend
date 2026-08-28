@@ -55,14 +55,14 @@ public class IntradayInvestorRankingSnapshot {
     @Enumerated(EnumType.STRING)
     private AmtQty amtQty;
 
+    @Column(nullable = false, length = 20)
+    private String stockCode;
+
     @Column(nullable = false)
     private LocalDateTime snapshotTime;
 
     @Column(name = "rank_no", nullable = false)
     private int rank;
-
-    @Column(nullable = false, length = 20)
-    private String stockCode;
 
     @Column(nullable = false, length = 100)
     private String stockName;
@@ -98,9 +98,9 @@ public class IntradayInvestorRankingSnapshot {
         entity.investor = investor;
         entity.rankingType = rankingType;
         entity.amtQty = amtQty;
+        entity.stockCode = stockCode;
         entity.snapshotTime = snapshotTime;
         entity.rank = rank;
-        entity.stockCode = stockCode;
         entity.stockName = stockName;
         entity.netBuyAmount = netBuyAmount;
         entity.sellVolume = sellVolume;

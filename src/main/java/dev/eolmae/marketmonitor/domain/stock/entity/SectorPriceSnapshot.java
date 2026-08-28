@@ -34,15 +34,15 @@ public class SectorPriceSnapshot {
     @Enumerated(EnumType.STRING)
     private Market marketType;
 
-    @Column(nullable = false)
-    private LocalDateTime snapshotTime;
-
     @Column(nullable = false, length = 20)
     private String stockCode;
 
     @Column(nullable = false, length = 20)
     @Enumerated(EnumType.STRING)
     private ExchangeType exchangeType;
+
+    @Column(nullable = false)
+    private LocalDateTime snapshotTime;
 
     @Column(nullable = false, length = 100)
     private String stockName;
@@ -72,9 +72,9 @@ public class SectorPriceSnapshot {
             BigDecimal changeRate) {
         var entity = new SectorPriceSnapshot();
         entity.marketType = marketType;
-        entity.snapshotTime = snapshotTime;
         entity.stockCode = stockCode;
         entity.exchangeType = exchangeType;
+        entity.snapshotTime = snapshotTime;
         entity.stockName = stockName;
         entity.currentPrice = currentPrice;
         entity.changeValue = changeValue;

@@ -33,14 +33,14 @@ public class IndexContributionRankingSnapshot {
     @Enumerated(EnumType.STRING)
     private Market marketType;
 
+    @Column(nullable = false, length = 20)
+    private String stockCode;
+
     @Column(nullable = false)
     private LocalDateTime snapshotTime;
 
     @Column(name = "rank_no", nullable = false)
     private int rank;
-
-    @Column(nullable = false, length = 20)
-    private String stockCode;
 
     @Column(nullable = false, length = 100)
     private String stockName;
@@ -70,9 +70,9 @@ public class IndexContributionRankingSnapshot {
             BigDecimal priceChangeRate) {
         var entity = new IndexContributionRankingSnapshot();
         entity.marketType = marketType;
+        entity.stockCode = stockCode;
         entity.snapshotTime = snapshotTime;
         entity.rank = rank;
-        entity.stockCode = stockCode;
         entity.stockName = stockName;
         entity.marketCode = marketCode;
         entity.contributionScore = contributionScore;

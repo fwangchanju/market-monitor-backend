@@ -19,7 +19,7 @@ import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Slf4j
 @Component
@@ -33,15 +33,12 @@ public class SectorInvestorNetBuyCollector {
 
     private final KiwoomApiClient kiwoomApiClient;
     private final InvestorTradingSummarySnapshotRepository investorTradingSummarySnapshotRepository;
+    private final TransactionTemplate transactionTemplate;
 
-    @Transactional
+    // 마켓별로 독립된 트랜잭션. 하나 실패하면 예외를 그대로 던져(catch 안 함) 호출부가 한 곳에서만 escalate.
     public void collect(LocalDateTime snapshotTime) {
         for (Market market : Market.values()) {
-            try {
-                collectForMarket(market, snapshotTime);
-            } catch (Exception e) {
-                log.error("투자자별매매종합 수집 실패: market={}", market, e);
-            }
+            transactionTemplate.executeWithoutResult(status -> collectForMarket(market, snapshotTime));
         }
     }
 

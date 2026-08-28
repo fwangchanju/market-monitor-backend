@@ -35,7 +35,7 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Slf4j
 @Component
@@ -55,17 +55,15 @@ public class IndexContributionRankingCollector {
     private final MarketOverviewSnapshotRepository marketOverviewSnapshotRepository;
     private final SectorPriceSnapshotRepository sectorPriceSnapshotRepository;
     private final IndexContributionRankingSnapshotRepository indexContributionRankingSnapshotRepository;
+    private final TransactionTemplate transactionTemplate;
 
-    @Transactional
+    // 마켓별로 독립된 트랜잭션. 하나 실패하면 그대로 예외를 던져서(catch 안 함) 이후 마켓은 시도하지 않고,
+    // 호출부(CollectionScheduler.run())가 한 곳에서만 escalate한다.
     public void collect(LocalDateTime snapshotTime) {
         Map<String, StockInfo> stockInfoCache = stockInfoCacheService.getCache();
 
         for (Market market : Market.values()) {
-            try {
-                collectForMarket(market, stockInfoCache, snapshotTime);
-            } catch (Exception e) {
-                log.error("지수기여도랭킹 수집 실패: market={}", market, e);
-            }
+            transactionTemplate.executeWithoutResult(status -> collectForMarket(market, stockInfoCache, snapshotTime));
         }
     }
 

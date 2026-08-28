@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 // ka10014: 공매도추이요청
 // ka10014는 장 종료 후 확정되는 일별 데이터만 제공 — 장중 실시간 없음
@@ -33,18 +34,17 @@ public class ShortSellingTrendCollector {
     private final KiwoomApiClient kiwoomApiClient;
     private final ShortSellingDailyHistoryRepository shortSellingRepository;
     private final WatchStockCacheService watchStockCacheService;
+    private final TransactionTemplate transactionTemplate;
 
-    /** 스케줄러 호출 — 당일 확정 데이터 적재 (19:00 이후) */
-    @Transactional
+    /**
+     * 스케줄러 호출 — 당일 확정 데이터 적재 (19:00 이후). 종목별로 독립된 트랜잭션. 하나 실패하면 예외를
+     * 그대로 던져(catch 안 함) 호출부가 한 곳에서만 escalate.
+     */
     public void collect(LocalDateTime snapshotTime) {
         LocalDate snapshotDate = snapshotTime.toLocalDate();
         List<WatchStock> watchStocks = watchStockCacheService.getCache();
         for (WatchStock watchStock : watchStocks) {
-            try {
-                collectForStock(watchStock, snapshotDate);
-            } catch (Exception e) {
-                log.error("공매도 수집 실패: stockCode={}", watchStock.getStockCode(), e);
-            }
+            transactionTemplate.executeWithoutResult(status -> collectForStock(watchStock, snapshotDate));
         }
     }
 

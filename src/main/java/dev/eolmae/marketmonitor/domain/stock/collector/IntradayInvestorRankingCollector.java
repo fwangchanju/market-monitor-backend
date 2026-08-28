@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Slf4j
 @Component
@@ -26,17 +26,16 @@ public class IntradayInvestorRankingCollector {
 
     private final KiwoomApiClient kiwoomApiClient;
     private final IntradayInvestorRankingSnapshotRepository repository;
+    private final TransactionTemplate transactionTemplate;
 
-    @Transactional
+    // 조합(market × investor × ranking)별로 독립된 트랜잭션. 하나 실패하면 예외를 그대로 던져(catch 안 함)
+    // 호출부가 한 곳에서만 escalate.
     public void collect(LocalDateTime snapshotTime) {
         for (Market market : Market.values()) {
             for (IntradayInvestor investor : IntradayInvestor.values()) {
                 for (IntradayRanking ranking : IntradayRanking.values()) {
-                    try {
-                        collectForCombination(market, investor, ranking, snapshotTime);
-                    } catch (Exception e) {
-                        log.error("장중투자자랭킹 수집 실패: market={}, investor={}, ranking={}", market, investor, ranking, e);
-                    }
+                    transactionTemplate.executeWithoutResult(
+                            status -> collectForCombination(market, investor, ranking, snapshotTime));
                 }
             }
         }

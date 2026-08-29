@@ -1,12 +1,12 @@
 package dev.eolmae.marketmonitor.domain.marketmap.service;
 
-import dev.eolmae.marketmonitor.common.enums.MarketValueTier;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.NotFoundException;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.BulkAssignResponse;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.StockCategoryListItem;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategory;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapStockCategory;
+import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketValueTierThreshold;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapStockCategoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.entity.SectorPriceSnapshot;
@@ -37,6 +37,7 @@ public class MarketMapStockCategoryService {
     private final MarketMapCategoryRepository marketMapCategoryRepository;
     private final StockInfoCacheService stockInfoCacheService;
     private final SectorPriceSnapshotService sectorPriceSnapshotService;
+    private final MarketValueTierThresholdService marketValueTierThresholdService;
 
     public void assign(String stockCode, Long categoryId) {
         if (!marketMapCategoryRepository.existsById(categoryId)) {
@@ -83,11 +84,16 @@ public class MarketMapStockCategoryService {
                 .collect(Collectors.toMap(MarketMapStockCategory::getStockCode, Function.identity()));
         Map<String, SectorPriceSnapshot> latestPriceByStockCode =
                 sectorPriceSnapshotService.findLatestPriceByStockCode();
+        List<MarketValueTierThreshold> sortedTiers = marketValueTierThresholdService.findAllSortedAscending();
 
         List<StockCategoryListItem> items = stockInfoCacheService.getCache().values().stream()
                 .filter(StockInfo::isActiveAndOrdinary)
                 .map(stockInfo -> toStockCategoryListItem(
-                        stockInfo, stockCategoryByStockCode.get(stockInfo.getStockCode()), categoryById, latestPriceByStockCode))
+                        stockInfo,
+                        stockCategoryByStockCode.get(stockInfo.getStockCode()),
+                        categoryById,
+                        latestPriceByStockCode,
+                        sortedTiers))
                 .toList();
 
         LocalDateTime snapshotTime = latestPriceByStockCode.values().stream()
@@ -101,16 +107,17 @@ public class MarketMapStockCategoryService {
             StockInfo stockInfo,
             MarketMapStockCategory stockCategory,
             Map<Long, MarketMapCategory> categoryById,
-            Map<String, SectorPriceSnapshot> latestPriceByStockCode) {
+            Map<String, SectorPriceSnapshot> latestPriceByStockCode,
+            List<MarketValueTierThreshold> sortedTiers) {
         MarketMapCategory category = categoryById.get(stockCategory.getCategoryId());
         MarketMapCategory parent = category.hasNoParent() ? null : categoryById.get(category.getParentId());
 
         SectorPriceSnapshot priceSnapshot = latestPriceByStockCode.get(stockInfo.getStockCode());
         BigDecimal totalMarketValue = null;
-        MarketValueTier marketValueTier = null;
+        String marketValueTier = null;
         if (priceSnapshot != null) {
             totalMarketValue = priceSnapshot.getCurrentPrice().multiply(BigDecimal.valueOf(stockInfo.getListCount()));
-            marketValueTier = MarketValueTier.from(totalMarketValue);
+            marketValueTier = marketValueTierThresholdService.resolveTier(sortedTiers, totalMarketValue);
         }
 
         return new StockCategoryListItem(

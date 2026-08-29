@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 // ka90003: 프로그램순매수상위50요청 — 코스피/코스닥 × 순매수/순매도 × 금액만 = 4회 호출/사이클
 @Slf4j
@@ -27,16 +27,13 @@ public class ProgramNetBuyRankingCollector {
 
     private final KiwoomApiClient kiwoomApiClient;
     private final ProgramTradingRankingSnapshotRepository rankingRepository;
+    private final TransactionTemplate transactionTemplate;
 
-    @Transactional
+    // 조합(market × ranking)별로 독립된 트랜잭션. 하나 실패하면 예외를 그대로 던져(catch 안 함) 호출부가 한 곳에서만 escalate.
     public void collect(LocalDateTime snapshotTime) {
         for (Market market : Market.values()) {
             for (ProgramRanking ranking : ProgramRanking.values()) {
-                try {
-                    collectForCombination(market, ranking, snapshotTime);
-                } catch (Exception e) {
-                    log.error("프로그램매매 랭킹 수집 실패: market={}, ranking={}", market, ranking, e);
-                }
+                transactionTemplate.executeWithoutResult(status -> collectForCombination(market, ranking, snapshotTime));
             }
         }
     }

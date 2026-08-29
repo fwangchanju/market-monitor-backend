@@ -46,15 +46,15 @@ public class ProgramTradingRankingSnapshot {
     @Enumerated(EnumType.STRING)
     private ProgramRanking rankingType;
 
-    @Column(nullable = false)
-    private LocalDateTime snapshotTime;
-
     @Column(nullable = false, length = 20)
     private String stockCode;
 
     @Column(nullable = false, length = 20)
     @Enumerated(EnumType.STRING)
     private ExchangeType exchangeType;
+
+    @Column(nullable = false)
+    private LocalDateTime snapshotTime;
 
     @Column(nullable = false, length = 100)
     private String stockName;
@@ -88,9 +88,9 @@ public class ProgramTradingRankingSnapshot {
         entity.marketType = marketType;
         entity.amtQty = amtQty;
         entity.rankingType = rankingType;
-        entity.snapshotTime = snapshotTime;
         entity.stockCode = stockCode;
         entity.exchangeType = exchangeType;
+        entity.snapshotTime = snapshotTime;
         entity.stockName = stockName;
         entity.programBuyAmount = programBuyAmount;
         entity.programSellAmount = programSellAmount;

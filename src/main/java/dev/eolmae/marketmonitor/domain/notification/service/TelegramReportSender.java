@@ -10,7 +10,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 // 텔레그램으로 캡처 이미지+텍스트를 발송하는 공통 흐름. 새 발송 양식이 필요하면 이 클래스를 상속해서
-// target()/buildText()만 구현하면 된다.
+// target()/buildText()만 구현하면 된다. 발송 여부(발송 주기 게이팅, 데이터 존재 여부 등) 판단은 호출부
+// (CollectionScheduler) 책임 — 여기선 호출되면 무조건 캡처+발송한다.
 @Slf4j
 @RequiredArgsConstructor
 public abstract class TelegramReportSender {
@@ -23,21 +24,7 @@ public abstract class TelegramReportSender {
 
     protected abstract String buildText(LocalDateTime dataTime);
 
-    protected boolean isNotSendTime(LocalDateTime snapshotTime) {
-        return snapshotTime.getMinute() != telegramProperties.sendMinute();
-    }
-
-    public void send(LocalDateTime snapshotTime) {
-        send(snapshotTime, snapshotTime);
-    }
-
-    // snapshotTime: 발송 여부 판단 기준(실제 시각). dataTime: 캡션에 찍을 데이터 기준 시각 — 마감 이후엔
-    // 수집이 스킵되어 실제 시각과 달라질 수 있어(예: 20:10에 발송되지만 데이터는 20:00 기준), 둘을 분리했다.
-    public void send(LocalDateTime snapshotTime, LocalDateTime dataTime) {
-        if (isNotSendTime(snapshotTime)) {
-            return;
-        }
-
+    public void send(LocalDateTime dataTime) {
         RenderTarget target = target();
         List<byte[]> images = screenshotClient.capture(target.path(), target.selector());
         byte[] combinedImage = ImageStitcher.stitchVertically(images);

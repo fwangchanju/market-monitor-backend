@@ -20,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 // ka90013: 종목일별프로그램매매추이
 // 각 틱은 해당 날짜의 일별 합계 → KRX[date] + NXT[date] 합산 저장
@@ -33,17 +34,13 @@ public class ProgramTradeDailyCollector {
     private final KiwoomApiClient kiwoomApiClient;
     private final ProgramTradingDailyHistoryRepository dailyHistoryRepository;
     private final WatchStockCacheService watchStockCacheService;
+    private final TransactionTemplate transactionTemplate;
 
-    /** 스케줄러 호출 */
-    @Transactional
+    /** 스케줄러 호출. 종목별로 독립된 트랜잭션. 하나 실패하면 예외를 그대로 던져(catch 안 함) 호출부가 한 곳에서만 escalate. */
     public void collect() {
         List<WatchStock> watchStocks = watchStockCacheService.getCache();
         for (WatchStock watchStock : watchStocks) {
-            try {
-                collectForStock(watchStock);
-            } catch (Exception e) {
-                log.error("프로그램매매 일별이력 수집 실패: stockCode={}", watchStock.getStockCode(), e);
-            }
+            transactionTemplate.executeWithoutResult(status -> collectForStock(watchStock));
         }
     }
 

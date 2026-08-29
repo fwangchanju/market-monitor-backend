@@ -27,6 +27,14 @@ public class SectorPriceSnapshotService {
                 .map(SectorPriceSnapshot::getSnapshotTime);
     }
 
+    public boolean existsSnapshot(Market market, LocalDateTime snapshotTime) {
+        return sectorPriceSnapshotRepository.existsByMarketTypeAndSnapshotTime(market, snapshotTime);
+    }
+
+    public boolean notExistsSnapshot(Market market, LocalDateTime snapshotTime) {
+        return !existsSnapshot(market, snapshotTime);
+    }
+
     public Map<String, SectorPriceSnapshot> findPriceByStockCode(Market market, LocalDateTime snapshotTime) {
         return sectorPriceSnapshotRepository.findByMarketTypeAndSnapshotTime(market, snapshotTime).stream()
                 .collect(Collectors.toMap(SectorPriceSnapshot::getStockCode, Function.identity()));

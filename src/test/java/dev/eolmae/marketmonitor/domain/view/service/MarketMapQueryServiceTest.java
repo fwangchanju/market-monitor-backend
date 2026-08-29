@@ -6,9 +6,10 @@ import static org.mockito.Mockito.when;
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategory;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapStockCategory;
-import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryChangeRateSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapStockCategoryRepository;
+import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryChangeRateSnapshotService;
+import dev.eolmae.marketmonitor.domain.marketmap.service.MarketValueTierThresholdService;
 import dev.eolmae.marketmonitor.domain.stock.entity.SectorPriceSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.enums.ExchangeType;
@@ -40,8 +41,10 @@ class MarketMapQueryServiceTest {
             Mockito.mock(MarketMapCategoryRepository.class);
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository =
             Mockito.mock(MarketMapStockCategoryRepository.class);
-    private final MarketMapCategoryChangeRateSnapshotRepository marketMapCategoryChangeRateSnapshotRepository =
-            Mockito.mock(MarketMapCategoryChangeRateSnapshotRepository.class);
+    private final MarketMapCategoryChangeRateSnapshotService marketMapCategoryChangeRateSnapshotService =
+            Mockito.mock(MarketMapCategoryChangeRateSnapshotService.class);
+    private final MarketValueTierThresholdService marketValueTierThresholdService =
+            Mockito.mock(MarketValueTierThresholdService.class);
     private final SectorPriceSnapshotService sectorPriceSnapshotService =
             new SectorPriceSnapshotService(sectorPriceSnapshotRepository);
     private final MarketMapQueryService service = new MarketMapQueryService(
@@ -50,7 +53,8 @@ class MarketMapQueryServiceTest {
             marketMapExcludedStockRepository,
             marketMapCategoryRepository,
             marketMapStockCategoryRepository,
-            marketMapCategoryChangeRateSnapshotRepository);
+            marketMapCategoryChangeRateSnapshotService,
+            marketValueTierThresholdService);
 
     @Test
     void getCustomMarketMap_트리집계와_카테고리명_매칭이_정확히_반영된다() {

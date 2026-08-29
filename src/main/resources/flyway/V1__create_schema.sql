@@ -245,17 +245,38 @@ CREATE TABLE sector_price_snapshot (
     CONSTRAINT uk_sector_price_snapshot UNIQUE (market_type, stock_code, exchange_type, snapshot_time)
 );
 
+CREATE TABLE market_value_tier_threshold (
+    id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
+    label VARCHAR(50) NOT NULL,
+    threshold_value BIGINT NOT NULL,
+    is_excluded_by_default BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_market_value_tier_threshold PRIMARY KEY (id),
+    CONSTRAINT uk_market_value_tier_threshold_label UNIQUE (label)
+);
+
+-- 카테고리(하위 재귀 포함) × 시가총액 구간별 등락률 원시 합계. 이미 나눠진 평균이 아니라 분자/분모를
+-- 그대로 저장 — 여러 구간을 조합해 가중/산술평균을 낼 때(예: 중형주 제외) 나눠진 값끼리 다시 평균내면
+-- 틀리기 때문에, 조회 시점에 필요한 구간들의 분자/분모를 합산한 뒤 마지막에 한 번만 나눈다.
 CREATE TABLE market_map_category_change_rate_snapshot (
     id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
     market_type VARCHAR(20) NOT NULL,
     category_id BIGINT NOT NULL,
+    market_value_tier_id BIGINT NOT NULL,
     snapshot_time TIMESTAMP NOT NULL,
-    weighted_avg_change_rate DECIMAL(9,4) NOT NULL,
-    simple_avg_change_rate DECIMAL(9,4) NOT NULL,
+    weighted_sum DECIMAL(30,4) NOT NULL,
+    total_value DECIMAL(30,4) NOT NULL,
+    simple_sum DECIMAL(19,4) NOT NULL,
+    item_count INT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_market_map_category_change_rate_snapshot PRIMARY KEY (id),
-    CONSTRAINT uk_market_map_category_change_rate_snapshot UNIQUE (market_type, category_id, snapshot_time),
-    CONSTRAINT fk_market_map_category_change_rate_snapshot_category FOREIGN KEY (category_id) REFERENCES market_map_category (id)
+    CONSTRAINT uk_market_map_category_change_rate_snapshot
+        UNIQUE (market_type, category_id, market_value_tier_id, snapshot_time),
+    CONSTRAINT fk_market_map_category_change_rate_snapshot_category
+        FOREIGN KEY (category_id) REFERENCES market_map_category (id),
+    CONSTRAINT fk_market_map_category_change_rate_snapshot_tier
+        FOREIGN KEY (market_value_tier_id) REFERENCES market_value_tier_threshold (id)
 );
 
 CREATE INDEX idx_market_overview_snapshot_time ON market_overview_snapshot (snapshot_time);

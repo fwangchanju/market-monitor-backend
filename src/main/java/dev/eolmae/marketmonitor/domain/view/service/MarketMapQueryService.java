@@ -1,18 +1,19 @@
 package dev.eolmae.marketmonitor.domain.view.service;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
-import dev.eolmae.marketmonitor.common.enums.MarketValueTier;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategory;
-import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategoryChangeRateSnapshot;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapStockCategory;
-import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryChangeRateSnapshotRepository;
+import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketValueTierThreshold;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapStockCategoryRepository;
+import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryChangeRateSnapshotService;
+import dev.eolmae.marketmonitor.domain.marketmap.service.MarketValueTierThresholdService;
 import dev.eolmae.marketmonitor.domain.stock.entity.SectorPriceSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketMapExcludedStockRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceSnapshotService;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
+import dev.eolmae.marketmonitor.domain.view.dto.CategoryTierBreakdown;
 import dev.eolmae.marketmonitor.domain.view.dto.ExcludedStockItem;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapItem;
@@ -44,7 +45,8 @@ public class MarketMapQueryService {
     private final MarketMapExcludedStockRepository marketMapExcludedStockRepository;
     private final MarketMapCategoryRepository marketMapCategoryRepository;
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository;
-    private final MarketMapCategoryChangeRateSnapshotRepository marketMapCategoryChangeRateSnapshotRepository;
+    private final MarketMapCategoryChangeRateSnapshotService marketMapCategoryChangeRateSnapshotService;
+    private final MarketValueTierThresholdService marketValueTierThresholdService;
 
     /** 기본 마켓맵: stock_info 카테고리 그대로(override 없이) 기준, 자식 없는 1뎁스 노드로 감싸서 반환 (getCustomMarketMap과 응답 모양 통일) */
     public SnapshotResponse<MarketMapCategoryNode> getDefaultMarketMap(Market market) {
@@ -59,13 +61,14 @@ public class MarketMapQueryService {
         List<StockInfo> candidates = filterCandidates(market);
         Map<String, SectorPriceSnapshot> priceMap =
                 sectorPriceSnapshotService.findPriceByStockCode(market, latestSnapshotTime);
+        List<MarketValueTierThreshold> sortedTiers = marketValueTierThresholdService.findAllSortedAscending();
 
         Map<String, List<MarketMapItem>> grouped = candidates.stream()
                 .filter(stockInfo -> priceMap.containsKey(stockInfo.getStockCode()))
                 .collect(Collectors.groupingBy(
                         stockInfo -> normalizeCategoryName(stockInfo.getCategoryName()),
                         Collectors.mapping(
-                                stockInfo -> toMarketMapItem(stockInfo, priceMap.get(stockInfo.getStockCode())),
+                                stockInfo -> toMarketMapItem(stockInfo, priceMap.get(stockInfo.getStockCode()), sortedTiers),
                                 Collectors.toList())));
 
         List<MarketMapCategoryNode> nodes = grouped.entrySet().stream()
@@ -90,9 +93,9 @@ public class MarketMapQueryService {
     }
 
     private SnapshotResponse<MarketMapCategoryNode> buildCustomMarketMap(Market market, LocalDateTime latestSnapshotTime) {
-        Map<Long, MarketMapCategoryChangeRateSnapshot> changeRateByCategoryId =
-                findLatestChangeRates(market, latestSnapshotTime);
-        List<MarketMapCategoryNode> tree = buildCategoryTree(market, latestSnapshotTime, changeRateByCategoryId);
+        Map<Long, List<CategoryTierBreakdown>> tierBreakdownByCategoryId =
+                marketMapCategoryChangeRateSnapshotService.findTierBreakdownsByCategoryId(market, latestSnapshotTime);
+        List<MarketMapCategoryNode> tree = buildCategoryTree(market, latestSnapshotTime, tierBreakdownByCategoryId);
         return new SnapshotResponse<>(latestSnapshotTime, tree);
     }
 
@@ -117,7 +120,7 @@ public class MarketMapQueryService {
     private List<MarketMapCategoryNode> buildCategoryTree(
             Market market,
             LocalDateTime latestSnapshotTime,
-            Map<Long, MarketMapCategoryChangeRateSnapshot> changeRateByCategoryId) {
+            Map<Long, List<CategoryTierBreakdown>> tierBreakdownByCategoryId) {
         List<StockInfo> candidates = filterCandidates(market);
         List<MarketMapCategory> categories = marketMapCategoryRepository.findAll();
         Map<Long, List<MarketMapCategory>> childrenByParentId = new HashMap<>();
@@ -130,6 +133,7 @@ public class MarketMapQueryService {
         Map<String, MarketMapStockCategory> stockCategoryMap = findStockCategoryMap();
         Map<String, SectorPriceSnapshot> priceMap =
                 sectorPriceSnapshotService.findPriceByStockCode(market, latestSnapshotTime);
+        List<MarketValueTierThreshold> sortedTiers = marketValueTierThresholdService.findAllSortedAscending();
 
         Map<Long, List<MarketMapItem>> itemsByCategoryId = candidates.stream()
                 .filter(stockInfo -> priceMap.containsKey(stockInfo.getStockCode()))
@@ -137,49 +141,34 @@ public class MarketMapQueryService {
                         stockInfo -> stockCategoryMap.get(stockInfo.getStockCode()).getCategoryId(),
                         Collectors.mapping(
                                 stockInfo -> toMarketMapItem(
-                                        stockInfo, priceMap.get(stockInfo.getStockCode()), stockCategoryMap),
+                                        stockInfo, priceMap.get(stockInfo.getStockCode()), stockCategoryMap, sortedTiers),
                                 Collectors.toList())));
 
         return childrenByParentId.getOrDefault(NO_PARENT_KEY, List.of()).stream()
-                .map(category -> toCategoryNode(category, childrenByParentId, itemsByCategoryId, changeRateByCategoryId))
+                .map(category -> toCategoryNode(category, childrenByParentId, itemsByCategoryId, tierBreakdownByCategoryId))
                 .toList();
-    }
-
-    /**
-     * 이 market의 정확히 latestSnapshotTime 시각 카테고리별 가중/산술평균 등락률 스냅샷 — "최신"을 따로
-     * 다시 조회하지 않고 가격 데이터와 정확히 같은 시각으로만 조회한다. 그 시각에 카테고리 스냅샷 캡처가
-     * 실패해서 없으면(가격 데이터는 있는데) 빈 맵(전부 null 처리됨) — 예전 시각 값을 조용히 섞어서 마치
-     * 지금 시각 값인 것처럼 보여주지 않는다.
-     */
-    private Map<Long, MarketMapCategoryChangeRateSnapshot> findLatestChangeRates(
-            Market market, LocalDateTime latestSnapshotTime) {
-        return marketMapCategoryChangeRateSnapshotRepository
-                .findByMarketTypeAndSnapshotTime(market, latestSnapshotTime)
-                .stream()
-                .collect(Collectors.toMap(MarketMapCategoryChangeRateSnapshot::getCategoryId, Function.identity()));
     }
 
     private MarketMapCategoryNode toCategoryNode(
             MarketMapCategory category,
             Map<Long, List<MarketMapCategory>> childrenByParentId,
             Map<Long, List<MarketMapItem>> itemsByCategoryId,
-            Map<Long, MarketMapCategoryChangeRateSnapshot> changeRateByCategoryId) {
+            Map<Long, List<CategoryTierBreakdown>> tierBreakdownByCategoryId) {
         List<MarketMapCategoryNode> children = childrenByParentId.getOrDefault(category.getId(), List.of()).stream()
-                .map(child -> toCategoryNode(child, childrenByParentId, itemsByCategoryId, changeRateByCategoryId))
+                .map(child -> toCategoryNode(child, childrenByParentId, itemsByCategoryId, tierBreakdownByCategoryId))
                 .toList();
         List<MarketMapItem> items = itemsByCategoryId.getOrDefault(category.getId(), List.of());
         BigDecimal itemsValue =
                 items.stream().map(MarketMapItem::totalMarketValue).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal childrenValue =
                 children.stream().map(MarketMapCategoryNode::totalMarketValue).reduce(BigDecimal.ZERO, BigDecimal::add);
-        MarketMapCategoryChangeRateSnapshot changeRate = changeRateByCategoryId.get(category.getId());
+        List<CategoryTierBreakdown> tierBreakdown = tierBreakdownByCategoryId.getOrDefault(category.getId(), List.of());
         return new MarketMapCategoryNode(
                 category.getId(),
                 category.getName(),
                 category.isExcluded(),
                 itemsValue.add(childrenValue),
-                changeRate != null ? changeRate.getWeightedAvgChangeRate() : null,
-                changeRate != null ? changeRate.getSimpleAvgChangeRate() : null,
+                tierBreakdown,
                 children,
                 items);
     }
@@ -204,17 +193,25 @@ public class MarketMapQueryService {
     }
 
     /** 기본 마켓맵용: override 없이 stock_info 종목명 그대로 */
-    private MarketMapItem toMarketMapItem(StockInfo stockInfo, SectorPriceSnapshot priceSnapshot) {
-        return toMarketMapItem(stockInfo, priceSnapshot, stockInfo.getStockName());
+    private MarketMapItem toMarketMapItem(
+            StockInfo stockInfo, SectorPriceSnapshot priceSnapshot, List<MarketValueTierThreshold> sortedTiers) {
+        return toMarketMapItem(stockInfo, priceSnapshot, stockInfo.getStockName(), sortedTiers);
     }
 
     /** 커스텀 마켓맵용: market_map_stock_category에 alias가 있으면 그걸로 종목명 대체 */
     private MarketMapItem toMarketMapItem(
-            StockInfo stockInfo, SectorPriceSnapshot priceSnapshot, Map<String, MarketMapStockCategory> stockCategoryMap) {
-        return toMarketMapItem(stockInfo, priceSnapshot, resolveDisplayName(stockInfo, stockCategoryMap));
+            StockInfo stockInfo,
+            SectorPriceSnapshot priceSnapshot,
+            Map<String, MarketMapStockCategory> stockCategoryMap,
+            List<MarketValueTierThreshold> sortedTiers) {
+        return toMarketMapItem(stockInfo, priceSnapshot, resolveDisplayName(stockInfo, stockCategoryMap), sortedTiers);
     }
 
-    private MarketMapItem toMarketMapItem(StockInfo stockInfo, SectorPriceSnapshot priceSnapshot, String displayName) {
+    private MarketMapItem toMarketMapItem(
+            StockInfo stockInfo,
+            SectorPriceSnapshot priceSnapshot,
+            String displayName,
+            List<MarketValueTierThreshold> sortedTiers) {
         BigDecimal currentPrice = priceSnapshot.getCurrentPrice();
         BigDecimal changeRate = priceSnapshot.getChangeRate();
         BigDecimal totalMarketValue = currentPrice.multiply(BigDecimal.valueOf(stockInfo.getListCount()));
@@ -225,7 +222,7 @@ public class MarketMapQueryService {
                 currentPrice,
                 stockInfo.getLastPrice(),
                 totalMarketValue,
-                MarketValueTier.from(totalMarketValue),
+                marketValueTierThresholdService.resolveTier(sortedTiers, totalMarketValue),
                 changeRate,
                 priceSnapshot.getSnapshotTime());
     }

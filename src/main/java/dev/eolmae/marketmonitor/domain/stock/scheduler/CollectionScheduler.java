@@ -104,7 +104,7 @@ public class CollectionScheduler {
         if (snapshotTime.getMinute() == telegramProperties.sendMinute()) {
             if (kospiCollected) {
                 run("마켓맵텔레그램발송", () -> marketMapTelegramReportSender.send(dataTime));
-                run("카테고리랭킹텔레그램발송", () -> marketMapCategoryRankingTelegramReportSender.send(dataTime));
+//                run("카테고리랭킹텔레그램발송", () -> marketMapCategoryRankingTelegramReportSender.send(dataTime));
             } else {
                 run("데이터수집실패알림", () -> telegramCollectionFailureNotifier.notify(dataTime));
             }

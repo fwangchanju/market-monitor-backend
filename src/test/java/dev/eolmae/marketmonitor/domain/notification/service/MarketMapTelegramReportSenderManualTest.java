@@ -1,5 +1,6 @@
 package dev.eolmae.marketmonitor.domain.notification.service;
 
+import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.domain.notification.client.TelegramClient;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
 import dev.eolmae.marketmonitor.domain.renderer.client.ScreenshotClient;
@@ -29,6 +30,6 @@ class MarketMapTelegramReportSenderManualTest {
 
     @Test
     void sendsMarketMapImageToTelegram() {
-        sender.send(LocalDateTime.now());
+        sender.send(LocalDateTime.now(), Market.KOSPI);
     }
 }

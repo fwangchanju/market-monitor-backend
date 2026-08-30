@@ -29,7 +29,6 @@ import org.springframework.stereotype.Component;
 @Component
 public class MarketMapCategoryRankingTelegramReportSender extends TelegramReportSender {
 
-    private static final Market MARKET = Market.KOSPI;
     private static final int BEFORE_MINUTES = 60;
     private static final int TOP_N = 3;
 
@@ -56,9 +55,9 @@ public class MarketMapCategoryRankingTelegramReportSender extends TelegramReport
     }
 
     @Override
-    protected String buildText(LocalDateTime dataTime) {
+    protected String buildText(LocalDateTime dataTime, Market market) {
         SnapshotResponse<CategoryChangeRateItem> ranking =
-                marketMapCategoryChangeRateSnapshotService.findRanking(MARKET, dataTime, BEFORE_MINUTES);
+                marketMapCategoryChangeRateSnapshotService.findRanking(market, dataTime, BEFORE_MINUTES);
 
         Map<Long, String> categoryNameById = marketMapCategoryRepository.findAll().stream()
                 .collect(Collectors.toMap(MarketMapCategory::getId, MarketMapCategory::getName));
@@ -83,9 +82,9 @@ public class MarketMapCategoryRankingTelegramReportSender extends TelegramReport
                 .limit(TOP_N)
                 .toList();
 
-        StringBuilder text = new StringBuilder("CUSTOM KOSPI INDUSTRY\n")
+        StringBuilder text = new StringBuilder(market + " Custom Sector\n")
                 .append(ranking.snapshotTime().format(DateTimePattern.DATETIME_MINUTE_WITH_WEEKDAY.formatter()))
-                .append(" (5분 간격)\n");
+                .append("\n");
 
         String rankingLines = IntStream.range(0, top.size())
                 .mapToObj(i -> {

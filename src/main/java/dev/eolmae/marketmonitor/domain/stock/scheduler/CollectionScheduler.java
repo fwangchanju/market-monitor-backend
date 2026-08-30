@@ -102,11 +102,24 @@ public class CollectionScheduler {
         LocalDateTime dataTime = shouldCollect ? snapshotTime : LocalDateTime.of(snapshotTime.toLocalDate(), LocalTime.of(endHour, 0));
 
         if (snapshotTime.getMinute() == telegramProperties.sendMinute()) {
-            if (kospiCollected) {
-                run("마켓맵텔레그램발송", () -> marketMapTelegramReportSender.send(dataTime));
-//                run("카테고리랭킹텔레그램발송", () -> marketMapCategoryRankingTelegramReportSender.send(dataTime));
-            } else {
+            if (!kospiCollected) {
                 run("데이터수집실패알림", () -> telegramCollectionFailureNotifier.notify(dataTime));
+            }
+
+            // 코스닥은 옵션 — 이번 사이클에 수집 실패했어도 코스피 발송/실패알림 어느 쪽에도 영향을 주지 않고
+            // 그냥 코스닥 발송만 조용히 스킵한다. 발송 순서는 맵(KOSPI→KOSDAQ) 다음 섹터(KOSPI→KOSDAQ).
+            boolean kosdaqCollected = sectorPriceSnapshotService.existsSnapshot(Market.KOSDAQ, snapshotTime);
+            if (kospiCollected) {
+                run("마켓맵텔레그램발송(KOSPI)", () -> marketMapTelegramReportSender.send(dataTime, Market.KOSPI));
+            }
+            if (kosdaqCollected) {
+                run("마켓맵텔레그램발송(KOSDAQ)", () -> marketMapTelegramReportSender.send(dataTime, Market.KOSDAQ));
+            }
+            if (kospiCollected) {
+                run("카테고리랭킹텔레그램발송(KOSPI)", () -> marketMapCategoryRankingTelegramReportSender.send(dataTime, Market.KOSPI));
+            }
+            if (kosdaqCollected) {
+                run("카테고리랭킹텔레그램발송(KOSDAQ)", () -> marketMapCategoryRankingTelegramReportSender.send(dataTime, Market.KOSDAQ));
             }
         }
     }
@@ -127,7 +140,7 @@ public class CollectionScheduler {
         run("프로그램매매랭킹", () -> programNetBuyRankingCollector.collect(snapshotTime));
         run("프로그램매매히스토리", () -> programTradeIntradayCollector.collect(snapshotTime));
         run("지수기여도랭킹", () -> indexContributionRankingCollector.collect(snapshotTime));
-        run("마켓맵텔레그램발송", () -> marketMapTelegramReportSender.send(snapshotTime));
+        run("마켓맵텔레그램발송", () -> marketMapTelegramReportSender.send(snapshotTime, Market.KOSPI));
 
         log.info("장중 시장 데이터 수집 완료: snapshotTime={}", snapshotTime);
     }

@@ -1,6 +1,7 @@
 package dev.eolmae.marketmonitor.domain.notification.service;
 
 import dev.eolmae.marketmonitor.common.enums.DateTimePattern;
+import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.domain.notification.client.TelegramClient;
 import dev.eolmae.marketmonitor.domain.notification.enums.RenderTarget;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
@@ -22,7 +23,7 @@ public class MarketMapTelegramReportSender extends TelegramReportSender {
     }
 
     @Override
-    protected String buildText(LocalDateTime dataTime) {
-        return "CUSTOM KOSPI MAP\n" + dataTime.format(DateTimePattern.DATETIME_MINUTE_WITH_WEEKDAY.formatter()) + " (5분 간격)";
+    protected String buildText(LocalDateTime dataTime, Market market) {
+        return market + " Custom Map\n" + dataTime.format(DateTimePattern.DATETIME_MINUTE_WITH_WEEKDAY.formatter());
     }
 }

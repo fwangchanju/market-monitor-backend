@@ -115,12 +115,12 @@ public class CollectionScheduler {
             if (kosdaqCollected) {
                 run("마켓맵텔레그램발송(KOSDAQ)", () -> marketMapTelegramReportSender.send(dataTime, Market.KOSDAQ));
             }
-            if (kospiCollected) {
-                run("카테고리랭킹텔레그램발송(KOSPI)", () -> marketMapCategoryRankingTelegramReportSender.send(dataTime, Market.KOSPI));
-            }
-            if (kosdaqCollected) {
-                run("카테고리랭킹텔레그램발송(KOSDAQ)", () -> marketMapCategoryRankingTelegramReportSender.send(dataTime, Market.KOSDAQ));
-            }
+//            if (kospiCollected) {
+//                run("카테고리랭킹텔레그램발송(KOSPI)", () -> marketMapCategoryRankingTelegramReportSender.send(dataTime, Market.KOSPI));
+//            }
+//            if (kosdaqCollected) {
+//                run("카테고리랭킹텔레그램발송(KOSDAQ)", () -> marketMapCategoryRankingTelegramReportSender.send(dataTime, Market.KOSDAQ));
+//            }
         }
     }
 

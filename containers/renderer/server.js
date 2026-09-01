@@ -39,7 +39,9 @@ app.post('/capture', async (req, res) => {
 
     const page = await context.newPage()
     await page.goto(BASE_URL + path, { waitUntil: 'networkidle', timeout: 30000 })
-    await page.waitForTimeout(2000)
+    // 프론트가 데이터 로딩을 마치고 캡처 대상 엘리먼트에 data-capture-ready="true"를 붙이면 그때 캡처한다
+    // (고정 딜레이로 "다 그려졌겠지" 추측하던 방식 대체).
+    await page.waitForSelector(`${selector}[data-capture-ready="true"]`, { timeout: 15000 })
 
     const sections = await page.$$(selector)
     const images = []

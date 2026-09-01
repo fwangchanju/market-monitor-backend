@@ -1,6 +1,5 @@
 package dev.eolmae.marketmonitor.domain.notification.service;
 
-import dev.eolmae.marketmonitor.common.enums.DateTimePattern;
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.domain.notification.client.TelegramClient;
 import dev.eolmae.marketmonitor.domain.notification.enums.RenderTarget;
@@ -24,6 +23,6 @@ public class MarketMapTelegramReportSender extends TelegramReportSender {
 
     @Override
     protected String buildText(LocalDateTime dataTime, Market market) {
-        return market + " Custom Map\n" + dataTime.format(DateTimePattern.DATETIME_MINUTE_WITH_WEEKDAY.formatter());
+        return market + " Custom Map";
     }
 }

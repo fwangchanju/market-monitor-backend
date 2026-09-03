@@ -13,4 +13,6 @@ public interface MarketMapCategoryChangeRateSnapshotRepository
     Optional<MarketMapCategoryChangeRateSnapshot> findFirstByMarketTypeOrderBySnapshotTimeDesc(Market market);
 
     List<MarketMapCategoryChangeRateSnapshot> findByMarketTypeAndSnapshotTime(Market market, LocalDateTime snapshotTime);
+
+    void deleteByCategoryIdIn(List<Long> categoryIds);
 }

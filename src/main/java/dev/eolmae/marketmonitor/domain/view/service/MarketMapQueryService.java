@@ -18,6 +18,7 @@ import dev.eolmae.marketmonitor.domain.view.dto.ExcludedStockItem;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapItem;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
+import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -49,18 +50,19 @@ public class MarketMapQueryService {
     private final MarketValueTierThresholdService marketValueTierThresholdService;
 
     /** 기본 마켓맵: stock_info 카테고리 그대로(override 없이) 기준, 자식 없는 1뎁스 노드로 감싸서 반환 (getCustomMarketMap과 응답 모양 통일) */
-    public SnapshotResponse<MarketMapCategoryNode> getDefaultMarketMap(Market market) {
+    public SnapshotResponse<MarketMapCategoryNode> getDefaultMarketMap(MarketQuery marketQuery) {
+        List<Market> markets = marketQuery.toMarkets();
         return sectorPriceSnapshotService
-                .findLatestSnapshotTime(market)
-                .map(latestSnapshotTime -> buildDefaultMarketMap(market, latestSnapshotTime))
+                .findLatestCommonSnapshotTime(markets)
+                .map(latestSnapshotTime -> buildDefaultMarketMap(markets, latestSnapshotTime))
                 .orElseGet(SnapshotResponse::empty);
     }
 
     private SnapshotResponse<MarketMapCategoryNode> buildDefaultMarketMap(
-            Market market, LocalDateTime latestSnapshotTime) {
-        List<StockInfo> candidates = filterCandidates(market);
+            List<Market> markets, LocalDateTime latestSnapshotTime) {
+        List<StockInfo> candidates = filterCandidates(markets);
         Map<String, SectorPriceSnapshot> priceMap =
-                sectorPriceSnapshotService.findPriceByStockCode(market, latestSnapshotTime);
+                sectorPriceSnapshotService.findPriceByStockCode(markets, latestSnapshotTime);
         List<MarketValueTierThreshold> sortedTiers = marketValueTierThresholdService.findAllSortedAscending();
 
         Map<String, List<MarketMapItem>> grouped = candidates.stream()
@@ -85,17 +87,27 @@ public class MarketMapQueryService {
     }
 
     /** 커스텀 마켓맵: 어드민이 구성한 카테고리 트리 기준. 트리에 배정 안 된 종목은 stock_info 카테고리로 묶은 노드를 같은 레벨에 섞어서 반환 */
-    public SnapshotResponse<MarketMapCategoryNode> getCustomMarketMap(Market market) {
+    public SnapshotResponse<MarketMapCategoryNode> getCustomMarketMap(MarketQuery marketQuery) {
+        List<Market> markets = marketQuery.toMarkets();
         return sectorPriceSnapshotService
-                .findLatestSnapshotTime(market)
-                .map(latestSnapshotTime -> buildCustomMarketMap(market, latestSnapshotTime))
+                .findLatestCommonSnapshotTime(markets)
+                .map(latestSnapshotTime -> buildCustomMarketMap(markets, latestSnapshotTime))
                 .orElseGet(SnapshotResponse::empty);
     }
 
-    private SnapshotResponse<MarketMapCategoryNode> buildCustomMarketMap(Market market, LocalDateTime latestSnapshotTime) {
+    private SnapshotResponse<MarketMapCategoryNode> buildCustomMarketMap(
+            List<Market> markets, LocalDateTime latestSnapshotTime) {
+        // 등락률 데코레이션(tierBreakdown)은 카테고리별로 하나만 붙으므로, All Stocks처럼 markets가
+        // 여러 개여도 마켓별로 나눌 필요 없이 그대로 합쳐서 조회한다.
         Map<Long, List<CategoryTierBreakdown>> tierBreakdownByCategoryId =
-                marketMapCategoryChangeRateSnapshotService.findTierBreakdownsByCategoryId(market, latestSnapshotTime);
-        List<MarketMapCategoryNode> tree = buildCategoryTree(market, latestSnapshotTime, tierBreakdownByCategoryId);
+                marketMapCategoryChangeRateSnapshotService.findTierBreakdownsByCategoryId(markets, latestSnapshotTime).values().stream()
+                        .flatMap(byCategoryId -> byCategoryId.entrySet().stream())
+                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (a, b) -> {
+                            List<CategoryTierBreakdown> merged = new ArrayList<>(a);
+                            merged.addAll(b);
+                            return merged;
+                        }));
+        List<MarketMapCategoryNode> tree = buildCategoryTree(markets, latestSnapshotTime, tierBreakdownByCategoryId);
         return new SnapshotResponse<>(latestSnapshotTime, tree);
     }
 
@@ -110,18 +122,18 @@ public class MarketMapQueryService {
         if (sectorPriceSnapshotService.notExistsSnapshot(market, snapshotTime)) {
             return List.of();
         }
-        return buildCategoryTree(market, snapshotTime);
+        return buildCategoryTree(List.of(market), snapshotTime);
     }
 
-    private List<MarketMapCategoryNode> buildCategoryTree(Market market, LocalDateTime latestSnapshotTime) {
-        return buildCategoryTree(market, latestSnapshotTime, Map.of());
+    private List<MarketMapCategoryNode> buildCategoryTree(List<Market> markets, LocalDateTime latestSnapshotTime) {
+        return buildCategoryTree(markets, latestSnapshotTime, Map.of());
     }
 
     private List<MarketMapCategoryNode> buildCategoryTree(
-            Market market,
+            List<Market> markets,
             LocalDateTime latestSnapshotTime,
             Map<Long, List<CategoryTierBreakdown>> tierBreakdownByCategoryId) {
-        List<StockInfo> candidates = filterCandidates(market);
+        List<StockInfo> candidates = filterCandidates(markets);
         List<MarketMapCategory> categories = marketMapCategoryRepository.findAll();
         Map<Long, List<MarketMapCategory>> childrenByParentId = new HashMap<>();
         for (MarketMapCategory category : categories) {
@@ -132,7 +144,7 @@ public class MarketMapQueryService {
         }
         Map<String, MarketMapStockCategory> stockCategoryMap = findStockCategoryMap();
         Map<String, SectorPriceSnapshot> priceMap =
-                sectorPriceSnapshotService.findPriceByStockCode(market, latestSnapshotTime);
+                sectorPriceSnapshotService.findPriceByStockCode(markets, latestSnapshotTime);
         List<MarketValueTierThreshold> sortedTiers = marketValueTierThresholdService.findAllSortedAscending();
 
         Map<Long, List<MarketMapItem>> itemsByCategoryId = candidates.stream()
@@ -173,9 +185,9 @@ public class MarketMapQueryService {
                 items);
     }
 
-    private List<StockInfo> filterCandidates(Market market) {
+    private List<StockInfo> filterCandidates(List<Market> markets) {
         return stockInfoCacheService.getCache().values().stream()
-                .filter(stockInfo -> stockInfo.getMarketType() == market)
+                .filter(stockInfo -> markets.contains(stockInfo.getMarketType()))
                 .filter(StockInfo::isActiveAndOrdinary)
                 .toList();
     }

@@ -6,6 +6,7 @@ import dev.eolmae.marketmonitor.domain.notification.enums.RenderTarget;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
 import dev.eolmae.marketmonitor.domain.renderer.client.ScreenshotClient;
 import java.time.LocalDateTime;
+import java.util.List;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -22,7 +23,7 @@ public class MarketMapTelegramReportSender extends TelegramReportSender {
     }
 
     @Override
-    protected String buildText(LocalDateTime dataTime, Market market) {
-        return market + " Custom Map";
+    protected String buildText(LocalDateTime dataTime, List<Market> markets) {
+        return "Custom Map";
     }
 }

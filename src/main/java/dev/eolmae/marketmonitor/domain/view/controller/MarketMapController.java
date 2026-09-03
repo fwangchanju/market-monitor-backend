@@ -8,10 +8,11 @@ import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryServic
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapScaleService;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketValueTierThresholdService;
 import dev.eolmae.marketmonitor.domain.stock.service.MarketMapExcludedStockService;
-import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateItem;
+import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateMarketRanking;
 import dev.eolmae.marketmonitor.domain.view.dto.ExcludedStockItem;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
+import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -37,7 +38,7 @@ public class MarketMapController {
 
     @GetMapping
     public SnapshotResponse<MarketMapCategoryNode> getMarketMap(
-            @RequestParam Market market, @RequestParam boolean isCustom) {
+            @RequestParam MarketQuery market, @RequestParam boolean isCustom) {
         return isCustom ? marketMapQueryService.getCustomMarketMap(market) : marketMapQueryService.getDefaultMarketMap(market);
     }
 
@@ -47,9 +48,9 @@ public class MarketMapController {
     }
 
     @GetMapping("/category-change-rates")
-    public SnapshotResponse<CategoryChangeRateItem> getCategoryChangeRates(
-            @RequestParam Market market, @RequestParam(defaultValue = "60") int beforeMinutes) {
-        return marketMapCategoryChangeRateSnapshotService.findLatestRanking(market, beforeMinutes);
+    public SnapshotResponse<CategoryChangeRateMarketRanking> getCategoryChangeRates(
+            @RequestParam MarketQuery market, @RequestParam(defaultValue = "60") int beforeMinutes) {
+        return marketMapCategoryChangeRateSnapshotService.findLatestRankingForMarkets(market.toMarkets(), beforeMinutes);
     }
 
     @GetMapping("/scale")

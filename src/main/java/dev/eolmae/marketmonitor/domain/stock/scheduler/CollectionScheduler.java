@@ -8,7 +8,7 @@ import dev.eolmae.marketmonitor.common.util.KstClock;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryChangeRateSnapshotService;
 import dev.eolmae.marketmonitor.domain.notification.listener.EscalationPublisher;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
-import dev.eolmae.marketmonitor.domain.notification.service.MarketMapCategoryRankingTelegramReportSender;
+import dev.eolmae.marketmonitor.domain.notification.service.DailyMarketReportSender;
 import dev.eolmae.marketmonitor.domain.notification.service.MarketMapTelegramReportSender;
 import dev.eolmae.marketmonitor.domain.notification.service.TelegramCollectionFailureNotifier;
 import dev.eolmae.marketmonitor.domain.stock.collector.HoldingsSyncService;
@@ -20,7 +20,6 @@ import dev.eolmae.marketmonitor.domain.stock.collector.ProgramTradeIntradayColle
 import dev.eolmae.marketmonitor.domain.stock.collector.SectorInvestorNetBuyCollector;
 import dev.eolmae.marketmonitor.domain.stock.collector.ShortSellingTrendCollector;
 import dev.eolmae.marketmonitor.domain.stock.collector.StockInfoCollector;
-import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceSnapshotService;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
 import java.time.Duration;
@@ -51,9 +50,8 @@ public class CollectionScheduler {
     private final StockInfoCollector stockInfoCollector;
     private final MarketMapQueryService marketMapQueryService;
     private final MarketMapCategoryChangeRateSnapshotService marketMapCategoryChangeRateSnapshotService;
-    private final SectorPriceSnapshotService sectorPriceSnapshotService;
     private final MarketMapTelegramReportSender marketMapTelegramReportSender;
-    private final MarketMapCategoryRankingTelegramReportSender marketMapCategoryRankingTelegramReportSender;
+    private final DailyMarketReportSender dailyMarketReportSender;
     private final TelegramCollectionFailureNotifier telegramCollectionFailureNotifier;
     private final TelegramProperties telegramProperties;
     private final EscalationPublisher escalationPublisher;
@@ -62,6 +60,12 @@ public class CollectionScheduler {
     private int endHour;
 
     private static final String KST_ZONE_ID = "Asia/Seoul";
+
+    // shouldCollect가 false라 이번 호출에서 수집을 안 한 경우에도, 마지막으로 실제 수집이 일어났을 때의
+    // 결과를 발송 판정(장 마감 이후 발송 시각)까지 들고 가기 위한 상태 — 로컬 변수로는 호출이 끝나면
+    // 사라져서 그 다음 호출(발송 시각)이 진짜 마지막 수집 결과를 알 수 없다.
+    private volatile boolean lastIndexContributionSuccess = true;
+    private volatile boolean lastChangeRateSuccess = true;
 
     /**
      * 장중 시장 데이터 수집: 평일 collect.start-hour~end-hour, interval-minutes 간격.
@@ -81,18 +85,15 @@ public class CollectionScheduler {
         }
 
         boolean shouldCollect = shouldCollect(snapshotTime);
-        boolean kospiCollected = true;
         if (shouldCollect) {
             log.info("장중 시장 데이터 수집 시작: snapshotTime={}", snapshotTime);
 
             run("투자자별매매종합", () -> sectorInvestorNetBuyCollector.collect(snapshotTime));
             run("프로그램매매랭킹", () -> programNetBuyRankingCollector.collect(snapshotTime));
-            run("지수기여도랭킹", () -> indexContributionRankingCollector.collect(snapshotTime));
+            lastIndexContributionSuccess = run("지수기여도랭킹", () -> indexContributionRankingCollector.collect(snapshotTime));
 
-            kospiCollected = sectorPriceSnapshotService.existsSnapshot(Market.KOSPI, snapshotTime);
-            if (kospiCollected) {
-                run("카테고리등락률스냅샷", () -> captureCategoryChangeRateSnapshots(snapshotTime));
-            }
+            lastChangeRateSuccess = lastIndexContributionSuccess
+                    && run("카테고리등락률스냅샷", () -> captureCategoryChangeRateSnapshots(snapshotTime));
 
             log.info("장중 시장 데이터 수집 완료: snapshotTime={}", snapshotTime);
         }
@@ -102,25 +103,13 @@ public class CollectionScheduler {
         LocalDateTime dataTime = shouldCollect ? snapshotTime : LocalDateTime.of(snapshotTime.toLocalDate(), LocalTime.of(endHour, 0));
 
         if (snapshotTime.getMinute() == telegramProperties.sendMinute()) {
-            if (!kospiCollected) {
+            if (!lastIndexContributionSuccess) {
                 run("데이터수집실패알림", () -> telegramCollectionFailureNotifier.notify(dataTime));
+            } else {
+                // 마켓맵 KOSPI/KOSDAQ + 섹터 All Stocks(성공했을 때만)를 앨범 하나로 묶어 알림 1번으로 발송.
+                boolean sectorImageAvailable = lastChangeRateSuccess;
+                run("일일마켓리포트발송", () -> dailyMarketReportSender.send(dataTime, sectorImageAvailable));
             }
-
-            // 코스닥은 옵션 — 이번 사이클에 수집 실패했어도 코스피 발송/실패알림 어느 쪽에도 영향을 주지 않고
-            // 그냥 코스닥 발송만 조용히 스킵한다. 발송 순서는 맵(KOSPI→KOSDAQ) 다음 섹터(KOSPI→KOSDAQ).
-            boolean kosdaqCollected = sectorPriceSnapshotService.existsSnapshot(Market.KOSDAQ, snapshotTime);
-            if (kospiCollected) {
-                run("마켓맵텔레그램발송(KOSPI)", () -> marketMapTelegramReportSender.send(dataTime, Market.KOSPI));
-            }
-            if (kosdaqCollected) {
-                run("마켓맵텔레그램발송(KOSDAQ)", () -> marketMapTelegramReportSender.send(dataTime, Market.KOSDAQ));
-            }
-//            if (kospiCollected) {
-//                run("카테고리랭킹텔레그램발송(KOSPI)", () -> marketMapCategoryRankingTelegramReportSender.send(dataTime, Market.KOSPI));
-//            }
-//            if (kosdaqCollected) {
-//                run("카테고리랭킹텔레그램발송(KOSDAQ)", () -> marketMapCategoryRankingTelegramReportSender.send(dataTime, Market.KOSDAQ));
-//            }
         }
     }
 
@@ -140,7 +129,7 @@ public class CollectionScheduler {
         run("프로그램매매랭킹", () -> programNetBuyRankingCollector.collect(snapshotTime));
         run("프로그램매매히스토리", () -> programTradeIntradayCollector.collect(snapshotTime));
         run("지수기여도랭킹", () -> indexContributionRankingCollector.collect(snapshotTime));
-        run("마켓맵텔레그램발송", () -> marketMapTelegramReportSender.send(snapshotTime, Market.KOSPI));
+        run("마켓맵텔레그램발송", () -> marketMapTelegramReportSender.send(snapshotTime, List.of(Market.KOSPI)));
 
         log.info("장중 시장 데이터 수집 완료: snapshotTime={}", snapshotTime);
     }
@@ -200,16 +189,21 @@ public class CollectionScheduler {
         return !snapshotTime.toLocalTime().isAfter(marketCloseTime);
     }
 
-    private void run(String collectorName, Runnable task) {
+    // 예외 없이 끝나면 true, 잡히면 escalate 후 false — 호출부가 "이 단계가 성공했는지"를 별도 재조회
+    // 없이 실행 결과 자체로 바로 알 수 있다. 반환값이 필요 없는 호출부는 그냥 무시하면 된다.
+    private boolean run(String collectorName, Runnable task) {
         LocalDateTime startedAt = LocalDateTime.now(Zone.KST.zoneId());
         log.info("[{}] 시작: {}", collectorName, startedAt);
+        boolean success = true;
         try {
             task.run();
         } catch (Exception e) {
             escalationPublisher.report(EscalateException.wrap(ErrorCode.COLLECTOR_EXECUTION_FAILED, e, collectorName));
+            success = false;
         } finally {
             LocalDateTime finishedAt = LocalDateTime.now(Zone.KST.zoneId());
             log.info("[{}] 종료: {} (소요 {}ms)", collectorName, finishedAt, Duration.between(startedAt, finishedAt).toMillis());
         }
+        return success;
     }
 }

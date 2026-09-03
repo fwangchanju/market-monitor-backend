@@ -6,11 +6,11 @@ import java.util.List;
 public enum MarketQuery {
     KOSPI,
     KOSDAQ,
-    COMBINED;
+    ALL_STOCKS;
 
     public List<Market> toMarkets() {
         return switch (this) {
-            case COMBINED -> List.of(Market.KOSPI, Market.KOSDAQ);
+            case ALL_STOCKS -> List.of(Market.KOSPI, Market.KOSDAQ);
             default -> List.of(Market.valueOf(name()));
         };
     }

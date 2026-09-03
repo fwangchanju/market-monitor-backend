@@ -6,6 +6,7 @@ import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketValueTierThreshold
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryChangeRateSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketValueTierThresholdRepository;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateItem;
+import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateMarketRanking;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryTierBreakdown;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapItem;
@@ -51,45 +52,61 @@ public class MarketMapCategoryChangeRateSnapshotService {
         marketMapCategoryChangeRateSnapshotRepository.saveAll(snapshots);
     }
 
-    /** 라이브 조회용 — 최신 시각을 먼저 찾은 다음 그 시각으로 findRanking을 호출한다. */
-    public SnapshotResponse<CategoryChangeRateItem> findLatestRanking(Market market, int beforeMinutes) {
+    /** 라이브 조회용 — markets 전부가 공통으로 가진 최신 시각을 먼저 찾은 뒤 findRankingForMarkets를
+     * 호출한다. */
+    public SnapshotResponse<CategoryChangeRateMarketRanking> findLatestRankingForMarkets(
+            List<Market> markets, int beforeMinutes) {
         return marketMapCategoryChangeRateSnapshotRepository
-                .findFirstByMarketTypeOrderBySnapshotTimeDesc(market)
-                .map(latest -> findRanking(market, latest.getSnapshotTime(), beforeMinutes))
+                .findLatestCommonSnapshotTime(markets)
+                .map(snapshotTime -> findRankingForMarkets(markets, snapshotTime, beforeMinutes))
                 .orElseGet(SnapshotResponse::empty);
     }
 
     /**
-     * 카테고리별 현재(snapshotTime)/직전(beforeMinutes분 전) 등락률 평균 랭킹 조회. 호출부가 이미 알고 있는
-     * 정확한 snapshotTime을 받는다 — 텔레그램 캡션처럼 특정 시각이 이미 정해진 호출부용. beforeMinutes
-     * 시각에 정확히 일치하는 스냅샷이 없으면(장 시작 직후, 수집 gap 등) 해당 카테고리는 before 없이
-     * 내려준다 — 가장 가까운 다른 시점 데이터로 조용히 대체하지 않는다.
+     * markets가 정확히 snapshotTime 시각에 가진 카테고리별 현재/직전(beforeMinutes분 전) 등락률 랭킹.
+     * 호출부가 이미 알고 있는 정확한 snapshotTime을 받는다 — 텔레그램 캡션처럼 특정 시각이 이미 정해진
+     * 호출부용(findLatestRankingForMarkets가 시각을 찾은 뒤 이 메서드에 위임하는 것과 동일한 코어).
+     * 그 시각에 데이터가 없는 마켓은 결과 목록에서 아예 빠진다 — 부분적으로만 데이터가 있어도 있는
+     * 마켓만으로 랭킹을 구성할 수 있다. beforeMinutes 시각에 정확히 일치하는 스냅샷이 없으면(장 시작
+     * 직후, 수집 gap 등) 해당 카테고리는 before 없이 내려준다 — 가장 가까운 다른 시점 데이터로 조용히
+     * 대체하지 않는다.
      */
-    public SnapshotResponse<CategoryChangeRateItem> findRanking(Market market, LocalDateTime snapshotTime, int beforeMinutes) {
-        Map<Long, List<CategoryTierBreakdown>> nowByCategoryId = findTierBreakdownsByCategoryId(market, snapshotTime);
-        if (nowByCategoryId.isEmpty()) {
-            return SnapshotResponse.empty();
-        }
-
+    public SnapshotResponse<CategoryChangeRateMarketRanking> findRankingForMarkets(
+            List<Market> markets, LocalDateTime snapshotTime, int beforeMinutes) {
         LocalDateTime beforeTime = snapshotTime.minusMinutes(beforeMinutes);
-        Map<Long, List<CategoryTierBreakdown>> beforeByCategoryId = findTierBreakdownsByCategoryId(market, beforeTime);
+        Map<Market, Map<Long, List<CategoryTierBreakdown>>> nowByMarket = findTierBreakdownsByCategoryId(markets, snapshotTime);
+        Map<Market, Map<Long, List<CategoryTierBreakdown>>> beforeByMarket =
+                findTierBreakdownsByCategoryId(markets, beforeTime);
 
-        List<CategoryChangeRateItem> items = nowByCategoryId.entrySet().stream()
-                .map(entry -> toItem(entry.getKey(), entry.getValue(), beforeByCategoryId.get(entry.getKey())))
+        List<CategoryChangeRateMarketRanking> rankings = markets.stream()
+                .filter(nowByMarket::containsKey)
+                .map(market -> {
+                    Map<Long, List<CategoryTierBreakdown>> now = nowByMarket.get(market);
+                    Map<Long, List<CategoryTierBreakdown>> before = beforeByMarket.getOrDefault(market, Map.of());
+                    List<CategoryChangeRateItem> items = now.entrySet().stream()
+                            .map(entry -> toItem(entry.getKey(), entry.getValue(), before.get(entry.getKey())))
+                            .toList();
+                    return new CategoryChangeRateMarketRanking(market, items);
+                })
                 .toList();
-        return new SnapshotResponse<>(snapshotTime, items);
+        return new SnapshotResponse<>(snapshotTime, rankings);
     }
 
-    /** market의 정확히 snapshotTime 시각, 카테고리별(하위 재귀 포함) 시가총액 구간별 등락률 원시 합계.
-     * 필터(어떤 구간을 포함할지)는 호출부(화면)가 알고 있으므로 여기서는 합산/나눗셈 없이 원시값 그대로
-     * 내려준다. 그 시각에 스냅샷이 없는 카테고리는 결과 맵에 아예 없음(빈 리스트로 채우지 않음). */
-    public Map<Long, List<CategoryTierBreakdown>> findTierBreakdownsByCategoryId(Market market, LocalDateTime snapshotTime) {
+    /** markets가 정확히 snapshotTime 시각에 가진, 카테고리별(하위 재귀 포함) 시가총액 구간별 등락률 원시
+     * 합계를 market → categoryId 순으로 묶어 반환한다. markets를 한 번의 IN 쿼리로 조회하므로 마켓이
+     * 하나든 여럿이든 쿼리는 항상 1번. 필터(어떤 구간을 포함할지)는 호출부(화면)가 알고 있으므로 여기서는
+     * 합산/나눗셈 없이 원시값 그대로 내려준다. 그 시각에 스냅샷이 없는 마켓/카테고리는 결과 맵에 아예
+     * 없음(빈 리스트로 채우지 않음). */
+    public Map<Market, Map<Long, List<CategoryTierBreakdown>>> findTierBreakdownsByCategoryId(
+            List<Market> markets, LocalDateTime snapshotTime) {
         Map<Long, MarketValueTierThreshold> tierById = marketValueTierThresholdRepository.findAll().stream()
                 .collect(Collectors.toMap(MarketValueTierThreshold::getId, Function.identity()));
-        return marketMapCategoryChangeRateSnapshotRepository.findByMarketTypeAndSnapshotTime(market, snapshotTime).stream()
+        return marketMapCategoryChangeRateSnapshotRepository.findByMarketTypeInAndSnapshotTime(markets, snapshotTime).stream()
                 .collect(Collectors.groupingBy(
-                        MarketMapCategoryChangeRateSnapshot::getCategoryId,
-                        Collectors.mapping(row -> toBreakdown(row, tierById), Collectors.toList())));
+                        MarketMapCategoryChangeRateSnapshot::getMarketType,
+                        Collectors.groupingBy(
+                                MarketMapCategoryChangeRateSnapshot::getCategoryId,
+                                Collectors.mapping(row -> toBreakdown(row, tierById), Collectors.toList()))));
     }
 
     private CategoryTierBreakdown toBreakdown(

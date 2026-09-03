@@ -1,11 +1,13 @@
 package dev.eolmae.marketmonitor.domain.notification.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.domain.notification.client.TelegramClient;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
 import dev.eolmae.marketmonitor.domain.renderer.client.ScreenshotClient;
 import dev.eolmae.marketmonitor.domain.renderer.properties.RendererProperties;
 import java.time.LocalDateTime;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClient;
 
@@ -23,13 +25,14 @@ class MarketMapTelegramReportSenderManualTest {
 
     private final TelegramProperties telegramProperties = new TelegramProperties(
             System.getenv("TELEGRAM_BOT_TOKEN"), System.getenv("TELEGRAM_CHAT_ID"), System.getenv("DEVELOPER_CHAT_ID"), 0);
-    private final TelegramClient telegramClient = new TelegramClient(telegramProperties, RestClient.create());
+    private final TelegramClient telegramClient =
+            new TelegramClient(telegramProperties, RestClient.create(), new ObjectMapper());
 
     private final MarketMapTelegramReportSender sender =
             new MarketMapTelegramReportSender(screenshotClient, telegramClient, telegramProperties);
 
     @Test
     void sendsMarketMapImageToTelegram() {
-        sender.send(LocalDateTime.now(), Market.KOSPI);
+        sender.send(LocalDateTime.now(), List.of(Market.KOSPI));
     }
 }

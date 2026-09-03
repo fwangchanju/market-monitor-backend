@@ -3,6 +3,7 @@ package dev.eolmae.marketmonitor.domain.notification.service;
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceSnapshotService;
 import java.time.LocalDateTime;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -31,15 +32,15 @@ class TelegramReportCycleManualTest {
         LocalDateTime kospiTime = latestSnapshotTimeOrThrow(Market.KOSPI);
         LocalDateTime kosdaqTime = latestSnapshotTimeOrThrow(Market.KOSDAQ);
 
-        marketMapTelegramReportSender.send(kospiTime, Market.KOSPI);
-        marketMapTelegramReportSender.send(kosdaqTime, Market.KOSDAQ);
-        marketMapCategoryRankingTelegramReportSender.send(kospiTime, Market.KOSPI);
-        marketMapCategoryRankingTelegramReportSender.send(kosdaqTime, Market.KOSDAQ);
+        marketMapTelegramReportSender.send(kospiTime, List.of(Market.KOSPI));
+        marketMapTelegramReportSender.send(kosdaqTime, List.of(Market.KOSDAQ));
+        marketMapCategoryRankingTelegramReportSender.send(kospiTime, List.of(Market.KOSPI));
+        marketMapCategoryRankingTelegramReportSender.send(kosdaqTime, List.of(Market.KOSDAQ));
     }
 
     private LocalDateTime latestSnapshotTimeOrThrow(Market market) {
         return sectorPriceSnapshotService
-                .findLatestSnapshotTime(market)
+                .findLatestCommonSnapshotTime(List.of(market))
                 .orElseThrow(() -> new IllegalStateException(market + " 스냅샷 데이터가 없습니다"));
     }
 }

@@ -4,13 +4,13 @@ import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategoryChangeRateSnapshot;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface MarketMapCategoryChangeRateSnapshotRepository
-        extends JpaRepository<MarketMapCategoryChangeRateSnapshot, Long> {
+        extends JpaRepository<MarketMapCategoryChangeRateSnapshot, Long>,
+                MarketMapCategoryChangeRateSnapshotRepositoryCustom {
 
-    Optional<MarketMapCategoryChangeRateSnapshot> findFirstByMarketTypeOrderBySnapshotTimeDesc(Market market);
+    List<MarketMapCategoryChangeRateSnapshot> findByMarketTypeInAndSnapshotTime(List<Market> markets, LocalDateTime snapshotTime);
 
-    List<MarketMapCategoryChangeRateSnapshot> findByMarketTypeAndSnapshotTime(Market market, LocalDateTime snapshotTime);
+    void deleteByCategoryIdIn(List<Long> categoryIds);
 }

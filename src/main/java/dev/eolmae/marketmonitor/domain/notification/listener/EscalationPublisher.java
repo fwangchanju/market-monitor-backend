@@ -21,6 +21,6 @@ public class EscalationPublisher {
     public void report(EscalateException e) {
         String logMessage = e.createLogMessage();
         ESCALATION_LOG.error(logMessage, e);
-        eventPublisher.publishEvent(new EscalationEvent(logMessage));
+        eventPublisher.publishEvent(new EscalationEvent(logMessage + e.getCauseMessage()));
     }
 }

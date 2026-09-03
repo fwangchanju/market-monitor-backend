@@ -19,6 +19,7 @@ import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceSnapshotService;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
+import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -81,16 +82,16 @@ class MarketMapQueryServiceTest {
                 .collect(Collectors.toMap(StockInfo::getStockCode, Function.identity()));
         when(stockInfoCacheService.getCache()).thenReturn(stockInfoCache);
 
-        when(sectorPriceSnapshotRepository.findFirstByMarketTypeOrderBySnapshotTimeDesc(Market.KOSPI))
-                .thenReturn(Optional.of(priceSnapshot("005930", snapshotTime, BigDecimal.TEN)));
-        when(sectorPriceSnapshotRepository.findByMarketTypeAndSnapshotTime(Market.KOSPI, snapshotTime))
+        when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
+                .thenReturn(Optional.of(snapshotTime));
+        when(sectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(List.of(Market.KOSPI), snapshotTime))
                 .thenReturn(List.of(
                         priceSnapshot("005930", snapshotTime, BigDecimal.TEN),
                         priceSnapshot("000660", snapshotTime, BigDecimal.valueOf(20)),
                         priceSnapshot("009150", snapshotTime, BigDecimal.valueOf(5)),
                         priceSnapshot("051910", snapshotTime, BigDecimal.ONE)));
 
-        SnapshotResponse<MarketMapCategoryNode> response = service.getCustomMarketMap(Market.KOSPI);
+        SnapshotResponse<MarketMapCategoryNode> response = service.getCustomMarketMap(MarketQuery.KOSPI);
 
         assertThat(response.snapshotTime()).isEqualTo(snapshotTime);
         List<MarketMapCategoryNode> nodes = response.items();
@@ -134,15 +135,15 @@ class MarketMapQueryServiceTest {
                 .collect(Collectors.toMap(StockInfo::getStockCode, Function.identity()));
         when(stockInfoCacheService.getCache()).thenReturn(stockInfoCache);
 
-        when(sectorPriceSnapshotRepository.findFirstByMarketTypeOrderBySnapshotTimeDesc(Market.KOSPI))
-                .thenReturn(Optional.of(priceSnapshot("005930", snapshotTime, BigDecimal.TEN)));
-        when(sectorPriceSnapshotRepository.findByMarketTypeAndSnapshotTime(Market.KOSPI, snapshotTime))
+        when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
+                .thenReturn(Optional.of(snapshotTime));
+        when(sectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(List.of(Market.KOSPI), snapshotTime))
                 .thenReturn(List.of(
                         priceSnapshot("005930", snapshotTime, BigDecimal.TEN),
                         priceSnapshot("000660", snapshotTime, BigDecimal.valueOf(20)),
                         priceSnapshot("051910", snapshotTime, BigDecimal.ONE)));
 
-        SnapshotResponse<MarketMapCategoryNode> response = service.getDefaultMarketMap(Market.KOSPI);
+        SnapshotResponse<MarketMapCategoryNode> response = service.getDefaultMarketMap(MarketQuery.KOSPI);
 
         assertThat(response.snapshotTime()).isEqualTo(snapshotTime);
         List<MarketMapCategoryNode> nodes = response.items();
@@ -183,12 +184,12 @@ class MarketMapQueryServiceTest {
                 List.of(samsung).stream().collect(Collectors.toMap(StockInfo::getStockCode, Function.identity()));
         when(stockInfoCacheService.getCache()).thenReturn(stockInfoCache);
 
-        when(sectorPriceSnapshotRepository.findFirstByMarketTypeOrderBySnapshotTimeDesc(Market.KOSPI))
-                .thenReturn(Optional.of(priceSnapshot("005930", snapshotTime, BigDecimal.TEN)));
-        when(sectorPriceSnapshotRepository.findByMarketTypeAndSnapshotTime(Market.KOSPI, snapshotTime))
+        when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
+                .thenReturn(Optional.of(snapshotTime));
+        when(sectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(List.of(Market.KOSPI), snapshotTime))
                 .thenReturn(List.of(priceSnapshot("005930", snapshotTime, BigDecimal.TEN)));
 
-        SnapshotResponse<MarketMapCategoryNode> response = service.getCustomMarketMap(Market.KOSPI);
+        SnapshotResponse<MarketMapCategoryNode> response = service.getCustomMarketMap(MarketQuery.KOSPI);
 
         List<MarketMapCategoryNode> nodes = response.items();
         assertThat(nodes).hasSize(2);

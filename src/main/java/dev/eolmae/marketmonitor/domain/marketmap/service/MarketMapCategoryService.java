@@ -9,6 +9,7 @@ import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryItem;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.StockCategoryItem;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategory;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapStockCategory;
+import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryChangeRateSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapStockCategoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
@@ -34,6 +35,7 @@ public class MarketMapCategoryService {
 
     private final MarketMapCategoryRepository marketMapCategoryRepository;
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository;
+    private final MarketMapCategoryChangeRateSnapshotRepository marketMapCategoryChangeRateSnapshotRepository;
     private final StockInfoCacheService stockInfoCacheService;
 
     @Transactional(readOnly = true)
@@ -198,6 +200,8 @@ public class MarketMapCategoryService {
         if (!marketMapStockCategoryRepository.findByCategoryIdIn(subCategoryIds).isEmpty()) {
             throw new ConflictException(ErrorCode.CATEGORY_HAS_ASSIGNED_STOCK, categoryId);
         }
+
+        marketMapCategoryChangeRateSnapshotRepository.deleteByCategoryIdIn(subCategoryIds);
 
         List<MarketMapCategory> subCategories = subCategoryIds.stream()
                 .map(categoryById::get)

@@ -21,6 +21,7 @@ import dev.eolmae.marketmonitor.domain.stock.collector.SectorInvestorNetBuyColle
 import dev.eolmae.marketmonitor.domain.stock.collector.ShortSellingTrendCollector;
 import dev.eolmae.marketmonitor.domain.stock.collector.StockInfoCollector;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
+import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -129,7 +130,7 @@ public class CollectionScheduler {
         run("프로그램매매랭킹", () -> programNetBuyRankingCollector.collect(snapshotTime));
         run("프로그램매매히스토리", () -> programTradeIntradayCollector.collect(snapshotTime));
         run("지수기여도랭킹", () -> indexContributionRankingCollector.collect(snapshotTime));
-        run("마켓맵텔레그램발송", () -> marketMapTelegramReportSender.send(snapshotTime, List.of(Market.KOSPI)));
+        run("마켓맵텔레그램발송", () -> marketMapTelegramReportSender.send(snapshotTime, MarketQuery.KOSPI));
 
         log.info("장중 시장 데이터 수집 완료: snapshotTime={}", snapshotTime);
     }

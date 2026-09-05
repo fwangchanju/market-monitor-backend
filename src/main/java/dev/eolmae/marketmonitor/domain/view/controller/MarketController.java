@@ -31,7 +31,7 @@ public class MarketController {
 
     /**
      * 장중 투자자별 매매 상위 top 10.
-     * market=ALL_STOCKS: KOSPI+KOSDAQ 합산, investor=FOREIGN_COMBINED: 외국인+외국계 합산.
+     * market=ALL_STOCK: KOSPI+KOSDAQ 합산, investor=FOREIGN_COMBINED: 외국인+외국계 합산.
      * ranking=NET_SELL: netBuyAmount 절댓값 변환 후 반환.
      */
     @GetMapping("/intraday-top")

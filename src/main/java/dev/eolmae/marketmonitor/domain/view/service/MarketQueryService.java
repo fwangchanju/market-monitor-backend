@@ -212,7 +212,7 @@ public class MarketQueryService {
                         markets, ranking, amtQty, latestSnapshotTime);
 
         // 종목당 거래소(exchangeType)별로 행이 나뉘어 있어 종목 기준으로 금액을 합산한 뒤,
-        // market=ALL_STOCKS(KOSPI+KOSDAQ)까지 포함해 netBuyAmount 기준으로 다시 정렬
+        // market=ALL_STOCK(KOSPI+KOSDAQ)까지 포함해 netBuyAmount 기준으로 다시 정렬
         Map<String, AggregatedProgramRanking> merged = snapshots.stream()
                 .collect(Collectors.toMap(
                         ProgramTradingRankingSnapshot::getStockCode,

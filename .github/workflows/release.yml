@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: '빌드 대상 (전체 재빌드+배포용, 브랜치 지정 배포는 deploy_ref 사용)'
+        description: '수동 배포 대상. "Use workflow from"에서 고른 브랜치 기준으로 동작 — 그 브랜치 태그 이미지가 이미 있으면 재사용, 없으면 빌드 후 배포한다.'
         required: true
         default: 'application'
         type: choice
@@ -18,10 +18,6 @@ on:
           - nginx
           - renderer
           - all
-      deploy_ref:
-        description: '배포할 브랜치명 (트라이얼 배포/롤백용). main을 입력하면 현재 승격된 이미지로 롤백. 비워두면 target 기준 전체 재빌드+배포만 수행.'
-        required: false
-        type: string
 
 jobs:
   changes:
@@ -182,15 +178,17 @@ jobs:
         env:
           CR_PAT: ${{ secrets.CR_PAT }}
           IMAGE_TAG: main
+          GIT_REF: ${{ github.ref_name }}
+          # promote-main은 항상 push-to-main에서만 도니 GIT_REF는 여기서 늘 "main"이다.
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          envs: CR_PAT,IMAGE_TAG
+          envs: CR_PAT,IMAGE_TAG,GIT_REF
           script: |
             source ~/repo/market-monitor-backend/infra/scripts/env.sh
-            git -C "$REPO_DIR" fetch origin main
-            git -C "$REPO_DIR" reset --hard origin/main
+            git -C "$REPO_DIR" fetch origin "$GIT_REF"
+            git -C "$REPO_DIR" reset --hard "origin/$GIT_REF"
             bash "$REPO_DIR/infra/scripts/deploy-application.sh"
 
       - name: Health check
@@ -212,60 +210,11 @@ jobs:
           min-versions-to-keep: 5
           token: ${{ secrets.CR_PAT }}
 
-  # workflow_dispatch로 브랜치(또는 main) 지정 배포: 빌드 없이 이미 존재하는 이미지를 pull해서 배포 (트라이얼 배포/롤백 겸용).
-  deploy:
-    if: github.event_name == 'workflow_dispatch' && inputs.deploy_ref != ''
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Resolve image tag
-        id: resolve
-        env:
-          DEPLOY_REF: ${{ inputs.deploy_ref }}
-        run: |
-          REF="$DEPLOY_REF"
-          if [ "$REF" = "main" ]; then
-            echo "image_tag=main" >> "$GITHUB_OUTPUT"
-          else
-            SHA=$(git ls-remote origin "refs/heads/$REF" | cut -f1)
-            if [ -z "$SHA" ]; then
-              echo "브랜치를 찾을 수 없습니다: $REF" >&2
-              exit 1
-            fi
-            echo "image_tag=sha-$SHA" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Deploy to server 1 (application)
-        uses: appleboy/ssh-action@v1
-        env:
-          CR_PAT: ${{ secrets.CR_PAT }}
-          IMAGE_TAG: ${{ steps.resolve.outputs.image_tag }}
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          envs: CR_PAT,IMAGE_TAG
-          script: |
-            source ~/repo/market-monitor-backend/infra/scripts/env.sh
-            git -C "$REPO_DIR" fetch origin main
-            git -C "$REPO_DIR" reset --hard origin/main
-            bash "$REPO_DIR/infra/scripts/deploy-application.sh"
-
-      - name: Health check
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
-          script: |
-            bash "$HOME/repo/market-monitor-backend/infra/scripts/health-check.sh"
-
-  # 수동 전체 재빌드+배포 (target=application 또는 all). 긴급/복구용, 브랜치·main push 흐름과 별개.
+  # 수동 배포 (target=application 또는 all). "Use workflow from"으로 고른 브랜치 기준으로 동작 —
+  # main이면 :main 태그(자동 배포와 동일, 영향 없음), 그 외 브랜치면 :branch-<이름> 태그를 쓴다.
+  # 그 태그 이미지가 이미 있으면(브랜치 push 시 build job이 이미 만들어둔 경우가 보통) 재빌드 없이 바로
+  # 배포하고, 없을 때만 새로 빌드한다 — 트라이얼/롤백이 빠르면서도 브랜치를 시험 배포해도 :main 태그는
+  # 안 건드린다.
   application:
     if: github.event_name == 'workflow_dispatch' && (inputs.target == 'application' || inputs.target == 'all')
     runs-on: ubuntu-latest
@@ -277,6 +226,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Compute image tag
+        id: tag
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$REF_NAME" = "main" ]; then
+            echo "image_tag=main" >> "$GITHUB_OUTPUT"
+          else
+            echo "image_tag=branch-$(echo "$REF_NAME" | tr '/' '-')" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -284,16 +244,27 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check if image already exists
+        id: check
+        run: |
+          if docker manifest inspect "ghcr.io/fwangchanju/market-monitor:${{ steps.tag.outputs.image_tag }}" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Docker Buildx
+        if: steps.check.outputs.exists == 'false'
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push application image
+        if: steps.check.outputs.exists == 'false'
         uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile
           push: true
-          tags: ghcr.io/fwangchanju/market-monitor:main
+          tags: ghcr.io/fwangchanju/market-monitor:${{ steps.tag.outputs.image_tag }}
           cache-from: type=gha,scope=application
           cache-to: type=gha,mode=max,scope=application
 
@@ -301,16 +272,17 @@ jobs:
         uses: appleboy/ssh-action@v1
         env:
           CR_PAT: ${{ secrets.CR_PAT }}
-          IMAGE_TAG: main
+          IMAGE_TAG: ${{ steps.tag.outputs.image_tag }}
+          GIT_REF: ${{ github.ref_name }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          envs: CR_PAT,IMAGE_TAG
+          envs: CR_PAT,IMAGE_TAG,GIT_REF
           script: |
             source ~/repo/market-monitor-backend/infra/scripts/env.sh
-            git -C "$REPO_DIR" fetch origin main
-            git -C "$REPO_DIR" reset --hard origin/main
+            git -C "$REPO_DIR" fetch origin "$GIT_REF"
+            git -C "$REPO_DIR" reset --hard "origin/$GIT_REF"
             bash "$REPO_DIR/infra/scripts/deploy-application.sh"
 
       - name: Health check
@@ -338,6 +310,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Compute image tag
+        id: tag
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$REF_NAME" = "main" ]; then
+            echo "image_tag=latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "image_tag=branch-$(echo "$REF_NAME" | tr '/' '-')" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -345,16 +328,27 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check if image already exists
+        id: check
+        run: |
+          if docker manifest inspect "ghcr.io/fwangchanju/market-monitor-nginx:${{ steps.tag.outputs.image_tag }}" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Docker Buildx
+        if: steps.check.outputs.exists == 'false'
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push nginx image
+        if: steps.check.outputs.exists == 'false'
         uses: docker/build-push-action@v6
         with:
           context: .
           file: containers/nginx/Dockerfile
           push: true
-          tags: ghcr.io/fwangchanju/market-monitor-nginx:latest
+          tags: ghcr.io/fwangchanju/market-monitor-nginx:${{ steps.tag.outputs.image_tag }}
           cache-from: type=gha,scope=nginx
           cache-to: type=gha,mode=max,scope=nginx
 
@@ -362,15 +356,17 @@ jobs:
         uses: appleboy/ssh-action@v1
         env:
           CR_PAT: ${{ secrets.CR_PAT }}
+          IMAGE_TAG: ${{ steps.tag.outputs.image_tag }}
+          GIT_REF: ${{ github.ref_name }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          envs: CR_PAT
+          envs: CR_PAT,IMAGE_TAG,GIT_REF
           script: |
             source ~/repo/market-monitor-backend/infra/scripts/env.sh
-            git -C "$REPO_DIR" fetch origin main
-            git -C "$REPO_DIR" reset --hard origin/main
+            git -C "$REPO_DIR" fetch origin "$GIT_REF"
+            git -C "$REPO_DIR" reset --hard "origin/$GIT_REF"
             bash "$REPO_DIR/infra/scripts/deploy-nginx.sh"
 
       - name: Health check
@@ -397,6 +393,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Compute image tag
+        id: tag
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$REF_NAME" = "main" ]; then
+            echo "image_tag=latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "image_tag=branch-$(echo "$REF_NAME" | tr '/' '-')" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -404,16 +411,27 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check if image already exists
+        id: check
+        run: |
+          if docker manifest inspect "ghcr.io/fwangchanju/market-monitor-renderer:${{ steps.tag.outputs.image_tag }}" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Docker Buildx
+        if: steps.check.outputs.exists == 'false'
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push renderer image
+        if: steps.check.outputs.exists == 'false'
         uses: docker/build-push-action@v6
         with:
           context: .
           file: containers/renderer/Dockerfile
           push: true
-          tags: ghcr.io/fwangchanju/market-monitor-renderer:latest
+          tags: ghcr.io/fwangchanju/market-monitor-renderer:${{ steps.tag.outputs.image_tag }}
           cache-from: type=gha,scope=renderer
           cache-to: type=gha,mode=max,scope=renderer
 
@@ -421,13 +439,15 @@ jobs:
         uses: appleboy/ssh-action@v1
         env:
           CR_PAT: ${{ secrets.CR_PAT }}
+          IMAGE_TAG: ${{ steps.tag.outputs.image_tag }}
+          GIT_REF: ${{ github.ref_name }}
         with:
           host: ${{ secrets.RENDERER_SERVER_HOST }}
           username: ${{ secrets.RENDERER_SERVER_USER }}
           key: ${{ secrets.RENDERER_SERVER_SSH_KEY }}
-          envs: CR_PAT
+          envs: CR_PAT,IMAGE_TAG,GIT_REF
           script: |
             source ~/repo/market-monitor-backend/infra/scripts/env.sh
-            git -C "$REPO_DIR" fetch origin main
-            git -C "$REPO_DIR" reset --hard origin/main
+            git -C "$REPO_DIR" fetch origin "$GIT_REF"
+            git -C "$REPO_DIR" reset --hard "origin/$GIT_REF"
             bash "$REPO_DIR/infra/scripts/deploy-renderer.sh"

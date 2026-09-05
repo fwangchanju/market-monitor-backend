@@ -22,6 +22,7 @@ public class DailyMarketReportSender {
     private final MarketMapCategoryRankingTelegramReportSender marketMapCategoryRankingTelegramReportSender;
 
     public void send(LocalDateTime dataTime, boolean changeSuccess) {
+
         marketMapTelegramReportSender.send(dataTime, MarketQuery.ALL_STOCK.toMarkets());
 
         //        if (changeSuccess) {

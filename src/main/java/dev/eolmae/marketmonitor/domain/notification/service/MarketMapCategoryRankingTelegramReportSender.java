@@ -1,5 +1,6 @@
 package dev.eolmae.marketmonitor.domain.notification.service;
 
+import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.domain.notification.client.TelegramClient;
 import dev.eolmae.marketmonitor.domain.notification.enums.RenderTarget;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
@@ -28,11 +29,10 @@ public class MarketMapCategoryRankingTelegramReportSender extends TelegramReport
         return RenderTarget.CATEGORY_CHANGE_RATE;
     }
 
-    // 화면(CategoryChangeRatePage)은 market=ALL_STOCKS 하나로도 KOSPI/KOSDAQ 그래프를 한 페이지에 같이
-    // 그려주므로, 마켓별로 나눠 캡처하지 않고 요청받은 query 값 그대로 하나만 찍는다(이미지 1장).
+    // 지도와 동일하게 마켓을 하나로 합치지 않고 마켓별로 각각 캡처한다(ALL_STOCKS면 KOSPI/KOSDAQ 이미지 2장).
     @Override
     protected List<String> captureQueryValues(MarketQuery query) {
-        return List.of(query.name());
+        return query.toMarkets().stream().map(Market::name).toList();
     }
 
     @Override

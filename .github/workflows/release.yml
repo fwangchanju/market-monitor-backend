@@ -328,21 +328,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check if image already exists
-        id: check
-        run: |
-          if docker manifest inspect "ghcr.io/fwangchanju/market-monitor-nginx:${{ steps.tag.outputs.image_tag }}" > /dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Set up Docker Buildx
-        if: steps.check.outputs.exists == 'false'
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push nginx image
-        if: steps.check.outputs.exists == 'false'
         uses: docker/build-push-action@v6
         with:
           context: .

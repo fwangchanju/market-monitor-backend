@@ -97,3 +97,15 @@
 **3) 캡션 텍스트 = 화면에 보이는 실제 데이터(구현 방향 확정)**: 렌더러가 프론트를 열어 캡처하는 흐름과, `TelegramReportSender.buildText()`가 텍스트를 만드는 흐름이 "같은 계산을 두 번 하는 것 아니냐"는 우려가 있었음. 실제로는 물리적으로 같은 백엔드 프로세스 안에서 일어나므로, 이미 갖춰진 `@Cacheable`(Caffeine, `StockInfoCacheService` 등과 동일 패턴) 인프라를 그대로 써서 계산 결과를 캐싱하면 됨 — 어느 쪽이 먼저 호출되든 그 데이터 수집 주기(예: 5분) 안에서는 실제 계산이 한 번만 실행되고, `CollectionScheduler`가 새 데이터를 쓰는 시점에 evict. 이 결론에 따라 **가중평균 등락률 계산을 프론트 client-side 전용(`MarketMapCategorySection.tsx`)에서 백엔드로 이관하고, `MarketMapCategoryNode`에 필드로 실어 보내는 쪽으로 방향을 잡음** — 캡션/캐시가 참조할 "백엔드가 계산한 값" 자체가 지금은 존재하지 않기 때문. 상승/하락/보합 카운트는 이관 대상 아님(백엔드 쪽 소비자가 없고, 프론트는 어차피 개별 종목 박스 렌더링을 위해 원본 종목 리스트를 계속 받아야 해서 그 자리에서 계산해도 무방).
 
 **현재 상태**: 전부 설계 단계, 구현 착수 안 함. 2번(스냅샷+이력) 특히 스키마/서비스 설계까지 더 필요해서 보류.
+
+---
+
+## 프론트 배포해도 운영에 반영 안 되던 버그 — nginx job 재빌드 스킵 (2026-09-05)
+
+프론트 `claude/fix/tier-range-sync` 브랜치를 "Use workflow from"으로 골라 배포했는데도 운영 웹에 반영이 안 되는 문제가 있었음. 원인과 임시 조치를 기록.
+
+**원인**: 프론트 `release.yml`은 정적 자산 이미지를 브랜치 구분 없이 항상 `market-monitor-assets:latest` 하나로만 태그해서 푸시한다. 이 이미지는 런타임이 아니라 백엔드 `containers/nginx/Dockerfile`의 `FROM ghcr.io/fwangchanju/market-monitor-assets:latest` 빌드 시점에 박히는데, 백엔드 `release.yml`의 `nginx` job이 "`market-monitor-nginx:<태그>` 이미지가 이미 존재하면 재빌드 스킵" 최적화를 갖고 있었다. 이 태그(`:latest`/`:main`)는 최초 1회 빌드된 이후로는 항상 "존재"하므로, `frontend-assets-published`(repository_dispatch)가 와도 이후로는 계속 재빌드가 스킵되고 예전에 박제된 프론트 코드만 계속 재배포됐다. `application`/`renderer` job은 태그 자체가 자기 자신의 브랜치/커밋을 가리켜서 이 스킵 최적화가 문제없지만, `nginx`만 외부(프론트) 콘텐츠에 의존하면서 그 콘텐츠가 태그에 안 드러나 캐시 무효화가 깨진 케이스.
+
+**임시 조치(적용 완료)**: `nginx` job의 "이미 존재하면 스킵" 체크를 제거하고 매번 무조건 재빌드하도록 수정(`release.yml`). 트리거될 때마다(프론트 릴리즈, nginx 대상 수동 배포, main push 시 nginx 경로 변경) 항상 최신 `market-monitor-assets:latest`를 반영한다.
+
+**TODO(더 견고한 개선안, 보류)**: 프론트 자산을 `:latest`뿐 아니라 `market-monitor-assets:sha-<프론트커밋>`으로도 태그하고, `repository_dispatch`의 `client_payload`로 그 sha를 백엔드에 전달 → 백엔드 nginx Dockerfile을 `ARG ASSETS_TAG` + `FROM ghcr.io/.../market-monitor-assets:${ASSETS_TAG}` 형태로 바꿔서 그 sha 태그로 빌드. 이러면 "이미 존재하면 스킵" 최적화가 다시 의미 있어짐(진짜 그 프론트 커밋 기준 이미지가 이미 있을 때만 스킵) — `application` job이 이미 쓰는 `sha-<hash>`/`branch-<name>` 컨벤션과도 일관됨. 지금은 당장 급한 불만 끄는 쪽(무조건 재빌드)으로 처리하고, 이 개선은 나중으로 미룸.

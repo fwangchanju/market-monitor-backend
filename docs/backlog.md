@@ -160,6 +160,41 @@ item마다 snapshotTime을 들고 있는 현재 구조는 불필요하다. 리�
 
 ---
 
+## JPA Auditing 전환 (검토 후 보류)
+
+엔티티가 `createdAt` / `updatedAt`을 **직접 대입**하고 있다. `this.updatedAt = LocalDateTime.now(...)`
+형태가 **엔티티 20개에 걸쳐 51곳**이다.
+
+`@EnableJpaAuditing` + `@EntityListeners(AuditingEntityListener.class)` + `@CreatedDate` /
+`@LastModifiedDate`로 바꾸면 51줄이 사라지고 "특정 메서드에서 갱신 누락" 버그가 구조적으로 막힌다.
+KST 기준을 유지해야 하므로 `DateTimeProvider` 빈을 만들고
+`@EnableJpaAuditing(dateTimeProviderRef = "...")`로 지정해야 한다.
+
+**왜 미뤘나 — 검증이 불가능해서다.**
+
+스키마상 `created_at` / `updated_at`이 전부 `NOT NULL`이다. 엔티티 20개 중 **하나라도
+`@EntityListeners`를 빠뜨리고 수동 대입만 지우면**, 그 엔티티의 INSERT가 프로덕션에서 제약 위반으로
+터진다. 그런데 CI에 DB가 없고 테스트 정책이 "프레임워크가 보장하는 것(JPA 매핑)은 테스트하지 않는다"라
+**이 실수를 잡을 자동 검증이 하나도 없다.**
+
+"정리" 작업으로 분류했었지만 실제로는 **동작 변경**이다. 사용자가 코드를 읽지 않는 상태에서, 검증
+수단 없이 20개 엔티티의 타임스탬프 동작을 한 번에 바꾸는 건 위험 대비 이득이 작다.
+
+**하게 된다면 필요한 것**
+- `domain/access`의 `AllowedIp`, `AdminToken` 포함 여부 결정(로그인 작업으로 대체될 영역)
+- 엔티티별 `@EntityListeners` 부착 여부를 표로 검증
+- DB를 띄우는 통합 테스트 한 개라도 있어야 안전하다
+
+## `market_map_category_change_rate_snapshot`에 `snapshot_time` 인덱스 (검토 후 보류)
+
+이 테이블에 `snapshot_time` 단독 인덱스가 없다. UK가
+`(market_type, category_id, market_value_tier_id, snapshot_time)`이라 선두 컬럼이 아니어서,
+정리 배치가 매일 풀스캔한다.
+
+**왜 미뤘나**: 인덱스를 추가하려면 `V1__create_schema.sql`을 고쳐야 하고, 그러면 운영 DB에서
+checksum 불일치 대응 절차를 밟아야 한다(`docs/operations.md`). 얻는 건 새벽 배치 속도뿐이라 지금은
+그 비용을 치르지 않는다. 배치가 실제로 오래 걸리는 게 보이면 그때 한다.
+
 ## 대량 insert 성능 개선 (검토 후 보류)
 
 `IndexContributionRankingCollector`가 종목당 `save()`를 호출해 5분마다 약 5,600번의 개별 INSERT가

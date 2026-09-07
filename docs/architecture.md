@@ -1,0 +1,193 @@
+# 구조와 배치 기준
+
+새 코드를 어디에 둘지 판단할 때 보는 문서. **파일을 만들기 전에 읽는다.**
+
+---
+
+## 도메인이 하는 일
+
+패키지 목록을 외우는 것보다, 각 도메인이 **무엇을 담당하는지**를 아는 게 중요하다.
+
+| 도메인 | 한 줄 |
+|---|---|
+| `domain/stock` | **데이터를 만든다** — 외부 API에서 수집해 스냅샷으로 저장 |
+| `domain/marketmap` | **데이터를 분류한다** — 어드민이 구성한 카테고리 체계, 종목 배정, 시가총액 구간 |
+| `domain/view` | **데이터를 읽어 화면용으로 준다** — 조회·집계·응답 DTO |
+| `domain/notification` | **데이터를 밖으로 내보낸다** — 텔레그램 발송, 장애 에스컬레이션 |
+| `domain/renderer` | **화면을 이미지로 만든다** — 렌더러 서버 호출 |
+| `domain/access` | **접근을 통제한다** — IP 화이트리스트, 관리자 토큰 |
+| `domain/krx` | KRX 크롤링. **비활성**(`krx.enabled=false`), 유지만 함 |
+
+앱 전역 인프라는 도메인 밖에 둔다.
+
+| 위치 | 내용 |
+|---|---|
+| `config/` | 앱 전역 Spring 배선 (`RestClient`, `CacheManager`, `JPAQueryFactory`) |
+| `handler/` | 전역 예외 처리 (`@RestControllerAdvice`) |
+| `runner/` | 앱 시작 시 훅 (`ApplicationRunner`) |
+| `common/` | 비즈니스가 공통으로 import하는 것 — `cache` · `enums` · `event` · `exception` · `util` |
+
+---
+
+## 데이터 흐름
+
+```
+외부 API (키움)
+    │
+    ▼
+domain/stock/collector          수집
+    │
+    ▼
+스냅샷 테이블 (sector_price_snapshot 등)
+    │
+    ├──────────────────────────────┐
+    ▼                              ▼
+domain/marketmap                domain/view
+카테고리 체계로 분류              조회·집계
+    │                              │
+    └──────────┬───────────────────┘
+               ▼
+    ┌──────────┴──────────┐
+    ▼                     ▼
+REST API (화면)      domain/notification
+                     (+ domain/renderer로 이미지 캡처)
+                          ▼
+                       텔레그램
+```
+
+스케줄러(`domain/stock/scheduler/CollectionScheduler`)가 이 흐름 전체의 트리거다.
+수집 → 카테고리 등락률 스냅샷 → 텔레그램 발송이 **같은 호출 안에서 순차 실행**된다. 별도 스케줄로
+나누면 두 트리거의 실행 순서를 보장할 수 없기 때문이다.
+
+---
+
+## 의존 방향
+
+- **`common` → `domain` 역의존 금지.** `common`은 순수 공유 라이브러리다
+- **도메인 간 순환 금지.** 순환이 생기면 **이벤트로 끊는다**
+  - 실제 사례: `StockInfoCollector`(stock)가 신규 종목을 저장한 뒤 카테고리를 배정해야 하는데,
+    `stock → marketmap` 직접 의존은 `marketmap → stock` 역방향과 순환이 된다. 그래서
+    `common/event/StockInfoSyncedEvent`를 발행하고 `MarketMapCategoryService`가 수신한다
+- **`view`는 다른 도메인을 읽기만 한다.** `view`가 데이터를 만들거나 바꾸지 않는다
+- 외부 API 클라이언트는 **소비하는 도메인에 귀속**시킨다
+  (`KiwoomApiClient` → `domain/stock/client`, `TelegramClient` → `domain/notification/client`)
+
+---
+
+## 레이어별 배치
+
+도메인 안에서는 아래 서브패키지를 쓴다. **루트 직속에 파일을 두지 않는다.**
+
+| 서브패키지 | 넣는 것 |
+|---|---|
+| `entity/` | JPA 엔티티 |
+| `repository/` | Spring Data 리포지토리 (+ QueryDSL `*RepositoryCustom`/`*RepositoryImpl`) |
+| `service/` | 비즈니스 로직, 캐시 서비스 |
+| `controller/` | REST 컨트롤러 |
+| `scheduler/` | `@Scheduled` 트리거 |
+| `collector/` | 배치 수집기 (외부 API 폴링해서 저장) |
+| `client/` | 외부 HTTP 호출자만. 요청·응답 타입은 `dto/` |
+| `dto/` | 요청·응답 타입 |
+| `enums/` | 도메인 enum (`enum`이 예약어라 복수형) |
+| `properties/` | `@ConfigurationProperties` |
+| `config/` | 도메인 종속 `@Configuration` |
+| `exception/` | 도메인 특화 예외 |
+
+**진입점(`controller`, `scheduler`)은 도메인 바로 아래에 둔다.** `collector` 밑에 중첩시키지 않는다.
+
+수집기 내부에서만 쓰는 중간 표현은 `dto/`가 아니라 **private nested record**로 둔다. `dto/`는 외부
+경계(HTTP 요청·응답) 전용이다.
+
+---
+
+## 어디에 둘지 애매할 때
+
+### 판단 순서
+
+1. **"이 코드가 하는 일이 위 7개 도메인 중 무엇인가?"**
+2. 그래도 애매하면 — **"이게 없어지면 어느 기능이 안 되나?"** 그 기능의 도메인에 둔다
+3. 여러 도메인에 걸치면 — **주된 소비자**의 도메인에 둔다
+4. 주된 소비자도 여럿이면 — **도메인별로 쪼개고, 그것들을 부르는 얇은 조율 계층을 트리거 쪽에 둔다**
+   (아래 예시 참고)
+
+### 새 파일을 만들기 전에
+
+- 같은 역할의 클래스가 이미 있는가? → 있으면 거기에 메서드를 추가한다
+- 기존 클래스의 확장으로 될 일인가? → 새 타입을 만들기 전에 확인한다
+- 두 곳에서 쓰이는가? → 한 곳이면 그 도메인에, 여러 곳이면 3~4번 판단으로
+
+### 예시 — 여러 도메인에 걸치는 배치 작업
+
+스냅샷 데이터 정리 배치는 두 테이블을 지운다.
+
+- `sector_price_snapshot` → `domain/stock`
+- `market_map_category_change_rate_snapshot` → `domain/marketmap`
+
+**나쁜 배치**: 한 클래스가 두 도메인의 리포지토리를 직접 호출한다. 도메인 경계를 넘고, 나중에
+`marketmap`만 고칠 때도 그 클래스를 건드려야 한다.
+
+**좋은 배치**: 삭제 로직을 **각 도메인의 서비스에** 두고, 스케줄러가 둘을 호출한다.
+
+```
+domain/stock/service/SectorPriceSnapshotService
+    └ deleteSnapshotsBefore(...)
+
+domain/marketmap/service/MarketMapCategoryChangeRateSnapshotService
+    └ deleteSnapshotsBefore(...)
+
+domain/stock/scheduler/  (또는 별도 스케줄러)
+    └ 위 둘을 호출하는 얇은 조율 메서드
+```
+
+각 도메인은 자기 데이터의 수명만 알고, 스케줄러는 "언제 도는가"만 안다.
+
+---
+
+## 명명
+
+- **API/TR 번호 기반 이름 금지** — `Ka20001Request` ❌ → `SectorCurrentPriceRequest`
+- **약어보다 풀네임** — `prevMarketCap` 대신 `prevMarketCapitalization`
+- **메서드명은 동사로 시작**하고 역할이 드러나게 — `message()` ❌ → `createMessage()`
+- **클래스명은 책임 중심으로** — `AlertService` ❌ → `EscalationService`
+- **enum static factory는 `valueOf`와 혼동되지 않게** — `codeOf()`, `from()`
+- **저장용 enum과 조회 파라미터용 enum을 섞지 않는다** — DB에 저장되는 `IntradayInvestorType`에
+  "합산 조회" 같은 API 전용 값을 끼우지 않는다. 그런 의미는 `MarketQuery`, `IntradayInvestorQuery`
+  같은 Query enum으로 분리한다
+- **"전체/통합"은 enum 상수가 아니라 Query enum으로** — `Market.ALL` ❌ → `MarketQuery.ALL_STOCK`
+
+---
+
+## 캐시
+
+- `common/cache/CacheService<T>` 인터페이스로 통일한다 — `getCache()` / `evict()`
+- `@Cacheable` value는 컴파일타임 상수여야 하므로 `CacheKey` 상수 클래스에 모은다
+- 캐시 매니저가 두 개다
+  - `cacheManager`(기본) — 종목 정보, 관심종목. TTL 없이 명시적 evict
+  - `accessCacheManager` — IP 화이트리스트. TTL 10초 (수동 DB 편집을 반영하기 위해)
+- **캐시 evict는 트랜잭션 커밋 후에 한다.** 커밋 전에 비우면 다른 스레드가 커밋 전 데이터를 읽어
+  캐시에 굳힐 수 있다
+
+---
+
+## 예외
+
+`common/exception/BusinessException`은 sealed이고 서브타입은 넷이다.
+
+| 타입 | HTTP | 용도 |
+|---|---|---|
+| `BadRequestException` | 400 | 잘못된 요청 |
+| `NotFoundException` | 404 | 대상 없음 |
+| `ConflictException` | 409 | 중복·충돌 |
+| `EscalateException` | 500 | **개발자에게 즉시 텔레그램 알림이 가는** 장애 |
+
+`EscalateException`을 쓸지 말지의 판단 기준은 `docs/decisions.md`를 본다. 아무 500에나 붙이는 게
+아니다.
+
+예외를 던지면 이후 흐름이 멈추는 곳(수집기처럼 다음 수집기가 계속 돌아야 하는 경우)에서는 던지는 대신
+`EscalateException.wrap(...)`으로 정규화해서 `EscalationPublisher.report()`에 넘긴다.
+
+---
+
+## 이 문서의 범위
+
+여기 없는 세부 코딩 규칙(제어 흐름, 스트림, BigDecimal 비교 등)은 `docs/rules/style.md`에 있다.

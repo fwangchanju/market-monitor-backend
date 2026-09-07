@@ -22,11 +22,11 @@
 
 ## 역할
 
-| 역할 | 하는 일 |
-|---|---|
-| **설계·문서·리뷰 세션** | 문서 작성, PR 리뷰. `docs/**`와 `CLAUDE.md`는 이쪽만 수정한다 |
-| **구현 세션** | 이 지시서를 읽고 **코드만** 작성. 문서는 건드리지 않는다 |
-| **사용자** | PR 병합, 배포 시점 결정 |
+| 역할 | 현재 담당 | 하는 일 |
+|---|---|---|
+| **설계·문서·리뷰** | Opus | 문서 작성, PR 리뷰. `docs/**`와 `CLAUDE.md`는 이쪽만 수정한다 |
+| **구현** | Sonnet | 이 지시서를 읽고 **코드만** 작성. 문서는 건드리지 않는다 |
+| **결정** | 사용자 | PR 병합, 배포 시점 |
 
 **구현 세션은 `docs/` 아래 문서를 수정하지 않는다.** 작업 중 알게 된 것, 판단이 갈렸던 지점,
 지시서와 실제가 달랐던 부분은 전부 **PR 설명에** 적는다. 문서 반영은 리뷰 세션이 한다.
@@ -117,6 +117,18 @@
   있게 한다
 - 각 매뉴얼 테스트 Javadoc에 실행 조건과 실행 명령 명시
 
+**⚠️ 서버 스크립트가 깨진다 — PR 설명에 반드시 적을 것**
+
+`excludeTags`는 JUnit 엔진 레벨 필터라 `--tests`보다 먼저 걸린다. 즉 `test` 태스크에 `excludeTags`를
+걸면 아래 형태는 **"테스트를 못 찾음"으로 조용히 아무것도 안 돈다.**
+
+```bash
+./gradlew test --tests "*.TelegramReportCycleManualTest"    # ← 이제 안 돎
+```
+
+사용자가 서버에서 쓰는 스크립트가 정확히 이 형태다. 새 태스크는 반대로 `includeTags 'manual'`을 걸어야
+하고, **바뀐 실행 명령을 PR 설명에 명시**해야 사용자가 서버 스크립트를 고칠 수 있다.
+
 ## 1-2. CI 추가
 
 현재 `.github/workflows/release.yml`은 **배포 전용**이고 테스트·빌드 검증 단계가 **아예 없다.**
@@ -158,7 +170,16 @@ promote-main job (main 병합 시)
 `promote-main`에는 "빌드 완료까지 최대 600초 대기" 로직이 있는데(`release.yml:151-166`)
 `application` job에는 없다. 1-3으로 수동 배포가 주 경로가 되므로 이 구멍을 막는다.
 
-배포 대상 커밋의 `:sha-<커밋>` 이미지가 실제로 존재하는지 확인하는 방식을 권한다.
+**조치: 배포 기준을 `:sha-<배포 대상 커밋>`으로 통일한다.**
+
+main이든 브랜치든 항상 커밋 sha 태그로 배포하고, 그 태그가 **없을 때만 그 자리에서 빌드**한다.
+`:main` / `:branch-<이름>`은 편의용 별칭으로만 남는다.
+
+"대기" 방식은 쓰지 않는다. `build` job은 `src/main/**` 등이 바뀔 때만 도는데, 그렇지 않은 커밋을
+배포하려 하면 `:sha-` 이미지가 **영원히 생기지 않아** 무조건 타임아웃이 나기 때문이다.
+
+이러면 "지금 서버에 어떤 커밋이 떠 있는지"가 태그만으로 정확해진다. 지금은 `:branch-x`가 어느 커밋인지
+알 방법이 없다.
 
 ## 1-5. 핵심 로직 테스트 작성
 
@@ -171,8 +192,13 @@ promote-main job (main 병합 시)
 
 1. **`CollectionChecker`** — 수집 시간대 판정, `expectedSnapshotTime()`, `previousTradingDay()`
    - **지금 상태로는 테스트가 불가능하다.** 내부에서 `LocalDateTime.now()`를 직접 호출한다
-   - **시각을 주입 가능하게 리팩터링한다.** 인자로 받거나 `java.time.Clock`을 주입한다
-   - 기존 `common/util/KstClock`을 활용하거나 정리한다(4단계와 연결)
+   - **조치: 시각을 인자로 받는 순수 함수로 바꾼다.** `Clock` 주입까지 갈 필요 없다
+     ```java
+     CollectionChecker.expectedSnapshotTime(now)          // 순수 함수 → 테스트 가능
+     호출부: CollectionChecker.expectedSnapshotTime(KstClock.now())
+     ```
+   - `KstClock`은 "현재 시각을 만드는 경계"라는 역할만 갖는다. **26곳에 기계적으로 퍼뜨리지 않는다**
+     (4-3 참고)
 2. **`CategoryRankingTextBuilder.buildRankingText()`** — TOP3 선정, 대분류 필터, 구간 제외, 포맷
 3. **`MarketQueryService.getProgramTradingRankings()`** — 종목별 합산·정렬·순위 부여
 4. **`KiwoomValueParser` / `NumberParser` / `Strings`** — 파싱 유틸
@@ -245,8 +271,17 @@ stockInfo -> stockCategoryMap.get(stockInfo.getStockCode()).getCategoryId()
 - `StockInfoCollector`의 이벤트는 **신규 종목만** 싣는다(`StockInfoCollector.java:90-96`).
   ETF→주권 전환이나 비활성→재활성 종목은 영원히 배정을 못 받는다
 
-**조치**: 배정 없는 종목은 "미분류"로 흘리거나 필터링한다. 전체 API가 죽는 것보다 낫다. 어느 쪽을
-택했는지 PR 설명에 남긴다.
+**조치: 조회 경로는 건드리지 않는다. 동기화 경로에서 구멍을 닫는다.**
+
+`StockInfoCollector.sync()`가 이벤트에 신규 종목만 싣는 대신, **"배정이 없는 활성 일반주 전체"**를
+대상으로 한다. 이미 있는 `syncStockCategories` 로직(복원 경로가 쓰는 그것)을 그대로 재사용한다.
+
+- 새 로직이 아니라 **기존 로직의 호출 지점을 늘리는 것**이다
+- ETF 자체를 배정 대상으로 삼는 게 아니다. ETF였던 종목이 일반주가 된 순간에만 대상이 된다
+- 동기화 트랜잭션 안에서 함께 처리되므로 시간 창(window)이 없다
+
+**조회 경로에 null 체크를 넣지 않는다.** 전제가 깨지지 않게 만드는 것이 목적이지, 깨져도 굴러가게
+만드는 게 목적이 아니다. 방어 코드는 "여기 없을 수도 있구나"라는 잘못된 암시를 준다(`style.md` §5).
 
 ## 2-4. 캐시를 커밋 전에 비우는 레이스
 
@@ -259,9 +294,12 @@ stockInfoCacheService.evict();      // ← 아직 커밋 전
 evict와 커밋 사이에 다른 스레드가 캐시를 재적재하면 **커밋 전 옛 데이터를 읽어 캐시에 굳힌다.**
 다음 evict까지 낡은 종목 정보가 서빙된다.
 
-**조치**: `@TransactionalEventListener(AFTER_COMMIT)` 또는 `TransactionSynchronization`의
-`afterCommit`으로 옮긴다. 단, 현재 주석("핸들러가 최신 상태를 보게 하려고 이벤트 발행 전에 evict")이
-설명하는 의도를 깨지 않는지 확인하고, 깨진다면 그 의도를 만족하는 다른 방법을 찾는다.
+**조치: `evict()`를 커밋 후(`afterCommit`)로 옮긴다.**
+
+현재 주석의 의도("핸들러가 최신 캐시를 보게")는 **사실 달성되지 않는 의도**다. 핸들러는 같은 트랜잭션
+안에서 돌기 때문에, 캐시를 다시 채워도 커밋 전 상태가 굳을 뿐이다.
+
+핸들러가 방금 저장한 종목을 봐야 한다면 **캐시가 아니라 리포지토리에서 직접 조회**하도록 바꾼다.
 
 ## 2-5. 키움 5xx·타임아웃이 "파싱 실패"로 보고됨
 
@@ -275,10 +313,15 @@ evict와 커밋 사이에 다른 스레드가 캐시를 재적재하면 **커밋
 `RestClientException`은 연결 실패·타임아웃·5xx를 전부 포함한다. 키움 서버 500이나 네트워크 단절도
 "응답 파싱 실패"로 알림이 온다. 그리고 429만 재시도 대상이라 일시적 5xx는 재시도 없이 버린다.
 
-**조치**:
-- 예외 종류를 구분해 각각 맞는 `ErrorCode`로 매핑 (연결/타임아웃 / 5xx / 파싱 실패). 필요하면
-  `ErrorCode`를 추가한다
-- 5xx와 타임아웃도 재시도 대상에 포함
+**조치: 아래 표대로 매핑한다.**
+
+| 상황 | ErrorCode | 재시도 |
+|---|---|---|
+| 연결 실패·타임아웃 | `KIWOOM_CONNECTION_FAILED` (신규) | O |
+| 5xx | `KIWOOM_SERVER_ERROR` (신규) | O |
+| 429 | `KIWOOM_RATE_LIMIT` (기존) | O |
+| 그 외 4xx | `KIWOOM_HTTP_ERROR` (기존) | X |
+| 진짜 파싱 실패 | `KIWOOM_RESPONSE_PARSE_FAILED` (기존) | X |
 - `KiwoomApiClient.java:46`의 Javadoc이 "최대 3회 재시도(2초 간격)"라고 되어 있으나 실제
   애노테이션은 `maxAttempts=2, delay=1000`이다. 바뀐 정책에 맞춰 Javadoc도 함께 고친다
 
@@ -290,6 +333,28 @@ Spring 기본 처리로 나가고 **텔레그램 알림이 가지 않는다.** `
 
 **조치**: catch-all 핸들러를 추가해 500 ProblemDetail 응답 + 에스컬레이션 알림. **2-1이 선행돼야
 이 핸들러가 안전하다.**
+
+## 2-7. 응답의 스냅샷 시각이 실제 데이터 시각과 다르다
+
+같은 `SnapshotResponse.snapshotTime` 필드에 서비스마다 다른 의미가 담겨 있다.
+
+| 서비스 | 넣는 값 |
+|---|---|
+| `MarketQueryService` | **기대 시각** (`CollectionChecker.expectedSnapshotTime()`) |
+| `MarketMapQueryService` | 실제 시각 |
+| `MarketMapCategoryChangeRateSnapshotService` | 실제 시각 |
+
+`MarketQueryService`는 실제로는 `latestSnapshotTime`으로 데이터를 조회해놓고, 응답 라벨에는 "지금쯤이면
+있어야 할" 시각을 담는다. **데이터가 16:05 것인데 화면엔 16:10이 찍힌다.**
+
+**조치: `MarketQueryService`도 실제 시각(`latestSnapshotTime`)을 담는다.** 세 서비스의 의미를 통일한다.
+
+정상 상황에서는 두 값이 같아 화면 변화가 없고, 수집 중이거나 지연됐을 때만 실제 데이터 시각이 찍힌다.
+그게 맞는 동작이다. 프론트 변경은 필요 없다.
+
+**`CollectionChecker`와 `isHoliday()`는 삭제하지 않는다.** 지연 감지 기능을 위해 미리 만들어둔
+코드이고, 그 기능은 공휴일 판정이 선행돼야 해서 나중으로 미뤄져 있다(`docs/backlog.md`의
+"데이터 지연 감지").
 
 ---
 
@@ -311,15 +376,20 @@ Spring 기본 처리로 나가고 **텔레그램 알림이 가지 않는다.** `
 - **삭제 조건**: 스냅샷 시각의 **일자**가 배치 수행 시각 기준 **30일 이전**인 데이터
 - **15:30 데이터가 없는 날**: 그날이 통째로 사라져도 무방하다. 사용자 확인 완료 — "15:30이
   중요하고, 그게 없으면 다른 시각 데이터는 무의미하다"
-- **배치 수행 시각**: 정해지지 않았다. 수집이 끝난 뒤 새벽(예: 03:00)으로 잡고 PR 설명에 명시한다
+- **배치 수행 시각**: **매일 04:00** (`0 0 4 * * *`). 수집(08~20시), 종목정보 동기화(07시), 비활성
+  배치(20:30/21:00) 어디와도 겹치지 않는다. 주말에도 돈다 — 30일 지난 데이터는 요일과 무관하게 생긴다
 
 **패키지 배치**: 두 테이블이 서로 다른 도메인(`stock`, `marketmap`)에 걸쳐 있다.
 `docs/architecture.md`의 "여러 도메인에 걸치는 배치 작업" 예시를 그대로 따른다 — 삭제 로직은 각 도메인
 서비스에 두고, 스케줄러가 둘을 호출한다.
 
-**구현 주의**: 30일치를 처음 돌리면 수백만~수천만 행을 한 번에 지운다. 단일 DELETE는 락과 테이블
-팽창(bloat) 문제를 일으킨다. **배치 단위로 나눠 삭제**하고(하루치씩 또는 N행씩 반복) 진행 상황을
-로그로 남긴다.
+**초기 대량 삭제는 배치에 넣지 않는다.** 30일치를 처음 돌리면 수백만~수천만 행을 한 번에 지우게
+되는데, 그걸 감당하려면 배치 단위 분할·진행 로그·중단 재개 같은 게 붙어서 복잡해진다. **그 복잡도가 딱
+한 번 쓰이고 영원히 안 쓰인다.**
+
+대신:
+- **배치 로직은 정상 운영 상태만 가정**하고 단순하게 만든다. 매일 도니까 실제로는 하루치씩만 지운다
+- **초기 정리용 SQL을 PR 설명에 함께 제공한다.** 사용자가 배포 전에 직접 실행한다(주말 등 한가한 때)
 
 ## 3-2. 수집 시간 설정 3중화 해소
 
@@ -337,20 +407,6 @@ Spring 기본 처리로 나가고 **텔레그램 알림이 가지 않는다.** `
 
 **조치**: `CollectionChecker`가 properties 값을 받도록 바꾼다. 1-5에서 이 클래스를 테스트 가능하게
 리팩터링하므로 그 구조와 함께 정리한다.
-
-## 3-3. (선택) 대량 insert 성능
-
-`IndexContributionRankingCollector.java:129-131`이 종목당 `save()`를 호출해 5분마다 약 5,600번의 개별
-INSERT가 발생한다. PK가 `GENERATED ALWAYS AS IDENTITY`라 Hibernate 배치가 **구조적으로 불가능**하다
-(INSERT를 실행해야 번호가 나오므로 한 건씩 보낼 수밖에 없음).
-
-**다만 초당 20건 수준이라 장애로 이어지지 않는다.** 수집 한 사이클이 1~3초 더 걸리는 정도다.
-**시간이 남을 때만 하고, 안 해도 무방하다.**
-
-해결 방향(택1): PK를 시퀀스 방식으로 변경(마이그레이션 필요) / 이 경로만 JdbcTemplate 벌크 insert.
-
-**마이그레이션을 택한다면 `docs/rules/process.md`의 "DB 마이그레이션 규칙"을 반드시 지킨다**
-(마이그레이션 선-머지, 하위호환 추가만).
 
 ---
 
@@ -393,8 +449,19 @@ Strings / KiwoomValueParser: InlineTrivialConstant
 
 문제는 미관이 아니라 **테스트 가능성**이다(1-5에서 `CollectionChecker`가 이것 때문에 막힌다).
 
-**조치**: 1단계에서 정한 방향(Clock 주입 등)에 맞춰 통일한다. 엔티티의 `createdAt/updatedAt` 세팅은
-4-4에서 별도 처리하므로 여기서는 제외한다.
+**조치: `KstClock`은 유지한다. 삭제하지 않는다. 다만 26곳에 기계적으로 퍼뜨리지도 않는다.**
+
+26곳을 뜯어보면 대부분이 저절로 정리되거나 손댈 이유가 없다.
+
+| 어디 | 개수 | 처리 |
+|---|---|---|
+| 엔티티의 `createdAt`/`updatedAt` | 약 20 | **4-4 JPA Auditing으로 통째로 사라짐** |
+| `CollectionScheduler` (로그용, 비활성 메서드) | 3 | 테스트 대상 아님. 그대로 |
+| 수집기 2곳 (저장 시각) | 2 | 그대로 |
+| `CollectionChecker` | 2 | **1-5에서 이미 처리됨** |
+
+`KstClock`은 "현재 시각을 만드는 경계"라는 역할만 갖는다. 로직은 시각을 인자로 받는 순수 함수로
+두고, `KstClock`은 그 값을 만드는 자리에서만 쓴다.
 
 ## 4-4. JPA Auditing 도입
 
@@ -410,7 +477,7 @@ Strings / KiwoomValueParser: InlineTrivialConstant
 | 4xx를 `log.error`로 기록 | `GlobalExceptionHandler.java:41` | 400/404/409는 `warn` 이하로. ERROR는 실제 장애만 |
 | `isAllowedAdmin` 캐시 없음 | `AllowedIpAccessService.java:27` | **하지 않는다.** `domain/access`는 로그인 도입으로 대체될 예정 |
 | 봇 토큰이 URL에 노출 | `TelegramClient.java:107` | 연결 실패 시 예외 메시지에 전체 URL이 실려 **ESCALATION 로그에 봇 토큰이 남는다.** 로그·알림 메시지에서 토큰을 마스킹 |
-| `ObjectMapper` 빈의 정체 | `ApplicationConfig.java:47` | Spring Boot 4는 웹 직렬화에 Jackson 3(`tools.jackson`)을 쓰는데 이 빈은 Jackson 2(`com.fasterxml`)다. **웹 레이어에 아무 영향이 없는데 그렇게 보인다.** 전용 용도임을 주석으로 명시하거나 Jackson 3으로 통일한다. JavaTimeModule이 없어 날짜 필드를 쓰면 터지는 상태인 것도 함께 처리 |
+| `ObjectMapper` 빈의 정체 | `ApplicationConfig.java:47` | **빈 이름을 `internalObjectMapper`로 바꾸고 JavaTimeModule을 등록한다.** Spring Boot 4는 웹 직렬화에 Jackson 3(`tools.jackson`)을 쓰는데 이 빈은 Jackson 2(`com.fasterxml`)라 **웹 레이어에 아무 영향이 없는데 그렇게 보인다.** Jackson 3 전환은 비활성 코드(`KrxCrawler`)까지 건드려야 해서 하지 않는다. "웹용이 아니다"는 주석보다 이름으로 드러내는 게 강하다 |
 
 ---
 
@@ -428,15 +495,20 @@ Strings / KiwoomValueParser: InlineTrivialConstant
 - `docs/architecture.md` 갱신 — 정리 후 구조 반영
 - `docs/operations.md` 갱신 — 1-3/1-4로 바뀐 배포 절차 반영
 - `docs/decisions.md` 갱신 — 각 PR에서 나온 판단 중 남길 것 회수
+- `docs/backlog.md` 갱신 — 정비 중 새로 미뤄진 일이 있으면 배경·구상과 함께 추가
 - **`docs/work-plan.md`(이 파일) 삭제**
 
 ---
 
 # 이번 작업에서 다루지 않는 것
 
+아래는 전부 **의도적으로 제외**한 것이다. 배경과 구상은 `docs/backlog.md`에 있다.
+
 - **보안 모델 전반** — 관리자 토큰 평문 저장, 토큰만 알면 자기 IP를 admin으로 등록 가능, 브루트포스
   방어 없음, `X-Real-IP` 헤더 무조건 신뢰. **로그인 기능 도입으로 통째로 대체될 영역**이라 제외
-- **`isHoliday()` 공휴일 판정 구현** — `TODO(#38)`로 등록된 별도 기능 작업
-- **관심종목(WatchStock) 구조 정리** — 여러 수집기와 startup 단계가 이것 때문에 비활성 상태다.
-  사용자가 "구조 정리 전까지 비활성"으로 명시해둔 영역
-- **로그인 기능** — 정비가 끝난 뒤 새 플로우의 첫 신규 기능으로 진행(`docs/decisions.md`)
+- **로그인 기능** — 정비가 끝난 뒤 새 플로우의 첫 신규 기능으로 진행
+- **공휴일 판정 구현** (`TODO(#38)`) — 별도 기능 작업
+- **데이터 지연 감지** — 공휴일 판정이 선행 조건. 응답 구조가 바뀌어 프론트 작업도 필요하다
+- **관심종목(WatchStock) 구조 정리** — 여러 수집기와 startup 단계가 이것 때문에 비활성 상태다
+- **대량 insert 배치화** — 검토했고 비용 대비 이득이 작아 미뤘다
+- **프론트엔드 레포 정비** — 백엔드가 갈무리된 뒤

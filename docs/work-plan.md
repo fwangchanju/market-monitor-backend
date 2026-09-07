@@ -119,6 +119,8 @@ target = application   →  :main 배포        (평소)
 target = rollback      →  :previous 배포    (사고 시)
 ```
 
+(`nginx`/`renderer`/`all` 선택지는 그대로 남는다. 다만 이제 **수동으로만** 나간다.)
+
 "Use workflow from"은 항상 `main`이다. 브랜치를 고를 일이 없어진다.
 
 **왜 브랜치 시험 배포를 없애나**
@@ -152,64 +154,151 @@ promote-main job (main 병합 시)
 **함께 정리할 잔여물**
 - `promote-main`의 `if`에 남는 `needs.changes.outputs.application_scripts == 'true'`는 배포 스텝이
   사라지면 **아무 일도 안 하는 job을 띄우는 조건**이 된다. 제거한다
+- 위를 제거하면 `changes` job의 `application_scripts` **output과 paths-filter 블록을 읽는 곳이
+  하나도 없어진다.** 둘 다 함께 제거한다
 - job 상단 설명 주석과 배포 스텝 근처 주석이 "배포한다"고 되어 있다. 사실과 맞게 고친다
+
+**GHCR 정리 스텝의 보관 개수를 5 → 20으로 올린다.**
+
+`min-versions-to-keep: 5`는 `ignore-versions`도 `delete-only-untagged-versions`도 없어서 **태그가
+붙어 있어도 오래된 것부터 지운다.** 지금까지는 "브랜치 작업 → 시험 배포 → 즉시 병합"이 순차적이라
+안전했지만, **배포를 병합에서 떼어내는 순간 그 전제가 깨진다.** 배포한 뒤 application PR을 5건
+병합하면 `:previous`가 가리키던 버전이 먼저 사라지고, 정작 사고가 났을 때 롤백이 불가능해진다.
 
 ## 1A-2. 브랜치 배포 경로 제거
 
-`application` job에서 브랜치 분기를 없앤다.
-
-- 배포 태그는 **항상 `:main`**. `github.ref_name`으로 태그를 계산하던 로직을 제거한다
+- 배포 태그는 **항상 `:main`**. `github.ref_name`으로 태그를 계산하던 로직(`application` job의
+  `Compute image tag`)을 제거한다
 - **`:branch-<이름>` 태그 체계를 없앤다.** `build` job에서도 이 태그를 더 이상 만들지 않는다
   (`:sha-<커밋>`만 만든다)
-- `nginx` / `renderer` job도 같은 방식으로 정리한다 — 이들도 `github.ref_name` 기반 분기를 갖고 있다.
-  **단 `nginx` job의 `repository_dispatch`(프론트 자산) 자동 배포는 그대로 유지한다**
+
+**`application` job의 빌드 폴백 3스텝을 제거한다** — `Check if image already exists` /
+`Set up Docker Buildx` / `Build and push application image`.
+
+지금은 브랜치에서 돌리면 태그가 `branch-*`라 `:main`이 오염되지 않는다. 태그를 `:main`으로 고정한
+상태에서 이 폴백을 남기면 **워크플로가 체크아웃한 코드를 `:main`으로 push해버린다.** 롤백에서는 더
+나쁘다 — `:previous`가 없을 때 현재 코드를 `:previous`로 태깅하고 배포한다. **이 job은 더 이상
+이미지를 만들지 않는다.** 배포 대상 태그가 없으면 빌드하지 말고 명확한 메시지와 함께 실패시킨다.
+
+**`GIT_REF`도 리터럴 `main`으로 고정한다.**
+
+`application`/`nginx`/`renderer` 세 job 모두 `GIT_REF: ${{ github.ref_name }}`로 서버에서
+`git reset --hard origin/$GIT_REF`를 돌린다. 이미지 태그만 `:main`으로 고정하면, main이 아닌
+브랜치에서 워크플로를 돌렸을 때 **프로덕션 서버의 `docker-compose.yml`·`nginx.conf`·배포 스크립트만
+그 브랜치 것이 되어 다음 배포까지 눌러앉는다.** "Use workflow from은 항상 main"은 운영 관례일 뿐
+워크플로가 강제하지 않는다.
+
+**`nginx`/`renderer` job도 정리한다.**
+
+- `github.ref_name` 기반 태그 분기 제거 → 항상 `latest`
+- **main push 시 자동 배포 조건을 제거한다** —
+  `(github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.nginx == 'true')`
+  및 renderer의 같은 조건. `docs/decisions.md`의 "병합은 배포하지 않는다"를 이 둘에도 똑같이
+  적용한다. `infra/nginx.conf` 한 줄 고친 PR을 장중에 병합하면 nginx가 내려갔다 뜨는 것이 지금
+  동작이다
+- **`nginx` job의 `repository_dispatch`(프론트 자산) 자동 배포는 그대로 유지한다.** 프론트가 보내는
+  payload에는 브랜치 정보가 없고 `github.ref_name`이 기본 브랜치로 잡히므로, 분기를 지워도 이 경로는
+  깨지지 않는다
+- **`renderer` job의 `Check if image already exists` 스텝과 빌드 스킵 조건
+  (`if: steps.check.outputs.exists == 'false'`)을 제거한다.** `nginx`와 동일하게 매번 재빌드한다
+
+  > 이건 새로 생기는 문제가 아니라 **지금 있는 버그**다. renderer의 main 태그는 `latest`인데 그게
+  > 이미 존재하므로 빌드가 항상 스킵된다 — 첫 빌드 이후로 renderer 이미지는 갱신된 적이 없다.
+  > `docs/decisions.md`에 적힌 nginx 자산 staleness 버그와 구조가 완전히 같다. 거기 "`renderer`
+  > job은 태그가 자기 커밋을 가리키므로 문제없다"고 적혀 있는데 **그 서술이 틀렸다.**
 
 ## 1A-3. 롤백 추가
 
 `target` 드롭다운에 **`rollback`** 값을 추가한다. 새 입력란은 만들지 않는다 — 이미 있는 드롭다운에
 선택지 하나가 늘어날 뿐이다.
 
+**배치**: 별도 job을 만들지 않는다. 기존 `application` job의 `if`를
+`inputs.target == 'application' || inputs.target == 'all' || inputs.target == 'rollback'`으로 넓히고,
+배포 태그와 포인터 처리만 분기한다. **`rollback`은 `all`에 포함하지 않는다.**
+
 **포인터 태그 두 개를 도입한다.**
 
 ```
-:deployed    마지막으로 배포한 프로덕션 이미지
-:previous    그 직전 프로덕션 이미지
+:deployed    지금 서버에 떠 있는 이미지
+:previous    그 직전에 정상 동작하던 이미지
 ```
 
-**평소 배포(`target=application`)**
+### 지켜야 할 불변식
+
+> **서버에 떠 있는 이미지 = `:deployed`**
+
+이게 깨지면 롤백이 엉뚱한 곳으로 간다. 아래 절차는 전부 이 불변식을 지키기 위한 것이다.
+
+### 평소 배포(`target=application`)
 
 1. `:main` 이미지를 배포한다
-2. 배포와 헬스체크가 **성공한 뒤에** 포인터를 민다
-   - `:previous` ← 기존 `:deployed` (없으면 이 단계 스킵)
-   - `:deployed` ← 방금 배포한 이미지
+2. 헬스체크
+3. **성공했으면** 포인터를 민다
+4. **실패했으면** `:deployed`를 다시 배포해서 원상복구하고 job을 실패시킨다 (아래 "자동 원복")
 
-**롤백(`target=rollback`)**
+### 포인터 미는 규칙 (3번)
+
+- **먼저 다이제스트를 변수에 담는다.** `:deployed`와 `:previous`를 순서대로 덮어쓰면 안 된다.
+  `docker buildx imagetools inspect --format '{{.Manifest.Digest}}' <태그>`로 먼저 고정한 뒤, 그
+  다이제스트를 소스로 태그를 민다. 안 그러면 두 태그가 같은 이미지를 가리키게 된다
+- **방금 배포한 이미지가 기존 `:deployed`와 같은 다이제스트면 포인터를 전혀 건드리지 않는다.**
+  로그만 남긴다. 인프라 스크립트 반영용 재배포처럼 `:main`이 그대로인 상태의 두 번째 배포가
+  실제로 생기는데(1A-1 참고), 이때 포인터를 밀면 `:previous == :deployed`가 되어 롤백이 무력화된다
+- `:deployed`가 아직 없으면 `:previous` 갱신을 건너뛰고 `:deployed`만 만든다
+- **두 태그를 미는 것은 한 스텝 안에서 `:previous` → `:deployed` 순서로 한다.** 중간에 실패하면
+  job을 실패시키고, "서버는 이미 새 이미지로 떠 있으니 포인터만 수동으로 맞추면 된다"는 사실과 그
+  명령을 PR 설명에 적는다
+
+### 자동 원복 (4번)
+
+헬스체크 스텝에 `id`와 `continue-on-error: true`를 붙이고, 뒤 스텝들이 `steps.<id>.outcome`으로
+분기한다.
+
+```
+헬스체크 실패
+  → :deployed 를 다시 배포 + 헬스체크          (:deployed 가 없으면 이 단계 스킵)
+  → 포인터는 건드리지 않는다
+  → job 을 실패시킨다 (마지막에 exit 1)
+```
+
+**이걸 넣는 이유**: 배포 스크립트는 헬스체크 전에 이미 컨테이너를 교체한다
+(`deploy-application.sh`의 `docker compose up -d`). 자동 원복이 없으면 헬스체크 실패 시 **서버에는
+새 이미지가 떠 있는데 `:deployed`는 직전 이미지를 가리키는** 불일치가 남고, 그 상태에서 롤백을
+누르면 **두 단계 전으로** 가버린다. 자동 원복은 그 불일치 자체를 없앤다.
+
+### 롤백(`target=rollback`)
 
 1. `:previous` 이미지를 배포한다
-2. 성공하면 포인터를 맞바꾼다 (`:deployed` ↔ `:previous`)
+2. 헬스체크가 성공하면 포인터를 맞바꾼다 (`:deployed` ↔ `:previous`) — 위 다이제스트 고정 규칙 동일
 3. `:previous`가 없으면 **명확한 메시지와 함께 실패**시킨다. 조용히 아무거나 배포하면 안 된다
+4. 롤백의 헬스체크가 실패하면 자동 원복을 하지 말고 그냥 실패시킨다. 돌아갈 곳이 없다
 
-**포인터는 `application` 배포에서만 움직인다.** `nginx`/`renderer`는 건드리지 않는다.
-
-**주의 — 롤백의 한계를 PR 설명에 적을 것**
-
-롤백은 **애플리케이션 이미지만** 되돌린다. 서버는 배포할 때 `git reset --hard origin/main`으로
-스크립트를 가져오므로, `nginx.conf`·`docker-compose.yml`·배포 스크립트가 바뀐 경우엔 **그것까지
-되돌아가지 않는다.** 인프라 변경을 되돌리려면 revert PR이 필요하다.
+**포인터는 `application`/`rollback` 배포에서만 움직인다.** `nginx`/`renderer`는 건드리지 않는다.
 
 ## ⚠️ PR 설명에 반드시 적을 것
 
 **1) 바뀐 배포·롤백 절차** — 사용자가 그대로 따라 할 수 있는 형태로. `docs/operations.md`는 구현
 세션이 못 고치므로, 이 PR 설명이 문서가 갱신될 때까지 유일한 안내가 된다.
 
-**2) 동작 변화 두 가지**
+**2) 동작 변화**
 - 지금까지는 `infra/scripts/*.sh`나 `docker-compose.yml`만 바꿔도 main 병합 시 자동 재배포되면서
   서버 스크립트가 갱신됐다. **이제는 다음 수동 배포 전까지 반영되지 않는다**
 - **이 PR 자체가 병합될 때는 이미 새 워크플로가 적용되어 자동 배포가 일어나지 않는다.** 이 PR로 바뀐
   배포 스크립트는 사용자가 수동 배포를 한 번 돌려야 서버에 들어간다
+- **nginx·renderer도 main 병합으로는 더 이상 배포되지 않는다.** `target=nginx` / `target=renderer`로
+  직접 돌려야 한다. 단 프론트 자산 발행(`repository_dispatch`)에 의한 nginx 자동 배포는 그대로다
+- **renderer 이미지가 처음으로 다시 빌드된다.** 스킵 로직 때문에 그동안 갱신되지 않고 있었다
 
-**3) 첫 롤백은 쓸 수 없다** — `:previous`는 두 번째 프로덕션 배포부터 생긴다. 이 사실을 적어야
-사용자가 "롤백이 안 되네?"로 당황하지 않는다
+**3) 롤백의 한계 — 세 가지를 반드시 적는다**
+- **첫 롤백은 쓸 수 없다.** `:previous`는 두 번째 프로덕션 배포부터 생긴다
+- **롤백은 토글이다.** 두 번 누르면 방금 되돌린 이미지로 다시 돌아간다. 두 단계 전으로 가는 수단은
+  없다
+- **롤백 상태에서 `target=application`을 누르면 사고 낸 이미지가 다시 나간다.** `:main`은 롤백으로
+  바뀌지 않기 때문이다. revert PR을 병합해 `:main`이 갱신되기 전까지는 누르지 않는다
+
+**4) 롤백은 애플리케이션 이미지만 되돌린다** — 서버는 배포할 때 `git reset --hard origin/main`으로
+스크립트를 가져오므로 `nginx.conf`·`docker-compose.yml`·배포 스크립트는 최신이 유지된다. 인프라
+변경을 되돌리려면 revert PR이 필요하다
 
 ---
 
@@ -535,11 +624,26 @@ Spring 기본 처리로 나가고 **텔레그램 알림이 가지 않는다.**
 이 정비에서 **유일하게 되돌릴 수 없는 조치**인데, DB 없는 단위 테스트로는 "15:30만 남기고 지운다"는
 술어를 검증할 수 없다. 술어가 반대로 뒤집혀 있어도 CI는 초록색이다.
 
-- `market-monitor.retention.dry-run` 프로퍼티를 두고 **기본값 `true`**
-- 드라이런이면 **삭제하지 않고 "지울 대상 건수"만 조회해서 `log.info`로 남긴다**
-- 실삭제 전환은 사용자가 프로퍼티를 바꿔 배포하는 것으로 한다. 코드 변경 없이 전환 가능해야 한다
-- PR 설명에 **"드라이런으로 배포됨. 다음날 로그에서 건수를 확인한 뒤 프로퍼티를 바꿔 실삭제로
-  전환한다"**와 그 방법을 적는다
+- `market-monitor.retention.dry-run` 프로퍼티를 두고 **기본값 `true`** (`application.properties`)
+- 드라이런이면 **삭제하지 않고 조회만 해서 `log.info`로 남긴다** (남길 내용은 아래)
+- **실삭제 전환은 서버의 `~/env/market-monitor.env`에 환경변수 한 줄을 추가하고 컨테이너를
+  재기동하는 것으로 한다.** `infra/docker-compose.yml`의 `env_file`이 이 파일을 읽는다 —
+  `application.properties`는 jar 안에 구워지므로 그걸 고치는 건 "코드 변경 없이 전환"이 아니다.
+  구현 세션은 이 프로퍼티가 실제로 바인딩되는 **정확한 환경변수 이름**(하이픈이 들어간 이름이라
+  relaxed binding 규칙상 자명하지 않다)과 재기동 명령을 PR 설명에 적는다
+- PR 설명에 **"드라이런으로 배포됨. 다음날 로그를 확인한 뒤 환경변수를 넣어 실삭제로 전환한다"**와
+  그 방법을 적는다
+
+**드라이런 로그에는 건수만 남기면 안 된다.** 이 배치는 하루 145회 수집 중 1회(15:30)만 남기므로,
+술어가 정상이면 삭제 대상이 cutoff 이전 전체의 약 144/145이고 **뒤집혀 있으면 약 1/145**다. 둘 다
+"그럴듯한 큰 수"라서 건수 하나만 보고는 구분할 수 없다. 테이블별로 다음을 함께 남긴다.
+
+1. 삭제 대상 건수
+2. **cutoff 이전 전체 건수** (비교 기준)
+3. 삭제 대상의 `min(snapshot_time)` / `max(snapshot_time)`
+4. 삭제 대상에 등장하는 **서로 다른 시각(`HH:mm`) 표본** 몇 개
+
+①이 ②의 대부분이고 ④에 `15:30`이 없어야 술어가 올바르다. **이 판정 기준을 PR 설명에 그대로 적는다.**
 
 ### ⚠️ 초기 30일치는 배치가 지우지 않는다
 
@@ -551,7 +655,21 @@ Spring 기본 처리로 나가고 **텔레그램 알림이 가지 않는다.**
 
 - **배치 로직은 정상 운영 상태만 가정한다.** 매일 도니까 실제로는 하루치씩만 지운다
 - **초기 정리용 SQL을 PR 설명에 함께 제공한다.** 사용자가 한가한 때(주말 등) 직접 실행한다
-- 순서: 드라이런 배포 → 건수 확인 → **초기 정리 SQL 수동 실행** → 실삭제 전환
+- 순서: 드라이런 배포 → 로그 확인 → **초기 정리 SQL 수동 실행** → 실삭제 전환
+
+**제공할 SQL이 만족해야 할 조건** — 여기 조건을 안 걸면 배치에서 피한 문제를 그대로 사용자 손에
+넘기는 꼴이 된다. 사용자는 코드를 읽지 않으므로 SQL의 위험성을 스스로 판단하지 않는다.
+
+- `sector_price_snapshot`은 **청크 삭제**로 준다. `snapshot_time` 인덱스가 있어(`V1` 참고) 청크
+  반복이 싸다. 한 번에 5만 행만 지우고 0행이 나올 때까지 반복 실행하는 형태
+  (`DELETE FROM ... WHERE id IN (SELECT id FROM ... WHERE <조건> LIMIT 50000)`).
+  **반복 실행해도 안전(멱등)해야 한다**
+- `market_map_category_change_rate_snapshot`은 `snapshot_time` 인덱스가 **없어서** 청크마다
+  풀스캔이 된다. 청크로 쪼개면 오히려 손해다 — 단일 문으로 준다
+- 마지막에 `VACUUM (ANALYZE) <table>` 안내를 붙인다. 대량 DELETE 후 공간이 회수되지 않는다
+- **서버에서의 실행 방법까지 적는다**:
+  `docker exec -it market-monitor-postgres psql -U market_monitor -d market_monitor_db`
+- 배치의 술어와 **같은 조건**임을 SQL 주석으로 명시한다
 
 ### 구현 제약
 
@@ -562,11 +680,20 @@ Spring 기본 처리로 나가고 **텔레그램 알림이 가지 않는다.**
   `@Transactional(readOnly = true)`라 안 붙이면 런타임에만 터진다
 - **cutoff 경계**: `snapshot_time < (오늘 KST − 30일)의 00:00`. 즉 30일째 되는 날의 데이터는 남긴다
 - **15:30 판정**: 시각 부분이 15:30이 아닌 행만 삭제한다
-- 삭제(또는 드라이런 조회) **건수를 테이블별로 `log.info`**에 남긴다. 사용자가 동작을 확인할 유일한
-  수단이다
+- **장 마감 시각 `15:30`은 `collect.*` 설정과 무관한 별개 상수다.** 정리 쪽 클래스 안의
+  `private static final LocalTime MARKET_CLOSE_TIME = LocalTime.of(15, 30);`으로 두고 프로퍼티로
+  빼지 않는다. `collect.end-hour`(=20, 수집 창의 끝)를 재사용하지 않는다 — 바로 다음 3-2가
+  `collect.*` 이중화를 정리하는 작업이라 헷갈리기 쉽다
+- 삭제(또는 드라이런 조회) 결과를 **테이블별로 `log.info`**에 남긴다. 사용자가 동작을 확인할 유일한
+  수단이다 (드라이런에 남길 항목은 위 참고)
+- **테이블별로 독립 실행한다.** 하나가 실패해도 다른 하나는 수행하고, 실패한 것만 report한다.
+  `CollectionScheduler.run()`이 수집기 하나가 실패해도 다음을 계속하는 것과 같은 패턴이다
 - **실패 시 `EscalationPublisher.report(EscalateException.wrap(...))`로 알림**을 보낸다.
   `@Scheduled` 메서드가 그냥 예외를 던지면 Spring이 로그만 찍고 끝나서, 매일 조용히 실패해도 아무도
   모른다
+- **`ErrorCode`에 스냅샷 정리 실패용 코드를 새로 추가해서 쓴다**(이름·문구는 구현 세션 재량).
+  `wrap`은 `ErrorCode`를 필수로 받는데 기존 코드 중 맞는 게 없다. 가장 가까운
+  `COLLECTOR_EXECUTION_FAILED`를 재사용하면 텔레그램에 "수집기 실행에 실패했습니다"가 찍힌다
 
 ### 패키지 배치
 

@@ -38,8 +38,8 @@ public class CategoryRankingTextBuilder {
     private final MarketMapCategoryRepository marketMapCategoryRepository;
     private final MarketValueTierThresholdService marketValueTierThresholdService;
 
-    /** query가 담고 있는 마켓 각각의 TOP3 카테고리 랭킹을 텍스트로 묶어 만든다("KOSPI\n카테고리: +x.xx%\n\n
-     * KOSDAQ\n.." 형태) — 단일 마켓 쿼리면 그 마켓 하나만 있는 텍스트가 된다. 데이터 없는 마켓은
+    /** query가 담고 있는 마켓 각각의 TOP3 카테고리 랭킹을 텍스트로 묶어 만든다("#KOSPI\n카테고리 +x.xx%\n\n
+     * #KOSDAQ\n.." 형태) — 단일 마켓 쿼리면 그 마켓 하나만 있는 텍스트가 된다. 데이터 없는 마켓은
      * findRankingForMarkets가 이미 결과에서 뺀 상태라 자동으로 텍스트에서도 빠진다. 헤더("Custom Sector"
      * 등)는 안 붙이므로 호출부가 자기 맥락에 맞는 헤더를 붙여 쓴다. */
     public String buildRankingText(LocalDateTime dataTime, MarketQuery query) {
@@ -84,11 +84,11 @@ public class CategoryRankingTextBuilder {
                     String rankingLines = top.stream()
                             .map(ranked -> {
                                 String categoryName = categoryNameById.getOrDefault(ranked.categoryId(), "");
-                                return categoryName + ": " + formatPercent(ranked.now().weightedAvgChangeRate());
+                                return categoryName + " " + formatPercent(ranked.now().weightedAvgChangeRate());
                             })
                             .collect(Collectors.joining("\n"));
 
-                    return marketRanking.market() + "\n" + rankingLines;
+                    return "#" + marketRanking.market() + "\n" + rankingLines;
                 })
                 .collect(Collectors.joining("\n\n"));
     }

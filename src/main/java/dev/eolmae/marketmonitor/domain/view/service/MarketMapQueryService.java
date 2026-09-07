@@ -204,25 +204,25 @@ public class MarketMapQueryService {
                 .collect(Collectors.toMap(MarketMapStockCategory::getStockCode, Function.identity()));
     }
 
-    /** 기본 마켓맵용: override 없이 stock_info 종목명 그대로 */
+    /** 기본 마켓맵용: alias 없음(커스텀 트리 전용 개념) */
     private MarketMapItem toMarketMapItem(
             StockInfo stockInfo, SectorPriceSnapshot priceSnapshot, List<MarketValueTierThreshold> sortedTiers) {
-        return toMarketMapItem(stockInfo, priceSnapshot, stockInfo.getStockName(), sortedTiers);
+        return toMarketMapItem(stockInfo, priceSnapshot, (String) null, sortedTiers);
     }
 
-    /** 커스텀 마켓맵용: market_map_stock_category에 alias가 있으면 그걸로 종목명 대체 */
+    /** 커스텀 마켓맵용: market_map_stock_category에 배정된 alias(없으면 null)를 같이 실어 보낸다 */
     private MarketMapItem toMarketMapItem(
             StockInfo stockInfo,
             SectorPriceSnapshot priceSnapshot,
             Map<String, MarketMapStockCategory> stockCategoryMap,
             List<MarketValueTierThreshold> sortedTiers) {
-        return toMarketMapItem(stockInfo, priceSnapshot, resolveDisplayName(stockInfo, stockCategoryMap), sortedTiers);
+        return toMarketMapItem(stockInfo, priceSnapshot, resolveAlias(stockInfo, stockCategoryMap), sortedTiers);
     }
 
     private MarketMapItem toMarketMapItem(
             StockInfo stockInfo,
             SectorPriceSnapshot priceSnapshot,
-            String displayName,
+            String alias,
             List<MarketValueTierThreshold> sortedTiers) {
         BigDecimal currentPrice = priceSnapshot.getCurrentPrice();
         BigDecimal changeRate = priceSnapshot.getChangeRate();
@@ -230,7 +230,8 @@ public class MarketMapQueryService {
 
         return new MarketMapItem(
                 stockInfo.getStockCode(),
-                displayName,
+                stockInfo.getStockName(),
+                alias,
                 currentPrice,
                 stockInfo.getLastPrice(),
                 totalMarketValue,
@@ -239,11 +240,11 @@ public class MarketMapQueryService {
                 priceSnapshot.getSnapshotTime());
     }
 
-    /** alias가 배정되어 있으면 alias, 없으면 stock_info의 종목명을 그대로 노출 */
-    private String resolveDisplayName(StockInfo stockInfo, Map<String, MarketMapStockCategory> stockCategoryMap) {
+    /** 배정된 alias가 있으면 그 값, 없거나 빈 문자열이면 null */
+    private String resolveAlias(StockInfo stockInfo, Map<String, MarketMapStockCategory> stockCategoryMap) {
         MarketMapStockCategory stockCategory = stockCategoryMap.get(stockInfo.getStockCode());
         if (stockCategory == null || stockCategory.getAlias() == null || stockCategory.getAlias().isBlank()) {
-            return stockInfo.getStockName();
+            return null;
         }
         return stockCategory.getAlias();
     }

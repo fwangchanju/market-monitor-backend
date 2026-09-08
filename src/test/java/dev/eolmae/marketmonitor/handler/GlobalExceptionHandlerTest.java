@@ -10,13 +10,16 @@ import dev.eolmae.marketmonitor.common.exception.BadRequestException;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.domain.notification.listener.EscalationPublisher;
+import java.lang.reflect.Method;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpInputMessage;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.server.ResponseStatusException;
 
 class GlobalExceptionHandlerTest {
@@ -71,6 +74,21 @@ class GlobalExceptionHandlerTest {
     @Test
     void handleUnexpectedException_AsyncRequestNotUsableException은_다시_던지고_알림을_보내지_않는다() {
         AsyncRequestNotUsableException e = new AsyncRequestNotUsableException("client disconnected");
+
+        assertThatThrownBy(() -> handler.handleUnexpectedException(e)).isSameAs(e);
+
+        verify(escalationPublisher, never()).report(Mockito.any());
+    }
+
+    @Test
+    void handleUnexpectedException_MethodArgumentTypeMismatchException은_다시_던지고_알림을_보내지_않는다()
+            throws NoSuchMethodException {
+        // ErrorResponse를 구현하지 않는 TypeMismatchException 계열 — @PathVariable/@RequestParam 타입이
+        // 안 맞는 정상적인 400 요청까지 500+알림으로 잘못 처리되던 버그의 재발 방지 테스트.
+        Method method = String.class.getMethod("charAt", int.class);
+        MethodParameter parameter = new MethodParameter(method, 0);
+        MethodArgumentTypeMismatchException e = new MethodArgumentTypeMismatchException(
+                "abc", int.class, "index", parameter, new NumberFormatException("abc"));
 
         assertThatThrownBy(() -> handler.handleUnexpectedException(e)).isSameAs(e);
 

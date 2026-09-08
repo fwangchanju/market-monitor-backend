@@ -20,7 +20,8 @@ class MarketMapAndSectorTelegramReportSenderTest {
 
     private final ScreenshotClient screenshotClient = Mockito.mock(ScreenshotClient.class);
     private final TelegramClient telegramClient = Mockito.mock(TelegramClient.class);
-    private final TelegramProperties telegramProperties = new TelegramProperties("token", "chat-id", "dev-chat", 10);
+    private final TelegramProperties telegramProperties =
+            new TelegramProperties("token", "chat-id", "dev-chat", 10, 30);
     private final CategoryRankingTextBuilder categoryRankingTextBuilder =
             Mockito.mock(CategoryRankingTextBuilder.class);
     private final MarketMapAndSectorTelegramReportSender sender = new MarketMapAndSectorTelegramReportSender(

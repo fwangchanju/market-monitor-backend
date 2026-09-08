@@ -28,8 +28,6 @@ jobs:
       contents: read
     outputs:
       application: ${{ steps.filter.outputs.application }}
-      nginx: ${{ steps.filter.outputs.nginx }}
-      renderer: ${{ steps.filter.outputs.renderer }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -47,16 +45,6 @@ jobs:
               - 'gradle.properties'
               - 'gradlew'
               - 'gradle/**'
-            nginx:
-              - 'containers/nginx/**'
-              - 'infra/nginx.conf'
-              - 'infra/nginx-docker-compose.yml'
-              - 'infra/scripts/deploy-nginx.sh'
-              - 'infra/scripts/nginx-health-check.sh'
-            renderer:
-              - 'containers/renderer/**'
-              - 'infra/renderer-docker-compose.yml'
-              - 'infra/scripts/deploy-renderer.sh'
 
   # 브랜치(main 제외) push: application 관련 변경이 있으면 빌드해서 sha 태그로만 푸시(승격의 재료). 배포는 안 함.
   build:
@@ -319,11 +307,9 @@ jobs:
           exit 1
 
   nginx:
-    needs: [changes]
     if: |
-      always() &&
-      ((github.event_name == 'workflow_dispatch' && (inputs.target == 'nginx' || inputs.target == 'all')) ||
-       github.event_name == 'repository_dispatch')
+      (github.event_name == 'workflow_dispatch' && (inputs.target == 'nginx' || inputs.target == 'all')) ||
+      github.event_name == 'repository_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -380,10 +366,7 @@ jobs:
             bash "$HOME/repo/market-monitor-backend/infra/scripts/nginx-health-check.sh"
 
   renderer:
-    needs: [changes]
-    if: |
-      always() &&
-      (github.event_name == 'workflow_dispatch' && (inputs.target == 'renderer' || inputs.target == 'all'))
+    if: github.event_name == 'workflow_dispatch' && (inputs.target == 'renderer' || inputs.target == 'all')
     runs-on: ubuntu-latest
     permissions:
       contents: read

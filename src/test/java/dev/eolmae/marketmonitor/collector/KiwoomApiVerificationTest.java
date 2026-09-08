@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -37,9 +38,12 @@ import org.springframework.test.context.TestPropertySource;
  *   - KIWOOM_APP_KEY, KIWOOM_SECRET 환경변수 필요
  *   - 로컬 DB 기동 필요 (Spring context 초기화용)
  *
+ * 실행 명령: ./gradlew manualTest --tests "*.KiwoomApiVerificationTest" -i
+ *
  * 결과 확인: assert 없음 — 로그 기반 수동 확인
  */
 @Slf4j
+@Tag("manual")
 @SpringBootTest
 @ActiveProfiles("prod")
 @TestPropertySource(

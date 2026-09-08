@@ -4,8 +4,16 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import java.net.CookieManager;
 import okhttp3.*;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+/**
+ * KRX 데이터마켓 로그인 플로우(세션 발급 → 로그인 → 중복 로그인 재시도) 검증용.
+ *
+ * 실행 조건: LOGIN_ID/LOGIN_PW 상수를 실제 KRX 계정 정보로 채워야 한다(현재 placeholder).
+ * 실행 명령: ./gradlew manualTest --tests "*.KrxLoginTest" -i
+ */
+@Tag("manual")
 class KrxLoginTest {
 
     static final String LOGIN_PAGE = "https://data.krx.co.kr/contents/MDC/COMS/client/MDCCOMS001.cmd";

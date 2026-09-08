@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -16,11 +17,12 @@ import org.springframework.test.context.TestPropertySource;
  * 전체 수집기 한 사이클 실행 — 로컬 DB 적재 후 화면/수치 검증용
  *
  * 실행 조건: KIWOOM_APP_KEY, KIWOOM_SECRET, DB_APP_PASSWD 환경변수 필요
- * 실행 명령: ./gradlew test --tests "*.FullDataCollectionTest" -i
+ * 실행 명령: ./gradlew manualTest --tests "*.FullDataCollectionTest" -i
  *
  * snapshotTime: 직전 거래일 날짜 + 현재 시각 정각 내림 (스케줄러와 동일한 방식)
  */
 @Slf4j
+@Tag("manual")
 @SpringBootTest
 @ActiveProfiles("prod")
 @TestPropertySource(

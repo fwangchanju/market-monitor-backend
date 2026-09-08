@@ -57,6 +57,9 @@ public class CollectionScheduler {
     private final TelegramProperties telegramProperties;
     private final EscalationPublisher escalationPublisher;
 
+    @Value("${collect.start-hour}")
+    private int startHour;
+
     @Value("${collect.end-hour}")
     private int endHour;
 
@@ -71,9 +74,9 @@ public class CollectionScheduler {
     /**
      * 장중 시장 데이터 수집: 평일 collect.start-hour~end-hour, interval-minutes 간격.
      * collect.end-hour 정각(장 마감 시점) 이후엔 수집해봐야 데이터가 안 바뀌므로 수집기 호출은 스킵한다.
-     * 수집 직후 텔레그램 발송을 매번 호출하되, 실제 발송 여부(telegram.send-minute분인지)는 여기서
-     * 한 곳에서만 게이팅한다(별도 스케줄로 분리하면 두 트리거의 실행 순서를 보장할 수 없어, 같은 호출
-     * 안에서 순차 실행되도록 묶었다).
+     * 수집 직후 텔레그램 발송을 매번 호출하되, 실제 발송 여부(telegram.send-minute분부터
+     * send-interval-minutes 간격인지, {@link #isSendCycle})는 여기서 한 곳에서만 게이팅한다(별도
+     * 스케줄로 분리하면 두 트리거의 실행 순서를 보장할 수 없어, 같은 호출 안에서 순차 실행되도록 묶었다).
      */
     @Scheduled(
             cron = "0 0/${collect.interval-minutes} ${collect.start-hour}-${collect.end-hour} * * MON-FRI",
@@ -105,7 +108,13 @@ public class CollectionScheduler {
         LocalDateTime dataTime =
                 shouldCollect ? snapshotTime : LocalDateTime.of(snapshotTime.toLocalDate(), LocalTime.of(endHour, 0));
 
-        if (snapshotTime.getMinute() == telegramProperties.sendMinute()) {
+        if (isSendCycle(
+                snapshotTime.getMinute(),
+                snapshotTime.getHour(),
+                startHour,
+                endHour,
+                telegramProperties.sendMinute(),
+                telegramProperties.sendIntervalMinutes())) {
             if (!lastIndexContributionSuccess) {
                 run("데이터수집실패알림", () -> telegramCollectionFailureNotifier.notify(dataTime));
             } else {
@@ -114,6 +123,26 @@ public class CollectionScheduler {
                 run("일일마켓리포트발송", () -> dailyMarketReportSender.send(dataTime, sectorImageAvailable));
             }
         }
+    }
+
+    /**
+     * 발송 시각 판정 — sendMinute(예: 10분)부터 시작해 sendIntervalMinutes(예: 30분) 간격으로 매시
+     * 반복한다(예: 10분, 40분). 다만 양 끝 경계 시각(startHour/endHour)은 sendMinute 한 번만 보내고
+     * 그 시간대의 추가 사이클(예: 08:40, 20:40)은 건너뛴다:
+     * - startHour는 아직 장이 열리기 전(pre-market)이라 30분 뒤에도 데이터가 그대로다
+     * - endHour는 이미 장 마감(collect.end-hour 정각) 이후라 shouldCollect가 꺼져서 dataTime이
+     *   마감 시각으로 고정된 채라, 추가 사이클을 보내면 방금 보낸 것과 완전히 같은 내용이 중복 발송된다
+     * 의존성 없는 순수 판정이라 static으로 뺐다.
+     */
+    static boolean isSendCycle(
+            int minute, int hour, int startHour, int endHour, int sendMinute, int sendIntervalMinutes) {
+        int offset = minute - sendMinute;
+        boolean onSchedule = offset >= 0 && offset % sendIntervalMinutes == 0;
+        if (!onSchedule) {
+            return false;
+        }
+        boolean isBoundaryHour = hour == startHour || hour == endHour;
+        return !isBoundaryHour || minute == sendMinute;
     }
 
     /**

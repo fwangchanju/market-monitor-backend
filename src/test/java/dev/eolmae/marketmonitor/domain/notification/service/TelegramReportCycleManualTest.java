@@ -4,6 +4,7 @@ import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceSnapshotService;
 import java.time.LocalDateTime;
 import java.util.List;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -15,9 +16,12 @@ import org.springframework.boot.test.context.SpringBootTest;
  * 안에서 섹터 호출이 주석 처리돼 있어 맵 메시지 1건만 온다 — 섹터를 다시 켜면 이 테스트도 별도 수정 없이
  * 그대로 맵+섹터 2건을 보내게 된다. 각 마켓의 실제 마지막 수집 시각을 그대로 쓴다(현재 시각을 쓰면 장
  * 마감/주말처럼 그 시각에 실제 스냅샷이 없는 경우 섹터 발송 쪽 랭킹 조회가 빈 결과로 나옴). 배포된
- * 컨테이너 안에서 그 환경의 실제 DB/renderer/텔레그램 설정을 그대로 쓰므로, 배포 후 확인할 때만
- * --tests로 직접 지정해서 실행한다.
+ * 컨테이너 안에서 그 환경의 실제 DB/renderer/텔레그램 설정을 그대로 쓰므로, 배포 후 확인할 때만 실행한다.
+ *
+ * 실행 조건: 배포된 컨테이너 환경(실제 DB/renderer/텔레그램 설정)에서 실행해야 한다.
+ * 실행 명령: ./gradlew manualTest --tests "*.TelegramReportCycleManualTest" -i
  */
+@Tag("manual")
 @SpringBootTest
 class TelegramReportCycleManualTest {
 

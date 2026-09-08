@@ -196,7 +196,8 @@ class MarketMapCategoryServiceTest {
         MarketMapCategory parent = category(1L, null, "부모");
         MarketMapCategory child = category(2L, 1L, "자식");
         MarketMapCategory grandchild = category(3L, 2L, "손자");
-        ReflectionTestUtils.setField(grandchild, "depth", 2); // 실제 부모(자식)는 depth 1인데, 헬퍼는 placeholder를 항상 depth 0으로 가정하므로 보정
+        ReflectionTestUtils.setField(
+                grandchild, "depth", 2); // 실제 부모(자식)는 depth 1인데, 헬퍼는 placeholder를 항상 depth 0으로 가정하므로 보정
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(parent, child, grandchild));
 
         service.reparent(2L, null);

@@ -25,10 +25,10 @@ public class DailyMarketReportSender {
 
         marketMapTelegramReportSender.send(dataTime, MarketQuery.ALL_STOCK);
 
-//        if (changeSuccess) {
-//            marketMapCategoryRankingTelegramReportSender.send(dataTime, MarketQuery.ALL_STOCK);
-//        } else {
-//            telegramClient.sendMessage(telegramProperties.chatId(), "섹터 이미지 생성에 실패했습니다");
-//        }
+        //        if (changeSuccess) {
+        //            marketMapCategoryRankingTelegramReportSender.send(dataTime, MarketQuery.ALL_STOCK);
+        //        } else {
+        //            telegramClient.sendMessage(telegramProperties.chatId(), "섹터 이미지 생성에 실패했습니다");
+        //        }
     }
 }

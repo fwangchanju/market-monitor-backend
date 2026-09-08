@@ -1,6 +1,5 @@
 package dev.eolmae.marketmonitor.domain.view.controller;
 
-import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.MarketMapScaleResponse;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.MarketValueTierItem;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryChangeRateSnapshotService;
@@ -39,7 +38,9 @@ public class MarketMapController {
     @GetMapping
     public SnapshotResponse<MarketMapCategoryNode> getMarketMap(
             @RequestParam MarketQuery market, @RequestParam boolean isCustom) {
-        return isCustom ? marketMapQueryService.getCustomMarketMap(market) : marketMapQueryService.getDefaultMarketMap(market);
+        return isCustom
+                ? marketMapQueryService.getCustomMarketMap(market)
+                : marketMapQueryService.getDefaultMarketMap(market);
     }
 
     @GetMapping("/value-tiers")
@@ -50,7 +51,8 @@ public class MarketMapController {
     @GetMapping("/category-change-rates")
     public SnapshotResponse<CategoryChangeRateMarketRanking> getCategoryChangeRates(
             @RequestParam MarketQuery market, @RequestParam(defaultValue = "60") int beforeMinutes) {
-        return marketMapCategoryChangeRateSnapshotService.findLatestRankingForMarkets(market.toMarkets(), beforeMinutes);
+        return marketMapCategoryChangeRateSnapshotService.findLatestRankingForMarkets(
+                market.toMarkets(), beforeMinutes);
     }
 
     @GetMapping("/scale")

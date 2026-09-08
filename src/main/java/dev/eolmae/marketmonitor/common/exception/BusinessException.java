@@ -42,6 +42,8 @@ public abstract sealed class BusinessException extends RuntimeException
         if (getCause() == null) {
             return "";
         }
-        return String.format("\ncause: %s\n%s", getCause().getClass().getSimpleName(), getCause().getMessage());
+        return String.format(
+                "\ncause: %s\n%s",
+                getCause().getClass().getSimpleName(), getCause().getMessage());
     }
 }

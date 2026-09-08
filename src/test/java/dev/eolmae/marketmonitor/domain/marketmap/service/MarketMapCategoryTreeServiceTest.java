@@ -54,15 +54,19 @@ class MarketMapCategoryTreeServiceTest {
         List<CategoryTreeNode> tree = service.buildTree();
 
         assertThat(tree).hasSize(2);
-        CategoryTreeNode electronicsNode =
-                tree.stream().filter(node -> node.categoryName().equals("전기/전자")).findFirst().orElseThrow();
+        CategoryTreeNode electronicsNode = tree.stream()
+                .filter(node -> node.categoryName().equals("전기/전자"))
+                .findFirst()
+                .orElseThrow();
         assertThat(electronicsNode.stockCodes()).containsExactly("009150");
         assertThat(electronicsNode.children()).hasSize(1);
         assertThat(electronicsNode.children().get(0).categoryName()).isEqualTo("반도체");
         assertThat(electronicsNode.children().get(0).stockCodes()).containsExactly("005930", "000660");
 
-        CategoryTreeNode chemicalNode =
-                tree.stream().filter(node -> node.categoryName().equals("화학")).findFirst().orElseThrow();
+        CategoryTreeNode chemicalNode = tree.stream()
+                .filter(node -> node.categoryName().equals("화학"))
+                .findFirst()
+                .orElseThrow();
         assertThat(chemicalNode.stockCodes()).isEmpty();
         assertThat(chemicalNode.children()).isEmpty();
     }
@@ -126,8 +130,7 @@ class MarketMapCategoryTreeServiceTest {
         StockInfo samsung = stockInfo("005930", "반도체", true, true);
         StockInfo delisted = stockInfo("999999", "반도체", false, true);
         StockInfo etf = stockInfo("888888", "ETF", true, false);
-        when(stockInfoCacheService.getCache())
-                .thenReturn(Map.of("005930", samsung, "999999", delisted, "888888", etf));
+        when(stockInfoCacheService.getCache()).thenReturn(Map.of("005930", samsung, "999999", delisted, "888888", etf));
 
         service.restore(tree, 1L);
 

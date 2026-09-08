@@ -6,4 +6,9 @@ import java.math.BigDecimal;
 // 나눠진 평균이 아니다. 호출부가 원하는 구간들만 골라 weightedSum/totalValue, simpleSum/itemCount를
 // 각각 합산한 뒤 마지막에 한 번만 나눠야 여러 구간 조합(예: 소형주 제외)에서도 정확한 평균이 나온다.
 public record CategoryTierBreakdown(
-        Long tierId, String tierLabel, BigDecimal weightedSum, BigDecimal totalValue, BigDecimal simpleSum, Integer itemCount) {}
+        Long tierId,
+        String tierLabel,
+        BigDecimal weightedSum,
+        BigDecimal totalValue,
+        BigDecimal simpleSum,
+        Integer itemCount) {}

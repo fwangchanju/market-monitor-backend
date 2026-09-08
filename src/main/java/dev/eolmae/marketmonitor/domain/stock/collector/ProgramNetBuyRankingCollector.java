@@ -33,7 +33,8 @@ public class ProgramNetBuyRankingCollector {
     public void collect(LocalDateTime snapshotTime) {
         for (Market market : Market.values()) {
             for (ProgramRanking ranking : ProgramRanking.values()) {
-                transactionTemplate.executeWithoutResult(status -> collectForCombination(market, ranking, snapshotTime));
+                transactionTemplate.executeWithoutResult(
+                        status -> collectForCombination(market, ranking, snapshotTime));
             }
         }
     }

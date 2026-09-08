@@ -8,15 +8,20 @@ import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRep
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapStockCategoryRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryChangeRateSnapshotService;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketValueTierThresholdService;
+import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.SectorPriceSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketMapExcludedStockRepository;
+import dev.eolmae.marketmonitor.domain.stock.repository.MarketOverviewSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceSnapshotService;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
+import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateMarketRanking;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryTierBreakdown;
 import dev.eolmae.marketmonitor.domain.view.dto.ExcludedStockItem;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapItem;
+import dev.eolmae.marketmonitor.domain.view.dto.MarketMapResponse;
+import dev.eolmae.marketmonitor.domain.view.dto.MarketOverviewItem;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import java.math.BigDecimal;
@@ -48,18 +53,18 @@ public class MarketMapQueryService {
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository;
     private final MarketMapCategoryChangeRateSnapshotService marketMapCategoryChangeRateSnapshotService;
     private final MarketValueTierThresholdService marketValueTierThresholdService;
+    private final MarketOverviewSnapshotRepository marketOverviewSnapshotRepository;
 
     /** 기본 마켓맵: stock_info 카테고리 그대로(override 없이) 기준, 자식 없는 1뎁스 노드로 감싸서 반환 (getCustomMarketMap과 응답 모양 통일) */
-    public SnapshotResponse<MarketMapCategoryNode> getDefaultMarketMap(MarketQuery marketQuery) {
+    public MarketMapResponse getDefaultMarketMap(MarketQuery marketQuery) {
         List<Market> markets = marketQuery.toMarkets();
         return sectorPriceSnapshotService
                 .findLatestCommonSnapshotTime(markets)
                 .map(latestSnapshotTime -> buildDefaultMarketMap(markets, latestSnapshotTime))
-                .orElseGet(SnapshotResponse::empty);
+                .orElseGet(MarketMapResponse::empty);
     }
 
-    private SnapshotResponse<MarketMapCategoryNode> buildDefaultMarketMap(
-            List<Market> markets, LocalDateTime latestSnapshotTime) {
+    private MarketMapResponse buildDefaultMarketMap(List<Market> markets, LocalDateTime latestSnapshotTime) {
         List<StockInfo> candidates = filterCandidates(markets);
         Map<String, SectorPriceSnapshot> priceMap =
                 sectorPriceSnapshotService.findPriceByStockCode(markets, latestSnapshotTime);
@@ -84,20 +89,19 @@ public class MarketMapQueryService {
                 })
                 .toList();
 
-        return new SnapshotResponse<>(latestSnapshotTime, nodes);
+        return new MarketMapResponse(latestSnapshotTime, nodes, findSingleMarketOverview(markets, latestSnapshotTime));
     }
 
     /** 커스텀 마켓맵: 어드민이 구성한 카테고리 트리 기준. 트리에 배정 안 된 종목은 stock_info 카테고리로 묶은 노드를 같은 레벨에 섞어서 반환 */
-    public SnapshotResponse<MarketMapCategoryNode> getCustomMarketMap(MarketQuery marketQuery) {
+    public MarketMapResponse getCustomMarketMap(MarketQuery marketQuery) {
         List<Market> markets = marketQuery.toMarkets();
         return sectorPriceSnapshotService
                 .findLatestCommonSnapshotTime(markets)
                 .map(latestSnapshotTime -> buildCustomMarketMap(markets, latestSnapshotTime))
-                .orElseGet(SnapshotResponse::empty);
+                .orElseGet(MarketMapResponse::empty);
     }
 
-    private SnapshotResponse<MarketMapCategoryNode> buildCustomMarketMap(
-            List<Market> markets, LocalDateTime latestSnapshotTime) {
+    private MarketMapResponse buildCustomMarketMap(List<Market> markets, LocalDateTime latestSnapshotTime) {
         // 등락률 데코레이션(tierBreakdown)은 카테고리별로 하나만 붙으므로, All Stocks처럼 markets가
         // 여러 개여도 마켓별로 나눌 필요 없이 그대로 합쳐서 조회한다.
         Map<Long, List<CategoryTierBreakdown>> tierBreakdownByCategoryId =
@@ -112,7 +116,49 @@ public class MarketMapQueryService {
                             return merged;
                         }));
         List<MarketMapCategoryNode> tree = buildCategoryTree(markets, latestSnapshotTime, tierBreakdownByCategoryId);
-        return new SnapshotResponse<>(latestSnapshotTime, tree);
+        return new MarketMapResponse(latestSnapshotTime, tree, findSingleMarketOverview(markets, latestSnapshotTime));
+    }
+
+    /**
+     * 마켓맵 카테고리별 등락률 랭킹(섹터 페이지) — 조회로 이미 확정된 snapshotTime을 그대로 키로 써서
+     * 마켓 지수 등락률을 붙인다. "최신"을 지수 쪽에서 또 조회하면, 이번 수집 주기에 지수기여도랭킹
+     * 수집만 부분 실패했을 때(카테고리 등락률 수집은 그 뒤 스킵되므로 둘의 최신 시각이 어긋난다) 서로 다른
+     * 시점의 값이 나란히 표시될 수 있다. 그 시각에 지수 스냅샷이 없으면(부분 실패로 아예 없는 경우) 조용히
+     * 비워서 내려준다 — 다른 시점 값으로 대체하지 않는다.
+     */
+    public SnapshotResponse<CategoryChangeRateMarketRanking> getCategoryChangeRates(
+            MarketQuery marketQuery, int beforeMinutes) {
+        SnapshotResponse<CategoryChangeRateMarketRanking> ranking =
+                marketMapCategoryChangeRateSnapshotService.findLatestRankingForMarkets(
+                        marketQuery.toMarkets(), beforeMinutes);
+        if (ranking.snapshotTime() == null) {
+            return ranking;
+        }
+
+        Map<Market, BigDecimal> indexChangeRateByMarket =
+                findOverviewsBySnapshotTime(ranking.snapshotTime()).entrySet().stream()
+                        .collect(Collectors.toMap(
+                                Map.Entry::getKey, entry -> entry.getValue().getChangeRate()));
+        return new SnapshotResponse<>(
+                ranking.snapshotTime(),
+                ranking.items().stream()
+                        .map(item -> item.withIndexChangeRate(indexChangeRateByMarket.get(item.market())))
+                        .toList());
+    }
+
+    /** markets가 정확히 하나일 때만 의미 있는 단일 지수 개요 — ALL_STOCK처럼 여럿이면 단일 값이 없어 null. */
+    private MarketOverviewItem findSingleMarketOverview(List<Market> markets, LocalDateTime snapshotTime) {
+        if (markets.size() != 1) {
+            return null;
+        }
+        MarketOverviewSnapshot overview =
+                findOverviewsBySnapshotTime(snapshotTime).get(markets.get(0));
+        return overview == null ? null : MarketOverviewItem.from(overview);
+    }
+
+    private Map<Market, MarketOverviewSnapshot> findOverviewsBySnapshotTime(LocalDateTime snapshotTime) {
+        return marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime).stream()
+                .collect(Collectors.toMap(MarketOverviewSnapshot::getMarketType, Function.identity()));
     }
 
     /**

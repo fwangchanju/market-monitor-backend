@@ -2,14 +2,13 @@ package dev.eolmae.marketmonitor.domain.view.controller;
 
 import dev.eolmae.marketmonitor.domain.marketmap.dto.MarketMapScaleResponse;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.MarketValueTierItem;
-import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryChangeRateSnapshotService;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryService;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapScaleService;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketValueTierThresholdService;
 import dev.eolmae.marketmonitor.domain.stock.service.MarketMapExcludedStockService;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateMarketRanking;
 import dev.eolmae.marketmonitor.domain.view.dto.ExcludedStockItem;
-import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
+import dev.eolmae.marketmonitor.domain.view.dto.MarketMapResponse;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
@@ -32,12 +31,10 @@ public class MarketMapController {
     private final MarketMapExcludedStockService marketMapExcludedStockService;
     private final MarketMapCategoryService marketMapCategoryService;
     private final MarketMapScaleService marketMapScaleService;
-    private final MarketMapCategoryChangeRateSnapshotService marketMapCategoryChangeRateSnapshotService;
     private final MarketValueTierThresholdService marketValueTierThresholdService;
 
     @GetMapping
-    public SnapshotResponse<MarketMapCategoryNode> getMarketMap(
-            @RequestParam MarketQuery market, @RequestParam boolean isCustom) {
+    public MarketMapResponse getMarketMap(@RequestParam MarketQuery market, @RequestParam boolean isCustom) {
         return isCustom
                 ? marketMapQueryService.getCustomMarketMap(market)
                 : marketMapQueryService.getDefaultMarketMap(market);
@@ -51,8 +48,7 @@ public class MarketMapController {
     @GetMapping("/category-change-rates")
     public SnapshotResponse<CategoryChangeRateMarketRanking> getCategoryChangeRates(
             @RequestParam MarketQuery market, @RequestParam(defaultValue = "60") int beforeMinutes) {
-        return marketMapCategoryChangeRateSnapshotService.findLatestRankingForMarkets(
-                market.toMarkets(), beforeMinutes);
+        return marketMapQueryService.getCategoryChangeRates(market, beforeMinutes);
     }
 
     @GetMapping("/scale")

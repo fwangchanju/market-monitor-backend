@@ -1,11 +1,14 @@
 package dev.eolmae.marketmonitor.domain.notification.service;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
+import dev.eolmae.marketmonitor.common.util.MarketLabels;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.MarketValueTierItem;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategory;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryChangeRateSnapshotService;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketValueTierThresholdService;
+import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
+import dev.eolmae.marketmonitor.domain.stock.repository.MarketOverviewSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateMarketRanking;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryTierBreakdown;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotAverages;
@@ -24,9 +27,9 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-// 카테고리 등락률 TOP3 랭킹 텍스트 생성 — 섹터 캡션(MarketMapCategoryRankingTelegramReportSender)과 맵
-// 캡션(MarketMapTelegramReportSender)이 둘 다 재사용한다. sender끼리는 서로 같은 레벨의 객체라 하나가
-// 다른 하나를 주입받는 건 부자연스러워서, 공통으로 의존할 별도 컴포넌트로 뺐다.
+// 카테고리 등락률 TOP3 랭킹 텍스트 생성 — 마켓별 리포트(MarketMapAndSectorTelegramReportSender)가
+// 재사용한다. sender와는 같은 레벨의 객체라 하나가 다른 하나를 주입받는 건 부자연스러워서, 공통으로
+// 의존할 별도 컴포넌트로 뺐다.
 @Component
 @RequiredArgsConstructor
 public class CategoryRankingTextBuilder {
@@ -37,15 +40,23 @@ public class CategoryRankingTextBuilder {
     private final MarketMapCategoryChangeRateSnapshotService marketMapCategoryChangeRateSnapshotService;
     private final MarketMapCategoryRepository marketMapCategoryRepository;
     private final MarketValueTierThresholdService marketValueTierThresholdService;
+    private final MarketOverviewSnapshotRepository marketOverviewSnapshotRepository;
 
-    /** query가 담고 있는 마켓 각각의 TOP3 카테고리 랭킹을 텍스트로 묶어 만든다("#KOSPI\n카테고리 +x.xx%\n\n
-     * #KOSDAQ\n.." 형태) — 단일 마켓 쿼리면 그 마켓 하나만 있는 텍스트가 된다. 데이터 없는 마켓은
-     * findRankingForMarkets가 이미 결과에서 뺀 상태라 자동으로 텍스트에서도 빠진다. 헤더("Custom Sector"
-     * 등)는 안 붙이므로 호출부가 자기 맥락에 맞는 헤더를 붙여 쓴다. */
+    /** query가 담고 있는 마켓 각각의 TOP3 카테고리 랭킹을 텍스트로 묶어 만든다("#코스피 +x.xx%\n카테고리
+     * +x.xx%\n\n#코스닥 +x.xx%\n.." 형태, 헤더 옆 퍼센트는 그 마켓 지수의 등락률) — 단일 마켓 쿼리면 그
+     * 마켓 하나만 있는 텍스트가 된다. 데이터 없는 마켓은 findRankingForMarkets가 이미 결과에서 뺀 상태라
+     * 자동으로 텍스트에서도 빠진다. 헤더("Custom Sector" 등)는 안 붙이므로 호출부가 자기 맥락에 맞는
+     * 헤더를 붙여 쓴다. */
     public String buildRankingText(LocalDateTime dataTime, MarketQuery query) {
         List<Market> markets = query.toMarkets();
         SnapshotResponse<CategoryChangeRateMarketRanking> ranking =
                 marketMapCategoryChangeRateSnapshotService.findRankingForMarkets(markets, dataTime, BEFORE_MINUTES);
+
+        // 카테고리 랭킹과 같은 dataTime 스냅샷 기준으로 맞춘다.
+        Map<Market, BigDecimal> changeRateByMarket =
+                marketOverviewSnapshotRepository.findBySnapshotTime(dataTime).stream()
+                        .collect(Collectors.toMap(
+                                MarketOverviewSnapshot::getMarketType, MarketOverviewSnapshot::getChangeRate));
 
         // 화면(CategoryChangeRatePage)도 대분류(부모 없는 카테고리)만 골라 랭킹을 매기므로, 텍스트도 같은
         // 기준으로 맞춘다 — findRankingForMarkets 자체는 전체 뎁스를 다 돌려주므로 여기서 걸러낸다.
@@ -91,9 +102,18 @@ public class CategoryRankingTextBuilder {
                             })
                             .collect(Collectors.joining("\n"));
 
-                    return "#" + marketRanking.market() + "\n" + rankingLines;
+                    return buildHeader(marketRanking.market(), changeRateByMarket.get(marketRanking.market())) + "\n"
+                            + rankingLines;
                 })
                 .collect(Collectors.joining("\n\n"));
+    }
+
+    private String buildHeader(Market market, BigDecimal indexChangeRate) {
+        String header = "#" + MarketLabels.toKorean(market);
+        if (indexChangeRate != null) {
+            header += " " + formatPercent(indexChangeRate);
+        }
+        return header;
     }
 
     private record RankedCategory(Long categoryId, SnapshotAverages now) {}

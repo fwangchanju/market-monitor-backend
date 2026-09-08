@@ -10,14 +10,19 @@ import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRep
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapStockCategoryRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryChangeRateSnapshotService;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketValueTierThresholdService;
+import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.SectorPriceSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.enums.ExchangeType;
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketMapExcludedStockRepository;
+import dev.eolmae.marketmonitor.domain.stock.repository.MarketOverviewSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.SectorPriceSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceSnapshotService;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
+import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateItem;
+import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateMarketRanking;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
+import dev.eolmae.marketmonitor.domain.view.dto.MarketMapResponse;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import java.math.BigDecimal;
@@ -46,6 +51,8 @@ class MarketMapQueryServiceTest {
             Mockito.mock(MarketMapCategoryChangeRateSnapshotService.class);
     private final MarketValueTierThresholdService marketValueTierThresholdService =
             Mockito.mock(MarketValueTierThresholdService.class);
+    private final MarketOverviewSnapshotRepository marketOverviewSnapshotRepository =
+            Mockito.mock(MarketOverviewSnapshotRepository.class);
     private final SectorPriceSnapshotService sectorPriceSnapshotService =
             new SectorPriceSnapshotService(sectorPriceSnapshotRepository);
     private final MarketMapQueryService service = new MarketMapQueryService(
@@ -55,7 +62,8 @@ class MarketMapQueryServiceTest {
             marketMapCategoryRepository,
             marketMapStockCategoryRepository,
             marketMapCategoryChangeRateSnapshotService,
-            marketValueTierThresholdService);
+            marketValueTierThresholdService,
+            marketOverviewSnapshotRepository);
 
     @Test
     void getCustomMarketMap_트리집계와_카테고리명_매칭이_정확히_반영된다() {
@@ -90,8 +98,9 @@ class MarketMapQueryServiceTest {
                         priceSnapshot("000660", snapshotTime, BigDecimal.valueOf(20)),
                         priceSnapshot("009150", snapshotTime, BigDecimal.valueOf(5)),
                         priceSnapshot("051910", snapshotTime, BigDecimal.ONE)));
+        when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
 
-        SnapshotResponse<MarketMapCategoryNode> response = service.getCustomMarketMap(MarketQuery.KOSPI);
+        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI);
 
         assertThat(response.snapshotTime()).isEqualTo(snapshotTime);
         List<MarketMapCategoryNode> nodes = response.items();
@@ -142,8 +151,9 @@ class MarketMapQueryServiceTest {
                         priceSnapshot("005930", snapshotTime, BigDecimal.TEN),
                         priceSnapshot("000660", snapshotTime, BigDecimal.valueOf(20)),
                         priceSnapshot("051910", snapshotTime, BigDecimal.ONE)));
+        when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
 
-        SnapshotResponse<MarketMapCategoryNode> response = service.getDefaultMarketMap(MarketQuery.KOSPI);
+        MarketMapResponse response = service.getDefaultMarketMap(MarketQuery.KOSPI);
 
         assertThat(response.snapshotTime()).isEqualTo(snapshotTime);
         List<MarketMapCategoryNode> nodes = response.items();
@@ -188,8 +198,9 @@ class MarketMapQueryServiceTest {
                 .thenReturn(Optional.of(snapshotTime));
         when(sectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(List.of(Market.KOSPI), snapshotTime))
                 .thenReturn(List.of(priceSnapshot("005930", snapshotTime, BigDecimal.TEN)));
+        when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
 
-        SnapshotResponse<MarketMapCategoryNode> response = service.getCustomMarketMap(MarketQuery.KOSPI);
+        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI);
 
         List<MarketMapCategoryNode> nodes = response.items();
         assertThat(nodes).hasSize(2);
@@ -234,8 +245,9 @@ class MarketMapQueryServiceTest {
                 .thenReturn(List.of(
                         priceSnapshot("009150", snapshotTime, BigDecimal.valueOf(5)),
                         priceSnapshot("005930", snapshotTime, BigDecimal.TEN)));
+        when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
 
-        SnapshotResponse<MarketMapCategoryNode> response = service.getCustomMarketMap(MarketQuery.KOSPI);
+        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI);
 
         MarketMapCategoryNode parentNode = response.items().stream()
                 .filter(node -> node.categoryName().equals("전기/전자"))
@@ -266,8 +278,9 @@ class MarketMapQueryServiceTest {
         // 000660은 가격 스냅샷이 없다 — 수집 gap 등으로 그 시각에 데이터가 아예 없는 경우
         when(sectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(List.of(Market.KOSPI), snapshotTime))
                 .thenReturn(List.of(priceSnapshot("005930", snapshotTime, BigDecimal.TEN)));
+        when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
 
-        SnapshotResponse<MarketMapCategoryNode> response = service.getCustomMarketMap(MarketQuery.KOSPI);
+        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI);
 
         MarketMapCategoryNode semiconductorNode = response.items().stream()
                 .filter(node -> node.categoryName().equals("반도체"))
@@ -287,10 +300,132 @@ class MarketMapQueryServiceTest {
                 .thenReturn(Optional.of(snapshotTime));
         when(sectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(List.of(Market.KOSPI), snapshotTime))
                 .thenReturn(List.of());
+        when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
 
-        SnapshotResponse<MarketMapCategoryNode> response = service.getCustomMarketMap(MarketQuery.KOSPI);
+        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI);
 
         assertThat(response.items()).isEmpty();
+    }
+
+    @Test
+    void getCustomMarketMap_그_시각에_지수_스냅샷이_있으면_marketOverview로_붙는다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of());
+        when(marketMapStockCategoryRepository.findAll()).thenReturn(List.of());
+        when(stockInfoCacheService.getCache()).thenReturn(Map.of());
+        when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
+                .thenReturn(Optional.of(snapshotTime));
+        when(sectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(List.of(Market.KOSPI), snapshotTime))
+                .thenReturn(List.of());
+        when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime))
+                .thenReturn(List.of(marketOverviewSnapshot(Market.KOSPI, snapshotTime, BigDecimal.valueOf(1.23))));
+
+        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI);
+
+        assertThat(response.marketOverview()).isNotNull();
+        assertThat(response.marketOverview().market()).isEqualTo(Market.KOSPI);
+        assertThat(response.marketOverview().changeRate()).isEqualByComparingTo(BigDecimal.valueOf(1.23));
+    }
+
+    @Test
+    void getCustomMarketMap_마켓이_여럿이면_단일_지수값이_없어_marketOverview가_null이다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        List<Market> markets = List.of(Market.KOSPI, Market.KOSDAQ);
+
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of());
+        when(marketMapStockCategoryRepository.findAll()).thenReturn(List.of());
+        when(stockInfoCacheService.getCache()).thenReturn(Map.of());
+        when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(markets))
+                .thenReturn(Optional.of(snapshotTime));
+        when(sectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(markets, snapshotTime))
+                .thenReturn(List.of());
+
+        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.ALL_STOCK);
+
+        // 마켓이 여럿이면 합쳐서 보여줄 단일 지수값이 없으므로, 지수 스냅샷 자체를 조회하지 않고 곧장 null.
+        assertThat(response.marketOverview()).isNull();
+        Mockito.verifyNoInteractions(marketOverviewSnapshotRepository);
+    }
+
+    @Test
+    void getCategoryChangeRates_랭킹_스냅샷이_없으면_빈_응답을_그대로_반환한다() {
+        when(marketMapCategoryChangeRateSnapshotService.findLatestRankingForMarkets(List.of(Market.KOSPI), 60))
+                .thenReturn(SnapshotResponse.empty());
+
+        SnapshotResponse<CategoryChangeRateMarketRanking> response =
+                service.getCategoryChangeRates(MarketQuery.KOSPI, 60);
+
+        assertThat(response.snapshotTime()).isNull();
+        assertThat(response.items()).isEmpty();
+        Mockito.verifyNoInteractions(marketOverviewSnapshotRepository);
+    }
+
+    @Test
+    void getCategoryChangeRates_랭킹과_같은_시각의_지수_등락률이_마켓별로_붙는다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        CategoryChangeRateMarketRanking kospiRanking = new CategoryChangeRateMarketRanking(
+                Market.KOSPI, List.of(CategoryChangeRateItem.withoutBefore(1L, List.of())));
+        CategoryChangeRateMarketRanking kosdaqRanking = new CategoryChangeRateMarketRanking(
+                Market.KOSDAQ, List.of(CategoryChangeRateItem.withoutBefore(2L, List.of())));
+        when(marketMapCategoryChangeRateSnapshotService.findLatestRankingForMarkets(
+                        List.of(Market.KOSPI, Market.KOSDAQ), 60))
+                .thenReturn(new SnapshotResponse<>(snapshotTime, List.of(kospiRanking, kosdaqRanking)));
+        when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime))
+                .thenReturn(List.of(
+                        marketOverviewSnapshot(Market.KOSPI, snapshotTime, BigDecimal.valueOf(1.23)),
+                        marketOverviewSnapshot(Market.KOSDAQ, snapshotTime, BigDecimal.valueOf(-0.45))));
+
+        SnapshotResponse<CategoryChangeRateMarketRanking> response =
+                service.getCategoryChangeRates(MarketQuery.ALL_STOCK, 60);
+
+        CategoryChangeRateMarketRanking kospi = response.items().stream()
+                .filter(ranking -> ranking.market() == Market.KOSPI)
+                .findFirst()
+                .orElseThrow();
+        assertThat(kospi.indexChangeRate()).isEqualByComparingTo(BigDecimal.valueOf(1.23));
+
+        CategoryChangeRateMarketRanking kosdaq = response.items().stream()
+                .filter(ranking -> ranking.market() == Market.KOSDAQ)
+                .findFirst()
+                .orElseThrow();
+        assertThat(kosdaq.indexChangeRate()).isEqualByComparingTo(BigDecimal.valueOf(-0.45));
+    }
+
+    @Test
+    void getCategoryChangeRates_그_시각에_지수_스냅샷이_없으면_indexChangeRate가_null이다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        CategoryChangeRateMarketRanking kospiRanking = new CategoryChangeRateMarketRanking(
+                Market.KOSPI, List.of(CategoryChangeRateItem.withoutBefore(1L, List.of())));
+        when(marketMapCategoryChangeRateSnapshotService.findLatestRankingForMarkets(List.of(Market.KOSPI), 60))
+                .thenReturn(new SnapshotResponse<>(snapshotTime, List.of(kospiRanking)));
+        // 이번 수집 주기에 지수기여도랭킹 수집만 실패해서, 카테고리 랭킹은 있는데 지수 스냅샷은 그 시각에
+        // 없는 경우 — 다른 시각 값으로 조용히 대체하지 않고 null로 내려간다.
+        when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
+
+        SnapshotResponse<CategoryChangeRateMarketRanking> response =
+                service.getCategoryChangeRates(MarketQuery.KOSPI, 60);
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().get(0).indexChangeRate()).isNull();
+    }
+
+    private MarketOverviewSnapshot marketOverviewSnapshot(
+            Market market, LocalDateTime snapshotTime, BigDecimal changeRate) {
+        return MarketOverviewSnapshot.create(
+                market,
+                snapshotTime,
+                BigDecimal.valueOf(2500),
+                BigDecimal.ONE,
+                changeRate,
+                BigDecimal.ZERO,
+                "OPEN",
+                0,
+                0,
+                0,
+                0,
+                0,
+                snapshotTime);
     }
 
     private MarketMapCategory category(Long id, Long parentId, String name) {

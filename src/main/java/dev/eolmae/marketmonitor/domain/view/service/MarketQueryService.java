@@ -136,21 +136,7 @@ public class MarketQueryService {
 
         return new SnapshotResponse<>(
                 latestSnapshotTime,
-                snapshots.stream()
-                        .map(item -> new MarketOverviewItem(
-                                item.getMarketType(),
-                                item.getMarketStatus(),
-                                item.getIndexValue(),
-                                item.getChangeValue(),
-                                item.getChangeRate(),
-                                item.getTradingValue(),
-                                item.getUpperLimitCount(),
-                                item.getLowerLimitCount(),
-                                item.getAdvancers(),
-                                item.getDecliners(),
-                                item.getUnchangedCount(),
-                                item.getSnapshotTime()))
-                        .toList());
+                snapshots.stream().map(MarketOverviewItem::from).toList());
     }
 
     /** 대시보드 요약: 투자자별 매매 종합 */

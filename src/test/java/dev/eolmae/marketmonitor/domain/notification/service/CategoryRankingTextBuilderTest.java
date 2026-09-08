@@ -12,6 +12,8 @@ import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategory;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryChangeRateSnapshotService;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketValueTierThresholdService;
+import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
+import dev.eolmae.marketmonitor.domain.stock.repository.MarketOverviewSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateItem;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateMarketRanking;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryTierBreakdown;
@@ -34,8 +36,13 @@ class CategoryRankingTextBuilderTest {
             Mockito.mock(MarketMapCategoryRepository.class);
     private final MarketValueTierThresholdService marketValueTierThresholdService =
             Mockito.mock(MarketValueTierThresholdService.class);
+    private final MarketOverviewSnapshotRepository marketOverviewSnapshotRepository =
+            Mockito.mock(MarketOverviewSnapshotRepository.class);
     private final CategoryRankingTextBuilder builder = new CategoryRankingTextBuilder(
-            snapshotService, marketMapCategoryRepository, marketValueTierThresholdService);
+            snapshotService,
+            marketMapCategoryRepository,
+            marketValueTierThresholdService,
+            marketOverviewSnapshotRepository);
 
     private final LocalDateTime dataTime = LocalDateTime.of(2025, 6, 2, 15, 0);
 
@@ -53,7 +60,7 @@ class CategoryRankingTextBuilderTest {
 
         String text = builder.buildRankingText(dataTime, MarketQuery.KOSPI);
 
-        assertThat(text).isEqualTo("#KOSPI\n반도체 +5.00%");
+        assertThat(text).isEqualTo("#코스피\n반도체 +5.00%");
     }
 
     @Test
@@ -73,7 +80,7 @@ class CategoryRankingTextBuilderTest {
 
         String text = builder.buildRankingText(dataTime, MarketQuery.KOSPI);
 
-        assertThat(text).isEqualTo("#KOSPI\n반도체 +10.00%\n화학 +5.00%\n자동차 +2.00%");
+        assertThat(text).isEqualTo("#코스피\n반도체 +10.00%\n화학 +5.00%\n자동차 +2.00%");
     }
 
     @Test
@@ -91,7 +98,7 @@ class CategoryRankingTextBuilderTest {
 
         String text = builder.buildRankingText(dataTime, MarketQuery.KOSPI);
 
-        assertThat(text).isEqualTo("#KOSPI\n반도체 +10.00%");
+        assertThat(text).isEqualTo("#코스피\n반도체 +10.00%");
     }
 
     @Test
@@ -102,7 +109,7 @@ class CategoryRankingTextBuilderTest {
 
         String text = builder.buildRankingText(dataTime, MarketQuery.KOSPI);
 
-        assertThat(text).isEqualTo("#KOSPI\n반도체 -12.34%");
+        assertThat(text).isEqualTo("#코스피\n반도체 -12.34%");
     }
 
     @Test
@@ -124,10 +131,23 @@ class CategoryRankingTextBuilderTest {
         doReturn(response).when(snapshotService).findRankingForMarkets(any(), any(), anyInt());
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(kospiCategory, kosdaqCategory));
         when(marketValueTierThresholdService.getValueTiers()).thenReturn(List.of());
+        when(marketOverviewSnapshotRepository.findBySnapshotTime(dataTime)).thenReturn(List.of());
 
         String text = builder.buildRankingText(dataTime, MarketQuery.ALL_STOCK);
 
-        assertThat(text).isEqualTo("#KOSPI\n반도체 +5.00%\n\n#KOSDAQ\n제약 +3.00%");
+        assertThat(text).isEqualTo("#코스피\n반도체 +5.00%\n\n#코스닥\n제약 +3.00%");
+    }
+
+    @Test
+    void buildRankingText_헤더_옆에_마켓_지수_변화율이_붙는다() {
+        MarketMapCategory root = category(1L, null, "반도체");
+        stub(List.of(root), List.of(), item(root.getId(), tier(10L, "대형", 50_000, 10000))); // +5%
+        when(marketOverviewSnapshotRepository.findBySnapshotTime(dataTime))
+                .thenReturn(List.of(marketOverview(Market.KOSPI, BigDecimal.valueOf(-1.23))));
+
+        String text = builder.buildRankingText(dataTime, MarketQuery.KOSPI);
+
+        assertThat(text).isEqualTo("#코스피 -1.23%\n반도체 +5.00%");
     }
 
     private void stub(List<MarketMapCategory> categories, List<Long> excludedTierIds, CategoryChangeRateItem... items) {
@@ -139,6 +159,24 @@ class CategoryRankingTextBuilderTest {
                 .thenReturn(excludedTierIds.stream()
                         .map(id -> new MarketValueTierItem(id, "제외구간", 0L, true))
                         .toList());
+        when(marketOverviewSnapshotRepository.findBySnapshotTime(dataTime)).thenReturn(List.of());
+    }
+
+    private MarketOverviewSnapshot marketOverview(Market market, BigDecimal changeRate) {
+        return MarketOverviewSnapshot.create(
+                market,
+                dataTime,
+                BigDecimal.valueOf(2500),
+                BigDecimal.ONE,
+                changeRate,
+                BigDecimal.ZERO,
+                "OPEN",
+                0,
+                0,
+                0,
+                0,
+                0,
+                dataTime);
     }
 
     private CategoryChangeRateItem item(Long categoryId, CategoryTierBreakdown... breakdowns) {

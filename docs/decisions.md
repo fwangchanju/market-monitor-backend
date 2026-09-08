@@ -225,6 +225,47 @@
 **그런데 왜 지우지 않나**: 구현에 시간이 꽤 들어갔고, 나중에 키움 API만으로 안 되는 기능이 생기면
 대안 수집 수단으로 쓸 수 있어서 남겨둔다.
 
+## `lombok.config`를 둔다 — `@Qualifier`가 조용히 무시되기 때문
+
+**결정**: 레포 루트에 `lombok.config`를 두고 `@Qualifier`를 복사 대상으로 등록한다.
+
+```
+lombok.copyableAnnotations += org.springframework.beans.factory.annotation.Qualifier
+```
+
+**이유**: `@RequiredArgsConstructor`가 만드는 생성자에는 **필드의 애노테이션이 복사되지 않는다.**
+Lombok은 `lombok.copyableAnnotations`에 등록된 것만 파라미터로 옮긴다. 생성자 주입에서 Spring은
+파라미터의 애노테이션만 보므로, 필드에 붙인 `@Qualifier`는 **읽히지도 않고 오류도 안 난다.**
+
+**이게 왜 위험한가**: 이 프로젝트의 `RestClient`는 `@Primary` 빈이 하나 있고 용도별 빈이 여럿이다.
+`@Qualifier`가 무시되면 **전부 `@Primary`로 주입되면서 기동도 성공하고 테스트도 통과한다.** 실제로
+2단계에서 렌더러 타임아웃이 90초 대신 10초로 주입되는 일이 있었고, 배포 후 일일 리포트가 안 나가야
+알 수 있는 상태였다. 바이트코드(`javap -v`로 `RuntimeVisibleParameterAnnotations` 확인)로만 잡힌다.
+
+**접은 선택지**: 필드명을 빈 이름과 맞춰 파라미터명 매칭에 기대는 방법. **성립하지 않는다** —
+Spring은 `@Primary`를 파라미터명 매칭보다 먼저 적용한다(`DefaultListableBeanFactory
+.determineAutowireCandidate`). `@Primary` 빈이 있는 한 계속 그쪽이 선택된다.
+
+## catch-all 예외 핸들러가 걸러야 하는 것
+
+`GlobalExceptionHandler`의 `@ExceptionHandler(Exception.class)`는 **MVC 내장 예외를 다시 던져야
+한다.** 안 그러면 정상적인 4xx가 500이 되고 요청 하나하나가 텔레그램 알림이 된다. nginx가 모든 요청에
+`auth_request`를 걸고 접근제어 403이 `ResponseStatusException`으로 나가므로, 공개 도메인에서 봇 스캔만
+으로도 채널이 죽는다.
+
+**`ErrorResponse` 구현 여부만으로 판단하면 안 된다.** `ResponseEntityExceptionHandler`가 다루는
+예외 중 아래 넷은 `ErrorResponse`가 아니라서 catch-all에 걸린다.
+
+- `TypeMismatchException` (→ `MethodArgumentTypeMismatchException`, `ConversionNotSupportedException`)
+- `HttpMessageNotReadableException`
+- `HttpMessageNotWritableException`
+- `AsyncRequestNotUsableException`
+
+특히 `MethodArgumentTypeMismatchException`은 `@PathVariable Long id`에 문자열이 오거나 enum
+파라미터에 없는 값이 오면 발생한다. **예외 메시지에 사용자가 보낸 값이 들어가므로**, 알림 억제 키를
+`클래스명|메시지`로 잡으면 요청마다 키가 달라져 억제가 무력화되고 맵이 무한히 커진다. 억제 저장소는
+크기 상한과 만료가 있어야 한다.
+
 ## nginx 설정을 백엔드 레포에 둔다
 
 **결정**: nginx Dockerfile과 배포 스크립트를 백엔드 레포에 유지한다. 프론트 레포로 옮기지 않는다.

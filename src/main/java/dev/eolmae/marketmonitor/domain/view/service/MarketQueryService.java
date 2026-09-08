@@ -1,7 +1,6 @@
 package dev.eolmae.marketmonitor.domain.view.service;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
-import dev.eolmae.marketmonitor.common.util.KstClock;
 import dev.eolmae.marketmonitor.domain.stock.entity.IndexContributionRankingSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.InvestorTradingSummarySnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
@@ -24,7 +23,6 @@ import dev.eolmae.marketmonitor.domain.stock.repository.ShortSellingDailyHistory
 import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketmonitor.domain.stock.service.WatchStockCacheService;
-import dev.eolmae.marketmonitor.domain.stock.util.CollectionChecker;
 import dev.eolmae.marketmonitor.domain.view.dto.IndexContributionItem;
 import dev.eolmae.marketmonitor.domain.view.dto.IntradayInvestorSummaryItem;
 import dev.eolmae.marketmonitor.domain.view.dto.InvestorTradingSummaryItem;
@@ -49,7 +47,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -69,15 +66,6 @@ public class MarketQueryService {
     private final ShortSellingDailyHistoryRepository shortSellingDailyHistoryRepository;
     private final WatchStockCacheService watchStockCacheService;
     private final StockInfoCacheService stockInfoCacheService;
-
-    @Value("${collect.start-hour}")
-    private int collectStartHour;
-
-    @Value("${collect.end-hour}")
-    private int collectEndHour;
-
-    @Value("${collect.interval-minutes}")
-    private int collectIntervalMinutes;
 
     private static final int RANKING_LIMIT = 10;
 
@@ -147,8 +135,7 @@ public class MarketQueryService {
                 .toList();
 
         return new SnapshotResponse<>(
-                CollectionChecker.expectedSnapshotTime(
-                        KstClock.now(), collectStartHour, collectEndHour, collectIntervalMinutes),
+                latestSnapshotTime,
                 snapshots.stream()
                         .map(item -> new MarketOverviewItem(
                                 item.getMarketType(),
@@ -184,8 +171,7 @@ public class MarketQueryService {
                 .toList();
 
         return new SnapshotResponse<>(
-                CollectionChecker.expectedSnapshotTime(
-                        KstClock.now(), collectStartHour, collectEndHour, collectIntervalMinutes),
+                latestSnapshotTime,
                 snapshots.stream()
                         .map(item -> new InvestorTradingSummaryItem(
                                 item.getMarketType(),
@@ -248,10 +234,7 @@ public class MarketQueryService {
                     agg.snapshotTime()));
         }
 
-        return new SnapshotResponse<>(
-                CollectionChecker.expectedSnapshotTime(
-                        KstClock.now(), collectStartHour, collectEndHour, collectIntervalMinutes),
-                items);
+        return new SnapshotResponse<>(latestSnapshotTime, items);
     }
 
     private static AggregatedProgramRanking toAggregated(ProgramTradingRankingSnapshot snapshot) {
@@ -306,10 +289,7 @@ public class MarketQueryService {
                         item.getSnapshotTime()))
                 .toList();
 
-        return new SnapshotResponse<>(
-                CollectionChecker.expectedSnapshotTime(
-                        KstClock.now(), collectStartHour, collectEndHour, collectIntervalMinutes),
-                items);
+        return new SnapshotResponse<>(latestSnapshotTime, items);
     }
 
     /** 관심종목 목록 반환 */
@@ -360,10 +340,12 @@ public class MarketQueryService {
 
     private StockHistoryResponse<ProgramTradingDailyHistoryItem> toProgramTradingDailyHistoryResponse(
             String stockCode, List<ProgramTradingDailyHistory> history) {
+        // 호출부(getProgramTradingDailyHistory)가 주석 처리돼 있어 도달 불가능한 코드다. 2-6에서
+        // collect.* @Value 주입이 제거되면서 예전 기대 시각 대신 null을 넣는다 — 실제로 호출되지 않으므로
+        // 값 자체는 의미가 없다.
         return new StockHistoryResponse<>(
                 stockCode,
-                CollectionChecker.expectedSnapshotTime(
-                        KstClock.now(), collectStartHour, collectEndHour, collectIntervalMinutes),
+                null,
                 history.stream()
                         .map(item -> new ProgramTradingDailyHistoryItem(
                                 item.getTradeDate(),

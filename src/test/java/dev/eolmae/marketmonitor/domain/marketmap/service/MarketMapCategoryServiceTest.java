@@ -20,6 +20,7 @@ import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryCha
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapStockCategoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
+import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import java.math.BigDecimal;
 import java.util.List;
@@ -38,11 +39,13 @@ class MarketMapCategoryServiceTest {
             Mockito.mock(MarketMapStockCategoryRepository.class);
     private final MarketMapCategoryChangeRateSnapshotRepository marketMapCategoryChangeRateSnapshotRepository =
             Mockito.mock(MarketMapCategoryChangeRateSnapshotRepository.class);
+    private final StockInfoRepository stockInfoRepository = Mockito.mock(StockInfoRepository.class);
     private final StockInfoCacheService stockInfoCacheService = Mockito.mock(StockInfoCacheService.class);
     private final MarketMapCategoryService service = new MarketMapCategoryService(
             marketMapCategoryRepository,
             marketMapStockCategoryRepository,
             marketMapCategoryChangeRateSnapshotRepository,
+            stockInfoRepository,
             stockInfoCacheService);
 
     @Test
@@ -91,6 +94,54 @@ class MarketMapCategoryServiceTest {
 
     @Test
     void onStockInfoSynced_신규종목이_없으면_아무것도_하지_않는다() {
+        when(stockInfoRepository.findByActiveTrue()).thenReturn(List.of());
+
+        service.onStockInfoSynced(new StockInfoSyncedEvent(List.of()));
+
+        verify(marketMapCategoryRepository, never()).save(Mockito.any());
+        verify(marketMapStockCategoryRepository, never()).saveAll(Mockito.anyList());
+    }
+
+    @Test
+    void onStockInfoSynced_이벤트에_없어도_배정_행이_없는_활성_일반주는_배정된다() {
+        // ETF로 있다가 일반주로 전환된 종목처럼, StockInfoCollector의 이벤트(신규 종목만)엔 안 실리지만
+        // market_map_stock_category엔 아직 배정 행이 없는 경우
+        MarketMapCategory semiconductor = category(1L, null, "반도체");
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
+        when(marketMapStockCategoryRepository.findAll()).thenReturn(List.of());
+        StockInfo unassigned = StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", "반도체", 100L, BigDecimal.TEN);
+        when(stockInfoRepository.findByActiveTrue()).thenReturn(List.of(unassigned));
+
+        service.onStockInfoSynced(new StockInfoSyncedEvent(List.of()));
+
+        ArgumentCaptor<List<MarketMapStockCategory>> assignmentCaptor = ArgumentCaptor.forClass(List.class);
+        verify(marketMapStockCategoryRepository).saveAll(assignmentCaptor.capture());
+        assertThat(assignmentCaptor.getValue())
+                .extracting(MarketMapStockCategory::getStockCode, MarketMapStockCategory::getCategoryId)
+                .containsExactly(tuple("005930", 1L));
+    }
+
+    @Test
+    void onStockInfoSynced_이미_배정된_종목은_다시_배정하지_않는다() {
+        MarketMapCategory semiconductor = category(1L, null, "반도체");
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
+        when(marketMapStockCategoryRepository.findAll())
+                .thenReturn(List.of(MarketMapStockCategory.create("005930", 1L)));
+        StockInfo assigned = StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", "반도체", 100L, BigDecimal.TEN);
+        when(stockInfoRepository.findByActiveTrue()).thenReturn(List.of(assigned));
+
+        service.onStockInfoSynced(new StockInfoSyncedEvent(List.of()));
+
+        verify(marketMapStockCategoryRepository, never()).saveAll(Mockito.anyList());
+    }
+
+    @Test
+    void onStockInfoSynced_ETF는_배정_대상에서_제외된다() {
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of());
+        when(marketMapStockCategoryRepository.findAll()).thenReturn(List.of());
+        StockInfo etf = StockInfo.create("069500", "KODEX 200", Market.KOSPI, "8", "ETF", 100L, BigDecimal.TEN);
+        when(stockInfoRepository.findByActiveTrue()).thenReturn(List.of(etf));
+
         service.onStockInfoSynced(new StockInfoSyncedEvent(List.of()));
 
         verify(marketMapCategoryRepository, never()).save(Mockito.any());

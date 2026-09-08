@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -15,10 +16,13 @@ import dev.eolmae.marketmonitor.domain.stock.dto.StockInfoResponse;
 import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import java.util.List;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionSynchronizationUtils;
 
 class StockInfoCollectorTest {
 
@@ -48,6 +52,41 @@ class StockInfoCollectorTest {
         assertThat(captor.getValue().newStocks())
                 .extracting(NewStock::stockCode, NewStock::categoryName)
                 .containsExactlyInAnyOrder(tuple("005930", "반도체"), tuple("051910", "미분류"));
+    }
+
+    @AfterEach
+    void clearSynchronization() {
+        // 테스트가 initSynchronization()만 하고 clear를 안 하면 ThreadLocal 상태가 다음 테스트로 샌다.
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
+
+    @Test
+    void sync_활성_트랜잭션이_없으면_캐시를_즉시_비운다() {
+        when(kiwoomApiClient.post(any(StockInfoRequest.class), eq(StockInfoResponse.class)))
+                .thenReturn(new StockInfoResponse("0", "정상", null));
+        when(stockInfoRepository.findAll()).thenReturn(List.of());
+
+        collector.sync();
+
+        verify(stockInfoCacheService).evict();
+    }
+
+    @Test
+    void sync_트랜잭션_커밋_전에는_캐시를_비우지_않고_커밋_후에_비운다() {
+        when(kiwoomApiClient.post(any(StockInfoRequest.class), eq(StockInfoResponse.class)))
+                .thenReturn(new StockInfoResponse("0", "정상", null));
+        when(stockInfoRepository.findAll()).thenReturn(List.of());
+        TransactionSynchronizationManager.initSynchronization();
+
+        collector.sync();
+
+        verify(stockInfoCacheService, never()).evict();
+
+        TransactionSynchronizationUtils.triggerAfterCommit();
+
+        verify(stockInfoCacheService).evict();
     }
 
     @Test

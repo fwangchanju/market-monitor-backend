@@ -13,6 +13,7 @@ import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryCha
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapStockCategoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
+import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -33,9 +34,12 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class MarketMapCategoryService {
 
+    private static final String UNCATEGORIZED = "미분류";
+
     private final MarketMapCategoryRepository marketMapCategoryRepository;
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository;
     private final MarketMapCategoryChangeRateSnapshotRepository marketMapCategoryChangeRateSnapshotRepository;
+    private final StockInfoRepository stockInfoRepository;
     private final StockInfoCacheService stockInfoCacheService;
 
     @Transactional(readOnly = true)
@@ -43,10 +47,43 @@ public class MarketMapCategoryService {
         return findAllCategories().stream().map(this::toItem).toList();
     }
 
-    /** stock -> marketmap 순환 의존을 피하려고 이벤트로 수신(StockInfoSyncedEvent 참고). */
+    /** stock -> marketmap 순환 의존을 피하려고 이벤트로 수신(StockInfoSyncedEvent 참고).
+     * 이벤트 payload(신규 종목)에 더해, "활성 일반주인데 아직 market_map_stock_category에 배정 행이
+     * 없는 종목"도 직접 계산해서 함께 채운다 — 이미 stock_info에 있던 종목이 나중에 일반주가 되는
+     * 경우(ETF로 등록됐다가 marketCode가 바뀌는 등)는 이벤트에 실리지 않아 배정을 영영 못 받기
+     * 때문이다. StockInfoCollector가 이벤트에 신규 종목만 싣는 것은 그대로 둔다. */
     @EventListener
     public void onStockInfoSynced(StockInfoSyncedEvent event) {
-        syncStockCategories(event.newStocks());
+        List<StockInfoSyncedEvent.NewStock> stocks = new ArrayList<>(event.newStocks());
+        stocks.addAll(findMissingAssignments(event.newStocks()));
+        syncStockCategories(stocks);
+    }
+
+    /** stockInfoCacheService가 아니라 StockInfoRepository를 직접 조회한다 — evict가 커밋 후로
+     * 밀리면(2-4) 이 시점의 캐시엔 방금 저장된 신규 종목이 아직 없을 수 있다.
+     * 계산 방식은 MarketMapCategoryTreeService.findStocksMissingAfterRestore()와 동일하다. */
+    private List<StockInfoSyncedEvent.NewStock> findMissingAssignments(List<StockInfoSyncedEvent.NewStock> newStocks) {
+        Set<String> alreadyHandled =
+                newStocks.stream().map(StockInfoSyncedEvent.NewStock::stockCode).collect(Collectors.toSet());
+        Set<String> assignedStockCodes = marketMapStockCategoryRepository.findAll().stream()
+                .map(MarketMapStockCategory::getStockCode)
+                .collect(Collectors.toSet());
+
+        return stockInfoRepository.findByActiveTrue().stream()
+                .filter(StockInfo::isActiveAndOrdinary)
+                .filter(stockInfo -> !alreadyHandled.contains(stockInfo.getStockCode()))
+                .filter(stockInfo -> !assignedStockCodes.contains(stockInfo.getStockCode()))
+                .map(stockInfo ->
+                        new StockInfoSyncedEvent.NewStock(stockInfo.getStockCode(), normalizeCategoryName(stockInfo)))
+                .toList();
+    }
+
+    private String normalizeCategoryName(StockInfo stockInfo) {
+        String categoryName = stockInfo.getCategoryName();
+        if (categoryName == null || categoryName.isBlank()) {
+            return UNCATEGORIZED;
+        }
+        return categoryName;
     }
 
     /** 버전 복원(MarketMapCategoryTreeService.restore) 후 스냅샷에 없던(=배정이 빠진) 종목을 채워넣는 진입점.

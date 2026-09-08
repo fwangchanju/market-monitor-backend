@@ -22,6 +22,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Slf4j
 @Component
@@ -82,9 +84,9 @@ public class StockInfoCollector {
                         fetched.lastPrice()))
                 .toList();
         stockInfoRepository.saveAll(newStocks);
-        // 이벤트 핸들러(카테고리 자동 배정 등)가 이 시점의 stock_info 캐시를 참조할 수 있으므로,
-        // 신규 종목 저장 직후·이벤트 발행 전에 캐시를 비워서 핸들러가 최신 상태를 보게 한다.
-        stockInfoCacheService.evict();
+        // 커밋 전에 비우면 evict~커밋 사이에 다른 스레드가 캐시를 재적재해 옛 데이터를 캐시에 굳힐 수
+        // 있다 — 그래서 evict는 이 트랜잭션이 커밋된 뒤로 미룬다.
+        evictCacheAfterCommit();
 
         // 마켓맵은 주권(코스피/코스닥)만 다루므로 ELW/ETF 등은 이벤트 발행 단계에서 제외 (stock_info 저장 자체는 종류 무관하게 전부 유지)
         List<StockInfoSyncedEvent.NewStock> newStockEvents = newStocks.stream()
@@ -96,6 +98,21 @@ public class StockInfoCollector {
         eventPublisher.publishEvent(new StockInfoSyncedEvent(newStockEvents));
 
         log.info("종목 정보 동기화 완료: 조회 종목 수={}", fetchedCount);
+    }
+
+    // StockInfoCollectorTest처럼 활성 트랜잭션 없이 도는 단위 테스트에서는
+    // registerSynchronization()이 IllegalStateException을 던지므로, 그런 경우엔 즉시 evict한다.
+    private void evictCacheAfterCommit() {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            stockInfoCacheService.evict();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                stockInfoCacheService.evict();
+            }
+        });
     }
 
     private void collectMarket(Market market, Map<String, FetchStockInfo> fetchedStocks) {

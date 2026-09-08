@@ -6,11 +6,13 @@ import dev.eolmae.marketmonitor.domain.stock.dto.KiwoomRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.KiwoomResponse;
 import dev.eolmae.marketmonitor.domain.stock.dto.KiwoomResponseHeader;
 import dev.eolmae.marketmonitor.domain.stock.exception.KiwoomRateLimitException;
+import dev.eolmae.marketmonitor.domain.stock.exception.KiwoomTransientFailureException;
 import dev.eolmae.marketmonitor.domain.stock.properties.KiwoomProperties;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +21,8 @@ import org.springframework.retry.annotation.Recover;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -35,6 +39,8 @@ public class KiwoomApiClient {
 
     private final KiwoomProperties properties;
     private final KiwoomTokenManager tokenManager;
+
+    @Qualifier("kiwoomRestClient")
     private final RestClient restClient;
 
     private long lastFetchNanos = 0;
@@ -43,10 +49,13 @@ public class KiwoomApiClient {
      * 타입 안전 API 호출. request DTO가 직렬화되어 요청 바디로 전송되고, 응답은 dataClass 타입으로 역직렬화된다.
      * 응답 헤더의 cont-yn이 Y인 동안 next-key로 계속 이어서 호출하고, 페이지들을 병합해서 하나로 리턴한다.
      *
-     * 429 응답 시 최대 3회 재시도(2초 간격), 초과 시 해당 사이클 스킵.
-     * 재시도는 이 메서드 전체 단위로 걸리므로, 페이지네이션 도중 429가 나면 첫 페이지부터 다시 돈다.
+     * 429·연결 실패/타임아웃·5xx 응답 시 최대 3회 재시도(2초 간격), 초과 시 해당 사이클 스킵.
+     * 재시도는 이 메서드 전체 단위로 걸리므로, 페이지네이션 도중 재시도 대상 오류가 나면 첫 페이지부터 다시 돈다.
      */
-    @Retryable(retryFor = KiwoomRateLimitException.class, maxAttempts = 2, backoff = @Backoff(delay = 1000))
+    @Retryable(
+            retryFor = {KiwoomRateLimitException.class, KiwoomTransientFailureException.class},
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 2000))
     public <T extends KiwoomResponse> T post(KiwoomRequest request, Class<T> dataClass) {
         log.debug("Kiwoom API 호출: apiId={}, path={}", request.apiId(), request.path());
         return fetchAll(request, dataClass);
@@ -56,6 +65,13 @@ public class KiwoomApiClient {
     public <T> T recoverFromRateLimit(KiwoomRateLimitException e, KiwoomRequest request, Class<T> dataClass) {
         log.warn("Kiwoom API rate limit 재시도 횟수 초과, 사이클 스킵: apiId={}", request.apiId());
         throw new BadRequestException(ErrorCode.KIWOOM_RATE_LIMIT, request.apiId());
+    }
+
+    @Recover
+    public <T> T recoverFromTransientFailure(
+            KiwoomTransientFailureException e, KiwoomRequest request, Class<T> dataClass) {
+        log.warn("Kiwoom API 연결 실패/서버 오류 재시도 횟수 초과, 사이클 스킵: apiId={}", request.apiId());
+        throw new BadRequestException(ErrorCode.KIWOOM_CONNECTION_FAILED, request.apiId());
     }
 
     @SuppressWarnings("unchecked")
@@ -121,6 +137,12 @@ public class KiwoomApiClient {
                 throw new KiwoomRateLimitException();
             }
             throw new BadRequestException(ErrorCode.KIWOOM_HTTP_ERROR, e, request.apiId());
+        } catch (HttpServerErrorException e) {
+            log.warn("Kiwoom API 5xx 오류, 재시도: apiId={}, status={}", request.apiId(), e.getStatusCode());
+            throw new KiwoomTransientFailureException();
+        } catch (ResourceAccessException e) {
+            log.warn("Kiwoom API 연결 실패/타임아웃, 재시도: apiId={}", request.apiId());
+            throw new KiwoomTransientFailureException();
         } catch (RestClientException e) {
             throw new BadRequestException(ErrorCode.KIWOOM_RESPONSE_PARSE_FAILED, e, request.apiId());
         }

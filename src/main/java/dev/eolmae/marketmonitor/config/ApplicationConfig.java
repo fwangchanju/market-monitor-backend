@@ -5,12 +5,15 @@ import com.github.benmanes.caffeine.cache.Caffeine;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import dev.eolmae.marketmonitor.common.cache.CacheKey;
 import jakarta.persistence.EntityManager;
+import java.net.http.HttpClient;
 import java.time.Duration;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.springframework.http.client.ClientHttpRequestFactory;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 @Configuration
@@ -18,6 +21,8 @@ public class ApplicationConfig {
 
     public static final String CACHE_MANAGER = "cacheManager";
     public static final String ACCESS_CACHE_MANAGER = "accessCacheManager";
+
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(3);
 
     @Bean(CACHE_MANAGER)
     @Primary
@@ -38,9 +43,44 @@ public class ApplicationConfig {
         return new JPAQueryFactory(entityManager);
     }
 
+    /** KrxCrawler 등 나머지 전부가 쓰는 기본 클라이언트. @Qualifier 없이 주입받는 곳은 전부 이 빈이다. */
     @Bean
+    @Primary
     public RestClient restClient() {
-        return RestClient.create();
+        return RestClient.builder()
+                .requestFactory(requestFactory(Duration.ofSeconds(10)))
+                .build();
+    }
+
+    @Bean
+    public RestClient kiwoomRestClient() {
+        return RestClient.builder()
+                .requestFactory(requestFactory(Duration.ofSeconds(10)))
+                .build();
+    }
+
+    @Bean
+    public RestClient telegramRestClient() {
+        return RestClient.builder()
+                .requestFactory(requestFactory(Duration.ofSeconds(30)))
+                .build();
+    }
+
+    // page.goto 30초 + waitForSelector 15초(containers/renderer/server.js)를 감안한 값 — 짧게 걸면
+    // 일일 리포트 스크린샷이 항상 실패한다.
+    @Bean
+    public RestClient rendererRestClient() {
+        return RestClient.builder()
+                .requestFactory(requestFactory(Duration.ofSeconds(90)))
+                .build();
+    }
+
+    private ClientHttpRequestFactory requestFactory(Duration readTimeout) {
+        HttpClient httpClient =
+                HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build();
+        JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
+        factory.setReadTimeout(readTimeout);
+        return factory;
     }
 
     @Bean

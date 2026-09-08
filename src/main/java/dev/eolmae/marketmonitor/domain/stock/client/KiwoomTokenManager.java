@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -26,6 +27,8 @@ public class KiwoomTokenManager {
     private static final int SUCCESS_CODE = 0;
 
     private final KiwoomProperties properties;
+
+    @Qualifier("kiwoomRestClient")
     private final RestClient restClient;
 
     private volatile String cachedToken;

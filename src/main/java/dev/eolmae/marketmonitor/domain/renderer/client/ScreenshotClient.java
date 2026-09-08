@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -20,6 +21,8 @@ import org.springframework.web.client.RestClient;
 public class ScreenshotClient {
 
     private final RendererProperties properties;
+
+    @Qualifier("rendererRestClient")
     private final RestClient restClient;
 
     // path: 프론트 base 뒤에 붙일 경로(쿼리 포함 가능), selector: 캡처할 요소들의 CSS 셀렉터

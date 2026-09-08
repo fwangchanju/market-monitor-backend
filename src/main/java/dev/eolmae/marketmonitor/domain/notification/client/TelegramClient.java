@@ -10,6 +10,7 @@ import dev.eolmae.marketmonitor.domain.notification.properties.TelegramPropertie
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -25,7 +26,10 @@ public class TelegramClient {
     private static final String BASE_URL = "https://api.telegram.org";
 
     private final TelegramProperties properties;
+
+    @Qualifier("telegramRestClient")
     private final RestClient restClient;
+
     private final ObjectMapper objectMapper;
 
     public void sendMessage(String chatId, String text) {

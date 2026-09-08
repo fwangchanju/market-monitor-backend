@@ -13,4 +13,8 @@ public final class KstClock {
     public static LocalDateTime getNowTruncateMinute() {
         return LocalDateTime.now(Zone.KST.zoneId()).truncatedTo(ChronoUnit.MINUTES);
     }
+
+    public static LocalDateTime now() {
+        return LocalDateTime.now(Zone.KST.zoneId());
+    }
 }

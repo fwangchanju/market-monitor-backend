@@ -1,8 +1,8 @@
 package dev.eolmae.marketmonitor.domain.view.service;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
+import dev.eolmae.marketmonitor.common.util.KstClock;
 import dev.eolmae.marketmonitor.domain.stock.entity.IndexContributionRankingSnapshot;
-import dev.eolmae.marketmonitor.domain.stock.entity.IntradayInvestorRankingSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.InvestorTradingSummarySnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.ProgramTradingDailyHistory;
@@ -45,11 +45,11 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -69,6 +69,15 @@ public class MarketQueryService {
     private final ShortSellingDailyHistoryRepository shortSellingDailyHistoryRepository;
     private final WatchStockCacheService watchStockCacheService;
     private final StockInfoCacheService stockInfoCacheService;
+
+    @Value("${collect.start-hour}")
+    private int collectStartHour;
+
+    @Value("${collect.end-hour}")
+    private int collectEndHour;
+
+    @Value("${collect.interval-minutes}")
+    private int collectIntervalMinutes;
 
     private static final int RANKING_LIMIT = 10;
 
@@ -138,7 +147,8 @@ public class MarketQueryService {
                 .toList();
 
         return new SnapshotResponse<>(
-                CollectionChecker.expectedSnapshotTime(),
+                CollectionChecker.expectedSnapshotTime(
+                        KstClock.now(), collectStartHour, collectEndHour, collectIntervalMinutes),
                 snapshots.stream()
                         .map(item -> new MarketOverviewItem(
                                 item.getMarketType(),
@@ -174,7 +184,8 @@ public class MarketQueryService {
                 .toList();
 
         return new SnapshotResponse<>(
-                CollectionChecker.expectedSnapshotTime(),
+                CollectionChecker.expectedSnapshotTime(
+                        KstClock.now(), collectStartHour, collectEndHour, collectIntervalMinutes),
                 snapshots.stream()
                         .map(item -> new InvestorTradingSummaryItem(
                                 item.getMarketType(),
@@ -237,7 +248,10 @@ public class MarketQueryService {
                     agg.snapshotTime()));
         }
 
-        return new SnapshotResponse<>(CollectionChecker.expectedSnapshotTime(), items);
+        return new SnapshotResponse<>(
+                CollectionChecker.expectedSnapshotTime(
+                        KstClock.now(), collectStartHour, collectEndHour, collectIntervalMinutes),
+                items);
     }
 
     private static AggregatedProgramRanking toAggregated(ProgramTradingRankingSnapshot snapshot) {
@@ -292,7 +306,10 @@ public class MarketQueryService {
                         item.getSnapshotTime()))
                 .toList();
 
-        return new SnapshotResponse<>(CollectionChecker.expectedSnapshotTime(), items);
+        return new SnapshotResponse<>(
+                CollectionChecker.expectedSnapshotTime(
+                        KstClock.now(), collectStartHour, collectEndHour, collectIntervalMinutes),
+                items);
     }
 
     /** 관심종목 목록 반환 */
@@ -345,7 +362,8 @@ public class MarketQueryService {
             String stockCode, List<ProgramTradingDailyHistory> history) {
         return new StockHistoryResponse<>(
                 stockCode,
-                CollectionChecker.expectedSnapshotTime(),
+                CollectionChecker.expectedSnapshotTime(
+                        KstClock.now(), collectStartHour, collectEndHour, collectIntervalMinutes),
                 history.stream()
                         .map(item -> new ProgramTradingDailyHistoryItem(
                                 item.getTradeDate(),

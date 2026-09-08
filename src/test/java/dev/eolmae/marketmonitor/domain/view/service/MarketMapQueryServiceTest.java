@@ -211,6 +211,88 @@ class MarketMapQueryServiceTest {
         assertThat(emptyNode.children()).isEmpty();
     }
 
+    @Test
+    void getCustomMarketMap_자식_카테고리가_있는_노드의_총액은_자기_items와_자식_합계다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+
+        MarketMapCategory parent = category(1L, null, "전기/전자");
+        MarketMapCategory child = category(2L, 1L, "반도체");
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(parent, child));
+        when(marketMapStockCategoryRepository.findAll())
+                .thenReturn(List.of(
+                        MarketMapStockCategory.create("009150", 1L), MarketMapStockCategory.create("005930", 2L)));
+
+        StockInfo lgElectronics = stockInfo("009150", "삼성전기", null, 200L, BigDecimal.valueOf(5));
+        StockInfo samsung = stockInfo("005930", "삼성전자", null, 100L, BigDecimal.TEN);
+        Map<String, StockInfo> stockInfoCache = List.of(lgElectronics, samsung).stream()
+                .collect(Collectors.toMap(StockInfo::getStockCode, Function.identity()));
+        when(stockInfoCacheService.getCache()).thenReturn(stockInfoCache);
+
+        when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
+                .thenReturn(Optional.of(snapshotTime));
+        when(sectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(List.of(Market.KOSPI), snapshotTime))
+                .thenReturn(List.of(
+                        priceSnapshot("009150", snapshotTime, BigDecimal.valueOf(5)),
+                        priceSnapshot("005930", snapshotTime, BigDecimal.TEN)));
+
+        SnapshotResponse<MarketMapCategoryNode> response = service.getCustomMarketMap(MarketQuery.KOSPI);
+
+        MarketMapCategoryNode parentNode = response.items().stream()
+                .filter(node -> node.categoryName().equals("전기/전자"))
+                .findFirst()
+                .orElseThrow();
+        // 직속(009150: 5*200=1000) + 자식(반도체: 10*100=1000) = 2000
+        assertThat(parentNode.totalMarketValue()).isEqualByComparingTo(BigDecimal.valueOf(2000));
+    }
+
+    @Test
+    void getCustomMarketMap_가격_스냅샷이_없는_종목은_제외된다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+
+        MarketMapCategory semiconductor = category(1L, null, "반도체");
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
+        when(marketMapStockCategoryRepository.findAll())
+                .thenReturn(List.of(
+                        MarketMapStockCategory.create("005930", 1L), MarketMapStockCategory.create("000660", 1L)));
+
+        StockInfo samsung = stockInfo("005930", "삼성전자", null, 100L, BigDecimal.TEN);
+        StockInfo skHynix = stockInfo("000660", "SK하이닉스", null, 50L, BigDecimal.valueOf(20));
+        Map<String, StockInfo> stockInfoCache = List.of(samsung, skHynix).stream()
+                .collect(Collectors.toMap(StockInfo::getStockCode, Function.identity()));
+        when(stockInfoCacheService.getCache()).thenReturn(stockInfoCache);
+
+        when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
+                .thenReturn(Optional.of(snapshotTime));
+        // 000660은 가격 스냅샷이 없다 — 수집 gap 등으로 그 시각에 데이터가 아예 없는 경우
+        when(sectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(List.of(Market.KOSPI), snapshotTime))
+                .thenReturn(List.of(priceSnapshot("005930", snapshotTime, BigDecimal.TEN)));
+
+        SnapshotResponse<MarketMapCategoryNode> response = service.getCustomMarketMap(MarketQuery.KOSPI);
+
+        MarketMapCategoryNode semiconductorNode = response.items().stream()
+                .filter(node -> node.categoryName().equals("반도체"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(semiconductorNode.items()).extracting("stockCode").containsExactly("005930");
+    }
+
+    @Test
+    void getCustomMarketMap_카테고리가_하나도_없으면_빈_리스트를_반환한다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of());
+        when(marketMapStockCategoryRepository.findAll()).thenReturn(List.of());
+        when(stockInfoCacheService.getCache()).thenReturn(Map.of());
+        when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
+                .thenReturn(Optional.of(snapshotTime));
+        when(sectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(List.of(Market.KOSPI), snapshotTime))
+                .thenReturn(List.of());
+
+        SnapshotResponse<MarketMapCategoryNode> response = service.getCustomMarketMap(MarketQuery.KOSPI);
+
+        assertThat(response.items()).isEmpty();
+    }
+
     private MarketMapCategory category(Long id, Long parentId, String name) {
         MarketMapCategory category =
                 parentId == null ? MarketMapCategory.createParent(name) : categoryWithParent(parentId, name);

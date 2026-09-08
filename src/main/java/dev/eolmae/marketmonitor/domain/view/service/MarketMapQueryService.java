@@ -70,7 +70,8 @@ public class MarketMapQueryService {
                 .collect(Collectors.groupingBy(
                         stockInfo -> normalizeCategoryName(stockInfo.getCategoryName()),
                         Collectors.mapping(
-                                stockInfo -> toMarketMapItem(stockInfo, priceMap.get(stockInfo.getStockCode()), sortedTiers),
+                                stockInfo ->
+                                        toMarketMapItem(stockInfo, priceMap.get(stockInfo.getStockCode()), sortedTiers),
                                 Collectors.toList())));
 
         List<MarketMapCategoryNode> nodes = grouped.entrySet().stream()
@@ -100,7 +101,10 @@ public class MarketMapQueryService {
         // 등락률 데코레이션(tierBreakdown)은 카테고리별로 하나만 붙으므로, All Stocks처럼 markets가
         // 여러 개여도 마켓별로 나눌 필요 없이 그대로 합쳐서 조회한다.
         Map<Long, List<CategoryTierBreakdown>> tierBreakdownByCategoryId =
-                marketMapCategoryChangeRateSnapshotService.findTierBreakdownsByCategoryId(markets, latestSnapshotTime).values().stream()
+                marketMapCategoryChangeRateSnapshotService
+                        .findTierBreakdownsByCategoryId(markets, latestSnapshotTime)
+                        .values()
+                        .stream()
                         .flatMap(byCategoryId -> byCategoryId.entrySet().stream())
                         .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (a, b) -> {
                             List<CategoryTierBreakdown> merged = new ArrayList<>(a);
@@ -150,14 +154,19 @@ public class MarketMapQueryService {
         Map<Long, List<MarketMapItem>> itemsByCategoryId = candidates.stream()
                 .filter(stockInfo -> priceMap.containsKey(stockInfo.getStockCode()))
                 .collect(Collectors.groupingBy(
-                        stockInfo -> stockCategoryMap.get(stockInfo.getStockCode()).getCategoryId(),
+                        stockInfo ->
+                                stockCategoryMap.get(stockInfo.getStockCode()).getCategoryId(),
                         Collectors.mapping(
                                 stockInfo -> toMarketMapItem(
-                                        stockInfo, priceMap.get(stockInfo.getStockCode()), stockCategoryMap, sortedTiers),
+                                        stockInfo,
+                                        priceMap.get(stockInfo.getStockCode()),
+                                        stockCategoryMap,
+                                        sortedTiers),
                                 Collectors.toList())));
 
         return childrenByParentId.getOrDefault(NO_PARENT_KEY, List.of()).stream()
-                .map(category -> toCategoryNode(category, childrenByParentId, itemsByCategoryId, tierBreakdownByCategoryId))
+                .map(category ->
+                        toCategoryNode(category, childrenByParentId, itemsByCategoryId, tierBreakdownByCategoryId))
                 .toList();
     }
 
@@ -243,7 +252,9 @@ public class MarketMapQueryService {
     /** 배정된 alias가 있으면 그 값, 없거나 빈 문자열이면 null */
     private String resolveAlias(StockInfo stockInfo, Map<String, MarketMapStockCategory> stockCategoryMap) {
         MarketMapStockCategory stockCategory = stockCategoryMap.get(stockInfo.getStockCode());
-        if (stockCategory == null || stockCategory.getAlias() == null || stockCategory.getAlias().isBlank()) {
+        if (stockCategory == null
+                || stockCategory.getAlias() == null
+                || stockCategory.getAlias().isBlank()) {
             return null;
         }
         return stockCategory.getAlias();

@@ -74,9 +74,11 @@ public class CategoryRankingTextBuilder {
                                         .filter(breakdown -> !excludedTierIds.contains(breakdown.tierId()))
                                         .toList();
                                 return new RankedCategory(
-                                        item.categoryId(), marketMapCategoryChangeRateSnapshotService.combine(included));
+                                        item.categoryId(),
+                                        marketMapCategoryChangeRateSnapshotService.combine(included));
                             })
-                            .sorted(Comparator.comparing((RankedCategory ranked) -> ranked.now().weightedAvgChangeRate())
+                            .sorted(Comparator.comparing((RankedCategory ranked) ->
+                                            ranked.now().weightedAvgChangeRate())
                                     .reversed())
                             .limit(TOP_N)
                             .toList();
@@ -84,7 +86,8 @@ public class CategoryRankingTextBuilder {
                     String rankingLines = top.stream()
                             .map(ranked -> {
                                 String categoryName = categoryNameById.getOrDefault(ranked.categoryId(), "");
-                                return categoryName + " " + formatPercent(ranked.now().weightedAvgChangeRate());
+                                return categoryName + " "
+                                        + formatPercent(ranked.now().weightedAvgChangeRate());
                             })
                             .collect(Collectors.joining("\n"));
 

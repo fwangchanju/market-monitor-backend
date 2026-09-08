@@ -74,7 +74,8 @@ public class MarketMapCategoryChangeRateSnapshotService {
     public SnapshotResponse<CategoryChangeRateMarketRanking> findRankingForMarkets(
             List<Market> markets, LocalDateTime snapshotTime, int beforeMinutes) {
         LocalDateTime beforeTime = snapshotTime.minusMinutes(beforeMinutes);
-        Map<Market, Map<Long, List<CategoryTierBreakdown>>> nowByMarket = findTierBreakdownsByCategoryId(markets, snapshotTime);
+        Map<Market, Map<Long, List<CategoryTierBreakdown>>> nowByMarket =
+                findTierBreakdownsByCategoryId(markets, snapshotTime);
         Map<Market, Map<Long, List<CategoryTierBreakdown>>> beforeByMarket =
                 findTierBreakdownsByCategoryId(markets, beforeTime);
 
@@ -101,7 +102,9 @@ public class MarketMapCategoryChangeRateSnapshotService {
             List<Market> markets, LocalDateTime snapshotTime) {
         Map<Long, MarketValueTierThreshold> tierById = marketValueTierThresholdRepository.findAll().stream()
                 .collect(Collectors.toMap(MarketValueTierThreshold::getId, Function.identity()));
-        return marketMapCategoryChangeRateSnapshotRepository.findByMarketTypeInAndSnapshotTime(markets, snapshotTime).stream()
+        return marketMapCategoryChangeRateSnapshotRepository
+                .findByMarketTypeInAndSnapshotTime(markets, snapshotTime)
+                .stream()
                 .collect(Collectors.groupingBy(
                         MarketMapCategoryChangeRateSnapshot::getMarketType,
                         Collectors.groupingBy(
@@ -113,10 +116,16 @@ public class MarketMapCategoryChangeRateSnapshotService {
             MarketMapCategoryChangeRateSnapshot row, Map<Long, MarketValueTierThreshold> tierById) {
         MarketValueTierThreshold tier = tierById.get(row.getMarketValueTierId());
         return new CategoryTierBreakdown(
-                tier.getId(), tier.getLabel(), row.getWeightedSum(), row.getTotalValue(), row.getSimpleSum(), row.getItemCount());
+                tier.getId(),
+                tier.getLabel(),
+                row.getWeightedSum(),
+                row.getTotalValue(),
+                row.getSimpleSum(),
+                row.getItemCount());
     }
 
-    private CategoryChangeRateItem toItem(Long categoryId, List<CategoryTierBreakdown> now, List<CategoryTierBreakdown> before) {
+    private CategoryChangeRateItem toItem(
+            Long categoryId, List<CategoryTierBreakdown> now, List<CategoryTierBreakdown> before) {
         if (before == null) {
             return CategoryChangeRateItem.withoutBefore(categoryId, now);
         }

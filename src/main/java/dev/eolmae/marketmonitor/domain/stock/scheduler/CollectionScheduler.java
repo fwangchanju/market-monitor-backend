@@ -1,9 +1,9 @@
 package dev.eolmae.marketmonitor.domain.stock.scheduler;
 
+import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.enums.Zone;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
-import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.util.KstClock;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryChangeRateSnapshotService;
 import dev.eolmae.marketmonitor.domain.notification.listener.EscalationPublisher;
@@ -91,7 +91,8 @@ public class CollectionScheduler {
 
             run("투자자별매매종합", () -> sectorInvestorNetBuyCollector.collect(snapshotTime));
             run("프로그램매매랭킹", () -> programNetBuyRankingCollector.collect(snapshotTime));
-            lastIndexContributionSuccess = run("지수기여도랭킹", () -> indexContributionRankingCollector.collect(snapshotTime));
+            lastIndexContributionSuccess =
+                    run("지수기여도랭킹", () -> indexContributionRankingCollector.collect(snapshotTime));
 
             lastChangeRateSuccess = lastIndexContributionSuccess
                     && run("카테고리등락률스냅샷", () -> captureCategoryChangeRateSnapshots(snapshotTime));
@@ -101,7 +102,8 @@ public class CollectionScheduler {
 
         // 마감 이후엔 수집을 스킵해서 실제 데이터는 마감 정각 기준이므로, 텔레그램 캡션엔 발송 시각이
         // 아니라 이 데이터 기준 시각을 찍는다.
-        LocalDateTime dataTime = shouldCollect ? snapshotTime : LocalDateTime.of(snapshotTime.toLocalDate(), LocalTime.of(endHour, 0));
+        LocalDateTime dataTime =
+                shouldCollect ? snapshotTime : LocalDateTime.of(snapshotTime.toLocalDate(), LocalTime.of(endHour, 0));
 
         if (snapshotTime.getMinute() == telegramProperties.sendMinute()) {
             if (!lastIndexContributionSuccess) {
@@ -203,7 +205,11 @@ public class CollectionScheduler {
             success = false;
         } finally {
             LocalDateTime finishedAt = LocalDateTime.now(Zone.KST.zoneId());
-            log.info("[{}] 종료: {} (소요 {}ms)", collectorName, finishedAt, Duration.between(startedAt, finishedAt).toMillis());
+            log.info(
+                    "[{}] 종료: {} (소요 {}ms)",
+                    collectorName,
+                    finishedAt,
+                    Duration.between(startedAt, finishedAt).toMillis());
         }
         return success;
     }

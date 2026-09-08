@@ -58,6 +58,7 @@ public class MarketMapScaleService {
     }
 
     private ScaleThresholdItem toItem(MarketMapScaleThreshold entity) {
-        return new ScaleThresholdItem(entity.getId(), entity.getThresholdPercent(), entity.getColor(), entity.getColorLabel());
+        return new ScaleThresholdItem(
+                entity.getId(), entity.getThresholdPercent(), entity.getColor(), entity.getColorLabel());
     }
 }

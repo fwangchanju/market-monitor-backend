@@ -10,7 +10,8 @@ import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
-public class MarketMapCategoryChangeRateSnapshotRepositoryImpl implements MarketMapCategoryChangeRateSnapshotRepositoryCustom {
+public class MarketMapCategoryChangeRateSnapshotRepositoryImpl
+        implements MarketMapCategoryChangeRateSnapshotRepositoryCustom {
 
     private final JPAQueryFactory queryFactory;
 

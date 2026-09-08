@@ -24,7 +24,12 @@ import lombok.Getter;
                 @UniqueConstraint(
                         name = "uk_program_trading_ranking_snapshot",
                         columnNames = {
-                            "market_type", "amt_qty_type", "ranking_type", "stock_code", "exchange_type", "snapshot_time"
+                            "market_type",
+                            "amt_qty_type",
+                            "ranking_type",
+                            "stock_code",
+                            "exchange_type",
+                            "snapshot_time"
                         }))
 @Entity
 @Getter

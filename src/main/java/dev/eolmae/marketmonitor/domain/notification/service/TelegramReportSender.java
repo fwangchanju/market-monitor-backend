@@ -36,7 +36,8 @@ public abstract class TelegramReportSender {
     public void send(LocalDateTime dataTime, MarketQuery query) {
         RenderTarget target = target();
         List<byte[]> images = captureQueryValues(query).stream()
-                .flatMap(value -> screenshotClient.capture(target.path() + "?market=" + value, target.selector()).stream())
+                .flatMap(value ->
+                        screenshotClient.capture(target.path() + "?market=" + value, target.selector()).stream())
                 .toList();
         telegramClient.sendMediaGroup(telegramProperties.chatId(), images, buildText(dataTime, query));
         log.info("{}({}) 이미지 발송 완료: {}장", target, query, images.size());

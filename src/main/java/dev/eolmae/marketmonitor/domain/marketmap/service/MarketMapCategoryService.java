@@ -61,9 +61,8 @@ public class MarketMapCategoryService {
             return;
         }
 
-        Set<String> categoryNames = stocks.stream()
-                .map(StockInfoSyncedEvent.NewStock::categoryName)
-                .collect(Collectors.toSet());
+        Set<String> categoryNames =
+                stocks.stream().map(StockInfoSyncedEvent.NewStock::categoryName).collect(Collectors.toSet());
         Map<String, MarketMapCategory> categoryByName = createMissingCategories(categoryNames);
         createNewStockCategories(stocks, categoryByName);
     }
@@ -80,8 +79,8 @@ public class MarketMapCategoryService {
 
     /** 기존 + 신규 생성분을 합친 이름별 맵을 리턴해서, 호출부가 다시 전체 조회할 필요가 없게 한다. */
     private Map<String, MarketMapCategory> createMissingCategories(Set<String> categoryNames) {
-        Map<String, MarketMapCategory> existingByName = findAllCategories().stream()
-                .collect(Collectors.toMap(MarketMapCategory::getName, Function.identity()));
+        Map<String, MarketMapCategory> existingByName =
+                findAllCategories().stream().collect(Collectors.toMap(MarketMapCategory::getName, Function.identity()));
 
         categoryNames.stream()
                 .filter(name -> !existingByName.containsKey(name))

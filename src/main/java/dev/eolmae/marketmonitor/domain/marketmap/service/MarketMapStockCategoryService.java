@@ -80,8 +80,9 @@ public class MarketMapStockCategoryService {
     public SnapshotResponse<StockCategoryListItem> getStockCategories() {
         Map<Long, MarketMapCategory> categoryById = marketMapCategoryRepository.findAll().stream()
                 .collect(Collectors.toMap(MarketMapCategory::getId, Function.identity()));
-        Map<String, MarketMapStockCategory> stockCategoryByStockCode = marketMapStockCategoryRepository.findAll().stream()
-                .collect(Collectors.toMap(MarketMapStockCategory::getStockCode, Function.identity()));
+        Map<String, MarketMapStockCategory> stockCategoryByStockCode =
+                marketMapStockCategoryRepository.findAll().stream()
+                        .collect(Collectors.toMap(MarketMapStockCategory::getStockCode, Function.identity()));
         Map<String, SectorPriceSnapshot> latestPriceByStockCode =
                 sectorPriceSnapshotService.findLatestPriceByStockCode();
         List<MarketValueTierThreshold> sortedTiers = marketValueTierThresholdService.findAllSortedAscending();

@@ -10,7 +10,8 @@ public interface MarketMapCategoryChangeRateSnapshotRepository
         extends JpaRepository<MarketMapCategoryChangeRateSnapshot, Long>,
                 MarketMapCategoryChangeRateSnapshotRepositoryCustom {
 
-    List<MarketMapCategoryChangeRateSnapshot> findByMarketTypeInAndSnapshotTime(List<Market> markets, LocalDateTime snapshotTime);
+    List<MarketMapCategoryChangeRateSnapshot> findByMarketTypeInAndSnapshotTime(
+            List<Market> markets, LocalDateTime snapshotTime);
 
     void deleteByCategoryIdIn(List<Long> categoryIds);
 }

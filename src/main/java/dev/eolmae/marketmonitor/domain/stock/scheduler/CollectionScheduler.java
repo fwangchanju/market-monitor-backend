@@ -210,7 +210,8 @@ public class CollectionScheduler {
         }
     }
 
-    // TODO(#38): 실제 공휴일 판정 로직 추가 예정 — 지금은 항상 false
+    // TODO(#38): 실제 공휴일 판정 로직 추가 예정 — 지금은 항상 false. 미구현 상태라 date를 아직 쓰지 않는다.
+    @SuppressWarnings("UnusedVariable")
     private boolean isHoliday(LocalDate date) {
         return false;
     }

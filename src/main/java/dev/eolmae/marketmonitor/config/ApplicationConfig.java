@@ -22,7 +22,9 @@ public class ApplicationConfig {
     public static final String CACHE_MANAGER = "cacheManager";
     public static final String ACCESS_CACHE_MANAGER = "accessCacheManager";
 
-    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(3);
+    // 외부 HTTPS 콜드 TLS 핸드셰이크(하루 첫 호출 등)엔 3초가 너무 빡빡해서 10초로 늘렸다 — 그래도
+    // 무한 대기로 스케줄러가 전면 정지되는 건 충분히 막는다.
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
 
     @Bean(CACHE_MANAGER)
     @Primary

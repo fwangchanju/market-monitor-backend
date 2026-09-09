@@ -40,6 +40,7 @@ jobs:
             application:
               - 'Dockerfile'
               - 'src/main/**'
+              - 'src/test/**'
               - 'build.gradle'
               - 'settings.gradle'
               - 'gradle.properties'

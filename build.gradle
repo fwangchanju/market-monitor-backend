@@ -54,9 +54,6 @@ dependencies {
 	// caffeine
 	implementation 'com.github.ben-manes.caffeine:caffeine'
 
-	// commons-lang3
-	implementation 'org.apache.commons:commons-lang3'
-
 	// ok http, krx data market login
 	implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 	implementation 'com.squareup.okhttp3:okhttp-urlconnection:4.12.0'

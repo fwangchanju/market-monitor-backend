@@ -4,6 +4,7 @@ import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategoryChangeRateSnapshot;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketValueTierThreshold;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryChangeRateSnapshotRepository;
+import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryChangeRateSnapshotRepositoryCustom.SnapshotRetentionSummary;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketValueTierThresholdRepository;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateItem;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateMarketRanking;
@@ -15,12 +16,14 @@ import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,12 +33,17 @@ import org.springframework.transaction.annotation.Transactional;
  * 직접 의존하면, MarketMapQueryService가 최신 스냅샷 값을 읽어 응답에 채워 넣을 때(반대 방향 의존) 순환
  * 참조가 된다.
  */
+@Slf4j
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
 public class MarketMapCategoryChangeRateSnapshotService {
 
     private static final int SCALE = 4;
+
+    // collect.*와 무관한 별개 상수 — 장마감 시각이 아니라 "보존할 스냅샷 시각"을 뜻한다.
+    private static final LocalTime MARKET_CLOSE_TIME = LocalTime.of(15, 30);
+    private static final int RETENTION_LOG_SAMPLE_SIZE = 5;
 
     private final MarketMapCategoryChangeRateSnapshotRepository marketMapCategoryChangeRateSnapshotRepository;
     private final MarketValueTierThresholdRepository marketValueTierThresholdRepository;
@@ -155,6 +163,28 @@ public class MarketMapCategoryChangeRateSnapshotService {
             simpleAvg = simpleSum.divide(BigDecimal.valueOf(itemCount), SCALE, RoundingMode.HALF_UP);
         }
         return new SnapshotAverages(weightedAvg, simpleAvg);
+    }
+
+    /** cutoff 이전이면서 MARKET_CLOSE_TIME(15:30)이 아닌 스냅샷 정리 — dryRun이면 조회만 하고 로그로 남긴다. */
+    @Transactional
+    public void cleanupSnapshotsBefore(LocalDateTime cutoff, boolean dryRun) {
+        SnapshotRetentionSummary summary = marketMapCategoryChangeRateSnapshotRepository.summarizeSnapshotsToDelete(
+                cutoff, MARKET_CLOSE_TIME, RETENTION_LOG_SAMPLE_SIZE);
+        log.info(
+                "[카테고리등락률스냅샷정리] 대상건수:{} | cutoff이전전체건수:{} | 최소시각:{} | 최대시각:{} | 표본시각:{}",
+                summary.targetCount(),
+                summary.totalCountBeforeCutoff(),
+                summary.minSnapshotTime(),
+                summary.maxSnapshotTime(),
+                summary.sampleSnapshotTimes());
+
+        if (dryRun) {
+            return;
+        }
+
+        long deletedCount =
+                marketMapCategoryChangeRateSnapshotRepository.deleteSnapshotsBefore(cutoff, MARKET_CLOSE_TIME);
+        log.info("[카테고리등락률스냅샷정리] 삭제완료 | 삭제건수:{}", deletedCount);
     }
 
     private void collectSnapshots(

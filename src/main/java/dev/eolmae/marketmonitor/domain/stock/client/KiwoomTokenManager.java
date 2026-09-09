@@ -6,6 +6,7 @@ import dev.eolmae.marketmonitor.common.exception.BadRequestException;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.domain.stock.dto.TokenRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.TokenResponse;
+import dev.eolmae.marketmonitor.domain.stock.exception.KiwoomTransientFailureException;
 import dev.eolmae.marketmonitor.domain.stock.properties.KiwoomProperties;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -15,6 +16,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -66,6 +69,12 @@ public class KiwoomTokenManager {
                     .body(TokenRequest.of(properties.appKey(), properties.secret()))
                     .retrieve()
                     .body(TokenResponse.class);
+        } catch (HttpServerErrorException e) {
+            log.warn("Kiwoom 토큰 발급 5xx 오류, 재시도");
+            throw new KiwoomTransientFailureException();
+        } catch (ResourceAccessException e) {
+            log.warn("Kiwoom 토큰 발급 연결 실패/타임아웃, 재시도");
+            throw new KiwoomTransientFailureException();
         } catch (RestClientException e) {
             throw new BadRequestException(ErrorCode.KIWOOM_TOKEN_ISSUE_FAILED, e);
         }

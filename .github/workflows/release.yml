@@ -40,11 +40,13 @@ jobs:
             application:
               - 'Dockerfile'
               - 'src/main/**'
+              - 'src/test/**'
               - 'build.gradle'
               - 'settings.gradle'
               - 'gradle.properties'
               - 'gradlew'
               - 'gradle/**'
+              - 'lombok.config'
 
   # 브랜치(main 제외) push: application 관련 변경이 있으면 빌드해서 sha 태그로만 푸시(승격의 재료). 배포는 안 함.
   build:
@@ -138,6 +140,8 @@ jobs:
             elapsed=$((elapsed + INTERVAL))
           done
           echo "exists=false" >> "$GITHUB_OUTPUT"
+          echo "::error::sha-${{ steps.resolve.outputs.merged_sha }} 이미지를 찾을 수 없습니다(커밋 ${{ steps.resolve.outputs.merged_sha }}). 그 커밋에 대한 build job이 돌지 않았을 가능성이 있습니다(예: application 경로 필터에 걸리지 않는 변경만 있었던 커밋)."
+          exit 1
 
       - name: Promote image to :main (재빌드 없이 레지스트리에서 재태깅)
         if: steps.check.outputs.exists == 'true'

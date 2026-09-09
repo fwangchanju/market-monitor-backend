@@ -45,6 +45,7 @@ jobs:
               - 'gradle.properties'
               - 'gradlew'
               - 'gradle/**'
+              - 'lombok.config'
 
   # 브랜치(main 제외) push: application 관련 변경이 있으면 빌드해서 sha 태그로만 푸시(승격의 재료). 배포는 안 함.
   build:

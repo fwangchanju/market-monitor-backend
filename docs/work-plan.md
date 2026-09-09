@@ -14,7 +14,7 @@
 > | 2 버그 7건 | 완료 (PR #88) |
 > | 3 운영 | 완료 (PR #94) |
 > | 4 정리 | 다음 |
-> | 5 텔레그램 발송 로직 정리 | |
+> | 5 텔레그램 발송 주기 재구성 | |
 > | 마지막 문서 마무리 | |
 
 > **⚠️ 라인 번호는 참고용이다.** 1B 단계의 `spotlessApply`가 23개 파일의 라인을 밀어버린다.
@@ -842,60 +842,192 @@ Jackson 3(`tools.jackson`)을 쓰는데 이 빈은 Jackson 2(`com.fasterxml`)라
 
 ---
 
-# 5단계 — 급하게 넣은 텔레그램 발송 로직 정리
+# 5단계 — 텔레그램 발송 주기 재구성
 
-브랜치명 예: `claude/refactor/telegram-report`
+브랜치명 예: `claude/refactor/telegram-schedule`
 
-PR #84, #90, #91은 정비 작업 중간에 급하게 들어가 리뷰를 거치지 않았다. 동작에는 문제가 없지만
-버그 하나와 구조 문제 둘이 있다. 4단계가 병합된 뒤에 시작한다.
+**백엔드와 프론트 두 레포를 모두 바꾼다.** PR은 레포별로 하나씩 올리고, 프론트를 먼저 배포한다.
+백엔드가 먼저 나가면 새 파라미터가 무시되어 아래 5-2에 적힌 어긋난 상태가 그대로 유지된다.
 
-## 5-1. 발송 시각 판정을 단순화한다 (버그 수정)
+4단계가 병합된 뒤에 시작한다.
 
-`CollectionScheduler.isSendCycle`이 08:40 발송을 스킵한다. 요청받은 것은 20:40 스킵뿐이었는데
-`startHour`까지 경계로 묶으면서 생긴 문제다.
+## 이 단계가 하는 일
+
+발송 주기를 15분짜리 하나에서 "짧은 주기 + 긴 주기" 둘로 늘린다. 각 주기는 화면에서 그만큼의
+"N분 전 대비"를 선택한 상태로 캡처된다. 주기 값과 겹칠 때의 정책은 프로퍼티로 바꿀 수 있어야 한다.
+
+이 과정에서 PR #84, #90, #91이 남긴 것들을 함께 정리한다. 세 PR은 정비 작업 중간에 급하게 들어가
+리뷰를 거치지 않았고, 발송이 안 되는 버그 하나와 같은 조회를 두 번 하는 구조가 남아 있다.
+
+## 5-1. 발송 주기를 둘로 나눈다
+
+### 별도 스케줄로 나누지 않는다
+
+발송은 지금처럼 수집 tick(`collectMarketData`) 안에서 게이팅한다. `@Scheduled`를 하나 더 만들면
+안 된다. 수집이 스냅샷을 쓰고 발송이 그것을 읽는데, 같은 시각에 뜨는 두 트리거의 실행 순서는
+보장되지 않는다. 지금 코드가 한 메서드에 묶어둔 이유가 이것이고 그 판단은 유지한다.
+
+### 지금 판정식은 60분을 넘는 주기를 표현하지 못한다
+
+```java
+int offset = minute - sendMinute;
+boolean onSchedule = offset >= 0 && offset % sendIntervalMinutes == 0;
+```
+
+`minute`은 0~59라 주기가 60을 넘으면 매시 걸리거나 아예 안 걸린다. 기준점을 그날의 한 시각으로
+잡고 거기서부터 경과한 분으로 판정해야 한다.
+
+### 새 규칙
+
+```
+기준점     그날 startHour:sendMinute (예: 08:10)
+정규 발송   shouldCollect 이고, 기준점부터 경과분 % 주기 == 0
+마감 리포트  shouldCollect 가 꺼졌고, 지금이 endHour:sendMinute (예: 20:10). 하루 한 번
+그 밖      발송하지 않는다
+```
+
+15분 주기는 08:10, 08:25, 08:40, …, 2시간 주기는 08:10, 10:10, 12:10, … 이 된다.
+
+마감 리포트를 시각 하나로 고정하는 이유는 마감 이후엔 `shouldCollect`가 꺼져 `dataTime`이 마감
+정각에 묶이기 때문이다. 그 뒤로는 몇 번을 보내도 내용이 같다. 주기 격자에 맡기면 20:25, 20:40,
+20:55에 같은 메시지가 반복된다. 마감 리포트의 before는 가장 긴 주기를 쓴다. 그날 마지막 메시지에
+15분 델타는 의미가 적다.
+
+### before는 주기에서 파생시킨다
+
+주기가 15분이면 before=15, 2시간이면 before=120이다. 별도 프로퍼티로 두지 않는다. 둘이 어긋나야
+할 이유가 생기면 그때 나눈다.
+
+### 프로퍼티
+
+```properties
+telegram.send-minute=10
+telegram.send-interval-minutes=15,120
+telegram.overlap=longest-only
+```
+
+- `send-interval-minutes`는 쉼표로 구분된 목록이다. `TelegramProperties`의 필드 타입을
+  `int`에서 `List<Integer>`로 바꾸면 별도 변환 없이 바인딩된다
+- `overlap`은 `all`과 `longest-only` 두 값을 갖는 enum이다. 두 주기가 같은 tick에 걸렸을 때
+  둘 다 보낼지, 주기가 긴 쪽만 보낼지를 정한다. 사용자가 아직 정하지 않았고 운영하면서 판단할
+  것이라 코드 수정 없이 뒤집을 수 있어야 한다
+
+### 판정을 객체로 뺀다
+
+인자 여섯 개짜리 `isSendCycle` static 메서드를 없애고, 발송 시각 판정을 담당하는 객체를 만든다.
+
+```
+due(지금 시각, shouldCollect) → 이번 tick에 발송할 주기 목록
+```
+
+- 겹침 정책은 이 목록을 거르는 마지막 단계다. `longest-only`면 가장 큰 주기 하나만 남긴다
+- `CollectionScheduler`의 `startHour` 필드는 이 객체로 옮겨간다. 스케줄러에는 남기지 않는다
+- 배치는 `docs/architecture.md`의 기준을 따르고 판단 근거를 PR 설명에 적는다
+- 스프링 없이 단위 테스트할 수 있어야 한다. 08:10 / 08:40 / 10:10 / 20:10 / 20:40이 각각 어떤
+  주기에 걸리는지를 겹침 정책 두 값 모두에 대해 검증한다
+
+### 기동 시 검증
+
+각 주기와 `send-minute`이 `collect.interval-minutes`의 배수가 아니면 애플리케이션이 뜨지 않게
+한다. 배수가 아니면 tick에 걸리지 않아 발송이 조용히 사라지는데, 그것이 지금 고치고 있는 08:40
+버그와 같은 종류의 사고다. 로그 경고로는 부족하다.
+
+### 08:40 버그는 여기서 사라진다
 
 ```java
 boolean isBoundaryHour = hour == startHour || hour == endHour;
 return !isBoundaryHour || minute == sendMinute;
 ```
 
-javadoc의 근거가 사실이 아니다. "startHour는 아직 장이 열리기 전이라 30분 뒤에도 데이터가 그대로다"
-라고 적혀 있는데, `shouldCollect`는 `시각 <= endHour:00`이라 08:40에도 수집기가 정상으로 돈다.
-새 스냅샷이 생기므로 08:10과 내용이 다르다.
+요청받은 것은 20:40 스킵뿐이었는데 `startHour`까지 경계로 묶으면서 08:40도 함께 막혔다.
+javadoc의 근거도 사실이 아니다. "startHour는 아직 장이 열리기 전이라 30분 뒤에도 데이터가
+그대로다"라고 적혀 있는데, `shouldCollect`는 `시각 <= endHour:00`이라 08:40에도 수집기가
+정상으로 돌고 새 스냅샷이 생긴다.
 
-조치. `isSendCycle`을 제거하고 `collectMarketData` 안에서 두 조건으로 표현한다.
+새 규칙에는 경계 시간이라는 개념 자체가 없다. 진짜 규칙은 "직전 발송과 내용이 같으면 보내지
+않는다"이고 그건 `shouldCollect`와 마감 리포트 규칙이 이미 표현한다.
+
+`CollectionSchedulerTest`의 `isSendCycle_수집_시작_시각의_추가_사이클은_개장_전이라_발송되지_않는다`
+는 지금 버그를 고정하고 있다. 08:40은 발송이 정답이므로 단언을 뒤집는다.
+
+### 발송 실패 알림
+
+지금은 발송 시각마다 수집 실패 여부를 보고 알림 또는 리포트 중 하나를 보낸다. 발송 대상이 여럿이
+되어도 실패 알림은 그 tick에 한 번만 보낸다. 리포트 두 통이 나갈 자리에 실패 알림 두 통이 나가면
+안 된다.
+
+## 5-2. before를 이미지에도 적용한다
+
+### 지금 이미지와 텍스트가 서로 다른 기준을 쓴다
+
+렌더러 캡처 URL은 `/category-change-rate?market=KOSPI`뿐이라 before가 넘어가지 않는다. 프론트는
+`usePersistedState('categoryChangeRate.beforeMinutes', 30)`인데 렌더러는 요청마다 Chromium을
+새로 띄우므로 sessionStorage가 항상 비어 있다. 그래서 이미지는 30분 전 기준으로 그려지고,
+텍스트는 `CategoryRankingTextBuilder.BEFORE_MINUTES = 60` 기준으로 만들어져 한 메시지에 붙는다.
+
+주기별로 before가 달라지면 이 어긋남이 그대로 확대되므로 함께 고친다.
+
+### 프론트
+
+`CategoryChangeRatePage`가 `market`을 쿼리 파라미터로 받는 것과 같은 방식으로 `beforeMinutes`도
+받는다. 같은 `useEffect`에서 처리하고, 반영한 뒤 주소에서 지우는 것까지 동일하다.
+
+- 양의 정수가 아니면 무시하고 기존 값을 쓴다
+- 이 변경만 단독으로 배포해도 지금 동작은 달라지지 않는다. 파라미터가 없으면 지금과 같다
+
+### 백엔드
+
+`beforeMinutes`를 발송 경로 전체에 인자로 흘린다.
 
 ```
-정규 사이클   shouldCollect 이면서 발송 주기에 해당       08:40 포함
-마감 리포트   shouldCollect 가 꺼졌고 minute == sendMinute  20:10 한 번
+CollectionScheduler → DailyMarketReportSender → MarketMapAndSectorTelegramReportSender
+                                                   ├─ 섹터 캡처 URL에 &beforeMinutes=N
+                                                   └─ CategoryRankingTextBuilder
 ```
 
-진짜 규칙은 "직전 발송과 내용이 같으면 보내지 않는다"이고, 그건 `shouldCollect`가 이미 표현하고
-있다. 경계 시간이라는 개념 자체가 필요 없다. 이렇게 바꾸면 인자 여섯 개짜리 판정 함수와
-`startHour` 필드가 함께 사라진다.
+`BEFORE_MINUTES` 상수는 없앤다. 마켓맵 캡처 URL은 before 개념이 없으므로 건드리지 않는다.
 
-- 발송 주기 판정(sendMinute부터 sendIntervalMinutes 간격인지)만 순수 함수로 남기고 테스트한다
-- `startHour` 필드는 이 판정에만 쓰이므로 제거한다. `@Value("${collect.start-hour}")` 선언도 함께
-  없앤다. `application.properties`의 프로퍼티 자체는 cron 표현식이 참조하므로 남긴다
-- `CollectionSchedulerTest`의 `isSendCycle_수집_시작_시각의_추가_사이클은_개장_전이라_발송되지_않는다`
-  는 지금 버그를 고정하고 있다. 08:40은 발송, 20:40은 스킵이 정답이므로 이 단언을 뒤집는다
+## 5-3. 카테고리 랭킹 조회를 한 번으로 모은다
 
-## 5-2. 지수 등락률 조회를 한 곳으로 모은다
+### 구조
 
-같은 쿼리로 같은 맵을 두 곳에서 각자 만든다.
+전체 카테고리 랭킹을 확정해서 내려주는 데까지가 공통이고, 필터링은 쓰는 쪽이 각자 한다.
+
+```
+공통(domain/view)   마켓별 전체 뎁스 카테고리 랭킹 + 지수 등락률 + 카테고리 이름 + depth
+프론트              depth로 골라 화면에 전부 표시
+백엔드 텍스트        depth == 0, 기본 제외 구간 제외, TOP3
+```
+
+### 응답에 depth와 categoryName을 싣는다
+
+지금은 응답에 `categoryId`밖에 없어서 양쪽이 뎁스를 알아내려고 각자 한 번 더 조회한다.
+
+```
+프론트   useMarketMap 트리를 한 번 더 호출해서 최상위 노드를 대분류로 본다
+백엔드   marketMapCategoryRepository.findAll()로 hasNoParent()를 본다
+```
+
+`CategoryChangeRateItem`에 `depth`와 `categoryName`을 추가하면 둘 다 없어진다. `depth`는
+`MarketMapCategory` 엔티티에 이미 있는 컬럼이다.
+
+### 지수 등락률을 붙이는 곳을 하나로 만든다
+
+같은 맵을 두 곳에서 각자 만든다.
 
 ```
 MarketMapQueryService.getCategoryChangeRates   findOverviewsBySnapshotTime → Market별 changeRate
 CategoryRankingTextBuilder.buildRankingText    findBySnapshotTime → Market별 changeRate
 ```
 
-한쪽은 `CategoryChangeRateMarketRanking.withIndexChangeRate`로 DTO에 심고, 한쪽은 별도 맵으로
-들고 있다. 기준 시각 규칙이 바뀌면 두 곳을 고쳐야 하고, 한쪽만 고치면 화면과 텔레그램이 서로 다른
-값을 보여준다.
+규칙도 미묘하게 다르다. 조회 쪽은 "랭킹이 확정한 snapshotTime을 그대로 쓴다"는 판단을 주석까지
+달아 지키는데, 텍스트 쪽은 `dataTime`으로 그냥 조회한다.
 
-조치는 5-3과 함께 이뤄진다. 집계가 view로 올라가면 이 중복은 자동으로 사라진다.
+조회 서비스에 스냅샷 시각을 인자로 받는 메서드를 두고, 지금의 "최신" 메서드는 최신 시각을 구한 뒤
+그 메서드에 위임하게 만든다. 텍스트 쪽은 `dataTime`으로 같은 메서드를 부른다. 지수 등락률을 붙이는
+코드는 한 곳만 남는다.
 
-## 5-3. 집계는 view로, notification은 포매팅만 한다
+### notification은 포매팅만 한다
 
 `CategoryRankingTextBuilder.buildRankingText`가 한 메서드에서 다음을 전부 한다.
 
@@ -906,34 +1038,59 @@ CategoryRankingTextBuilder.buildRankingText    findBySnapshotTime → Market별 
 
 70줄에 스트림이 3중이고, `domain/notification`인데 리포지토리 세 개를 직접 주입받는다.
 `docs/architecture.md`는 조회와 집계를 `domain/view`의 역할로, notification을 "데이터를 밖으로
-내보낸다"로 정해두었다. 그 경계를 넘는다.
+내보낸다"로 정해두었다.
 
-조치. `domain/view`에 "마켓별 TOP3 랭킹"을 확정해서 돌려주는 조회 메서드를 만든다. 대분류만
-고르는 것, 기본 제외 구간을 빼는 것, 가중평균을 합치는 것, 정렬해서 TOP3를 자르는 것, 지수 등락률을
-붙이는 것까지 전부 여기서 끝낸다.
+대분류만 고르는 것, 기본 제외 구간을 빼는 것, 가중평균을 합치는 것, 정렬해서 TOP3를 자르는 것까지
+전부 view에서 끝낸다. `CategoryRankingTextBuilder`에는 헤더 조립과 `formatPercent`만 남고
+리포지토리 주입은 사라진다.
 
-`CategoryRankingTextBuilder`는 그 결과를 받아 문자열로 만드는 일만 한다. 리포지토리 주입은 사라지고
-`formatPercent`와 헤더 조립만 남는다.
-
-- 새 메서드는 `MarketMapQueryService`에 두거나, 그 클래스가 이미 크면 별도 조회 서비스로 뺀다.
-  판단은 `docs/architecture.md`의 배치 기준을 따르고 PR 설명에 이유를 적는다
+- 새 메서드를 `MarketMapQueryService`에 둘지 별도 조회 서비스로 뺄지는 `docs/architecture.md`의
+  배치 기준을 따르고 이유를 PR 설명에 적는다
 - 반환 타입은 새로 만들어도 되고 기존 것을 재사용해도 된다. 텍스트 조립에 필요한 값(마켓, 지수
-  등락률, 카테고리 이름과 등락률 TOP3)이 전부 들어 있으면 된다
-- 카테고리 이름을 붙이는 것도 조회 쪽 일이다. notification이 `MarketMapCategoryRepository`를 다시
-  물지 않도록 이름까지 담아서 넘긴다
+  등락률, 카테고리 이름과 등락률 TOP3)이 들어 있으면 된다
 - 이동한 로직의 동작이 바뀌면 안 된다. 기존 `CategoryRankingTextBuilderTest`가 검증하던 것(TOP3
   선정, 대분류 필터, 구간 제외, 포맷)은 옮겨간 자리에서 그대로 검증되어야 한다
 
+### 프론트의 트리 조회 제거
+
+섹터 페이지의 `useMarketMap` 호출은 카테고리 이름과 최상위 ID를 얻으려고만 쓴다. 응답에 둘 다
+실리면 이 호출은 필요 없다.
+
+다만 지금 최상위 판정은 "그 마켓의 트리에 실제로 담긴 최상위 노드"이고, 새 판정은 "랭킹 응답에
+담긴 depth 0"이라 완전히 같지 않을 수 있다. 화면에 나오는 카테고리 목록이 변경 전후로 같은지
+확인하고, 다르면 제거하지 말고 차이를 PR 설명에 적는다.
+
+`excludedCategoryIds`(사용자 설정) 필터는 그대로 유지한다.
+
 ## 이 단계에서 하지 않는 것
 
-랭킹 규칙이 프론트와 백엔드에 각각 구현되어 있는 문제는 이번 범위가 아니다. 텔레그램은 프론트가
-그린 이미지와 백엔드가 만든 텍스트를 한 메시지로 붙여 보내는데, 두 규칙이 어긋나면 같은 메시지
-안에서 이미지와 텍스트가 다른 순위를 말하게 된다. 지금은 맞춰져 있고 유지가 사람 손에 달려 있다.
-프론트 레포 변경과 배포가 함께 필요해서 미뤘다. `docs/backlog.md` 참고.
+- **대/중/소 토글 UI.** 이번에는 응답에 `depth`를 싣고 프론트가 그것으로 거르는 데까지만 한다.
+  토글은 별도 작업으로 뺀다
+- **랭킹 규칙의 이중 구현.** 화면과 텍스트가 각자 대분류 필터, 기본 제외 구간, TOP3를 구현하고
+  있다. 백엔드가 순위를 확정해 내려주고 프론트는 그리기만 하는 구조로 가야 하는데, 화면은
+  전체를 보여주고 텍스트만 TOP3라서 단순히 합칠 수 없다. `docs/backlog.md` 참고
+- **렌더러 Chromium 재사용.** backlog에 있다. 아래 부하 항목과 관련되지만 이번 범위가 아니다
+
+## 알아둘 것 — 발송 부하
+
+발송 한 번에 캡처가 4번 일어난다(마켓 2개 × 맵/섹터). 15분 주기면 시간당 16번으로 지금(30분
+주기)의 두 배다. 겹침 정책이 `all`이면 겹치는 tick에서 캡처 8번이 한 tick 안에서 순차로 돈다.
+렌더러 read 타임아웃이 90초라 최악의 경우 5분 tick을 넘겨 다음 수집이 밀린다.
+
+지금도 캡처가 하루 1~2번 실패한다. 주기를 올린 뒤 실패 빈도와 tick 소요 시간을 지켜봐야 한다.
 
 ## PR 설명에 적을 것
 
+### 프론트
+
+- `beforeMinutes` 파라미터가 없으면 동작이 지금과 같다는 것
+- 트리 조회를 제거했는지, 제거했다면 카테고리 목록이 같은지 어떻게 확인했는지
+
+### 백엔드
+
+- 이미지와 텍스트가 서로 다른 before를 쓰고 있었다는 것과, 언제부터 그랬는지
 - 08:40 발송이 복구된다는 것. 배포 후 다음 영업일 08:40 텔레그램이 오는지가 확인 지점이다
+- 프로퍼티로 설정한 주기와 겹침 정책의 초기값
 - `CategoryRankingTextBuilder`에서 옮긴 로직의 목록과 옮긴 자리
 
 # 마지막 단계 — 문서 마무리

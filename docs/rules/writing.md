@@ -16,7 +16,8 @@
 - `docs/**` 중 2026-09-07 이후에 쓴 문서와 `CLAUDE.md`
 
 사용자와의 대화는 대상이 아니다. 코드 주석과 로그 문구도 아니다.
-`docs/rules/style.md`와 `docs/rules/commit.md`는 그 전에 쓴 글이라 손대지 않는다.
+`docs/rules/commit.md`도 대상이다. `docs/rules/style.md`는 마지막 단계에서 내용까지 재작성할
+예정이라 그때 함께 본다.
 
 ## 문체
 

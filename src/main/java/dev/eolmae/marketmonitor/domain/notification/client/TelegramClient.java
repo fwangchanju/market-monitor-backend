@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
+import dev.eolmae.marketmonitor.common.util.SecretMasker;
 import dev.eolmae.marketmonitor.domain.notification.dto.TelegramRequest;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
 import java.util.List;
@@ -44,7 +45,7 @@ public class TelegramClient {
 
             log.debug("텔레그램 메시지 발송 완료: chatId={}", chatId);
         } catch (Exception e) {
-            throw new EscalateException(ErrorCode.TELEGRAM_MESSAGE_SEND_FAILED, e);
+            throw new EscalateException(ErrorCode.TELEGRAM_MESSAGE_SEND_FAILED, maskBotToken(e));
         }
     }
 
@@ -67,7 +68,7 @@ public class TelegramClient {
 
             log.debug("텔레그램 사진 발송 완료: chatId={}", chatId);
         } catch (Exception e) {
-            throw new EscalateException(ErrorCode.TELEGRAM_IMAGE_SEND_FAILED, e);
+            throw new EscalateException(ErrorCode.TELEGRAM_IMAGE_SEND_FAILED, maskBotToken(e));
         }
     }
 
@@ -103,12 +104,19 @@ public class TelegramClient {
 
             log.debug("텔레그램 앨범 발송 완료: chatId={}, {}장", chatId, images.size());
         } catch (Exception e) {
-            throw new EscalateException(ErrorCode.TELEGRAM_IMAGE_SEND_FAILED, e);
+            throw new EscalateException(ErrorCode.TELEGRAM_IMAGE_SEND_FAILED, maskBotToken(e));
         }
     }
 
     private String botUrl(String endpoint) {
         return BASE_URL + "/bot" + properties.botToken() + endpoint;
+    }
+
+    // 연결 실패 등 RestClient 예외는 메시지에 요청 URI(봇 토큰 포함)를 그대로 담는다. 원본 예외를 cause로
+    // 그대로 달면 ESCALATION_LOG의 스택트레이스와 텔레그램 알림 본문(getCauseMessage)에 토큰이 새어나가므로,
+    // 메시지를 마스킹한 새 예외로 갈아끼우고 원본 cause 체인은 버린다.
+    private Exception maskBotToken(Exception e) {
+        return new RuntimeException(SecretMasker.mask(e.getMessage(), properties.botToken()));
     }
 
     private ByteArrayResource namedResource(byte[] data, String filename) {

@@ -58,7 +58,8 @@ public class GlobalExceptionHandler {
         if (e instanceof EscalateException escalateException) {
             escalationPublisher.report(escalateException);
         } else {
-            log.error(e.createLogMessage(), e);
+            // 400/404/409는 클라이언트 요청 문제라 실제 장애가 아니다. ERROR는 EscalateException 경로에만 남긴다.
+            log.warn(e.createLogMessage(), e);
         }
 
         return toProblemDetail(status, e.getErrorCode(), e.getMessage());

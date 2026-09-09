@@ -76,6 +76,19 @@ GitHub Actions → Release 워크플로 → `Run workflow`
 헬스체크가 실패하면 워크플로가 `:deployed`를 다시 배포해 원상복구한 뒤 실패로 끝난다. 즉
 실패한 배포는 서버에 남지 않는다.
 
+### `application`은 렌더러를 건드리지 않는다
+
+target은 컨테이너 하나만 고른다. `application`을 배포해도 서버 2의 렌더러는 그대로다.
+`containers/renderer/`를 고쳤으면 `target=renderer`를 따로 돌려야 나간다.
+
+실제로 2026-09-09까지 렌더러에는 8월 하순 이미지가 떠 있었다. 백엔드만 배포하면서 렌더러 쪽
+수정이 반영됐다고 착각하기 쉬우니, `containers/` 아래를 고친 PR을 병합했으면 그 target도 함께
+돌렸는지 확인한다.
+
+`all`은 nginx까지 배포한다. `deploy-nginx.sh`가 `down` 후 `up -d`라 화면이 잠깐 안 뜬다.
+장 시간이면 `application`과 `renderer`를 나눠 돌리는 편이 낫다. 렌더러는 서버 2에 있고 웹 경로에
+끼지 않으므로 아무 때나 배포해도 화면에 영향이 없다.
+
 ### 배포 전 확인
 
 병합과 배포가 분리돼 있으므로 "병합했는데 배포를 깜빡" 해서 운영이 main보다 뒤처질 수 있다.

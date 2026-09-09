@@ -1,6 +1,7 @@
 package dev.eolmae.marketmonitor.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import dev.eolmae.marketmonitor.common.cache.CacheKey;
@@ -85,8 +86,10 @@ public class ApplicationConfig {
         return factory;
     }
 
+    // 웹 직렬화는 Jackson 3(tools.jackson)을 쓰고 이 빈은 Jackson 2(com.fasterxml.jackson)라 웹
+    // 레이어와 무관하다. KrxCrawler/TelegramClient/MarketMapCategoryTreeService가 내부용으로 직접 쓴다.
     @Bean
-    public ObjectMapper objectMapper() {
-        return new ObjectMapper();
+    public ObjectMapper internalObjectMapper() {
+        return new ObjectMapper().registerModule(new JavaTimeModule());
     }
 }

@@ -14,6 +14,7 @@
 > | 2 버그 7건 | 완료 (PR #88) |
 > | 3 운영 | 완료 (PR #94) |
 > | 4 정리 | 다음 |
+> | 5 텔레그램 발송 로직 정리 | |
 > | 마지막 문서 마무리 | |
 
 > **⚠️ 라인 번호는 참고용이다.** 1B 단계의 `spotlessApply`가 23개 파일의 라인을 밀어버린다.
@@ -840,6 +841,100 @@ Jackson 3(`tools.jackson`)을 쓰는데 이 빈은 Jackson 2(`com.fasterxml`)라
 `NoUniqueBeanDefinitionException`이 나면 **앱이 기동조차 못 한다.**
 
 ---
+
+# 5단계 — 급하게 넣은 텔레그램 발송 로직 정리
+
+브랜치명 예: `claude/refactor/telegram-report`
+
+PR #84, #90, #91은 정비 작업 중간에 급하게 들어가 리뷰를 거치지 않았다. 동작에는 문제가 없지만
+버그 하나와 구조 문제 둘이 있다. 4단계가 병합된 뒤에 시작한다.
+
+## 5-1. 발송 시각 판정을 단순화한다 (버그 수정)
+
+`CollectionScheduler.isSendCycle`이 08:40 발송을 스킵한다. 요청받은 것은 20:40 스킵뿐이었는데
+`startHour`까지 경계로 묶으면서 생긴 문제다.
+
+```java
+boolean isBoundaryHour = hour == startHour || hour == endHour;
+return !isBoundaryHour || minute == sendMinute;
+```
+
+javadoc의 근거가 사실이 아니다. "startHour는 아직 장이 열리기 전이라 30분 뒤에도 데이터가 그대로다"
+라고 적혀 있는데, `shouldCollect`는 `시각 <= endHour:00`이라 08:40에도 수집기가 정상으로 돈다.
+새 스냅샷이 생기므로 08:10과 내용이 다르다.
+
+조치. `isSendCycle`을 제거하고 `collectMarketData` 안에서 두 조건으로 표현한다.
+
+```
+정규 사이클   shouldCollect 이면서 발송 주기에 해당       08:40 포함
+마감 리포트   shouldCollect 가 꺼졌고 minute == sendMinute  20:10 한 번
+```
+
+진짜 규칙은 "직전 발송과 내용이 같으면 보내지 않는다"이고, 그건 `shouldCollect`가 이미 표현하고
+있다. 경계 시간이라는 개념 자체가 필요 없다. 이렇게 바꾸면 인자 여섯 개짜리 판정 함수와
+`startHour` 필드가 함께 사라진다.
+
+- 발송 주기 판정(sendMinute부터 sendIntervalMinutes 간격인지)만 순수 함수로 남기고 테스트한다
+- `startHour` 필드는 이 판정에만 쓰이므로 제거한다. `@Value("${collect.start-hour}")` 선언도 함께
+  없앤다. `application.properties`의 프로퍼티 자체는 cron 표현식이 참조하므로 남긴다
+- `CollectionSchedulerTest`의 `isSendCycle_수집_시작_시각의_추가_사이클은_개장_전이라_발송되지_않는다`
+  는 지금 버그를 고정하고 있다. 08:40은 발송, 20:40은 스킵이 정답이므로 이 단언을 뒤집는다
+
+## 5-2. 지수 등락률 조회를 한 곳으로 모은다
+
+같은 쿼리로 같은 맵을 두 곳에서 각자 만든다.
+
+```
+MarketMapQueryService.getCategoryChangeRates   findOverviewsBySnapshotTime → Market별 changeRate
+CategoryRankingTextBuilder.buildRankingText    findBySnapshotTime → Market별 changeRate
+```
+
+한쪽은 `CategoryChangeRateMarketRanking.withIndexChangeRate`로 DTO에 심고, 한쪽은 별도 맵으로
+들고 있다. 기준 시각 규칙이 바뀌면 두 곳을 고쳐야 하고, 한쪽만 고치면 화면과 텔레그램이 서로 다른
+값을 보여준다.
+
+조치는 5-3과 함께 이뤄진다. 집계가 view로 올라가면 이 중복은 자동으로 사라진다.
+
+## 5-3. 집계는 view로, notification은 포매팅만 한다
+
+`CategoryRankingTextBuilder.buildRankingText`가 한 메서드에서 다음을 전부 한다.
+
+```
+랭킹 조회 → 지수 등락률 조회 → 전체 카테고리 조회(이름 맵 + 루트 ID 집합)
+→ 제외 구간 조회 → 마켓별 필터·정렬·TOP3 → 텍스트 조립
+```
+
+70줄에 스트림이 3중이고, `domain/notification`인데 리포지토리 세 개를 직접 주입받는다.
+`docs/architecture.md`는 조회와 집계를 `domain/view`의 역할로, notification을 "데이터를 밖으로
+내보낸다"로 정해두었다. 그 경계를 넘는다.
+
+조치. `domain/view`에 "마켓별 TOP3 랭킹"을 확정해서 돌려주는 조회 메서드를 만든다. 대분류만
+고르는 것, 기본 제외 구간을 빼는 것, 가중평균을 합치는 것, 정렬해서 TOP3를 자르는 것, 지수 등락률을
+붙이는 것까지 전부 여기서 끝낸다.
+
+`CategoryRankingTextBuilder`는 그 결과를 받아 문자열로 만드는 일만 한다. 리포지토리 주입은 사라지고
+`formatPercent`와 헤더 조립만 남는다.
+
+- 새 메서드는 `MarketMapQueryService`에 두거나, 그 클래스가 이미 크면 별도 조회 서비스로 뺀다.
+  판단은 `docs/architecture.md`의 배치 기준을 따르고 PR 설명에 이유를 적는다
+- 반환 타입은 새로 만들어도 되고 기존 것을 재사용해도 된다. 텍스트 조립에 필요한 값(마켓, 지수
+  등락률, 카테고리 이름과 등락률 TOP3)이 전부 들어 있으면 된다
+- 카테고리 이름을 붙이는 것도 조회 쪽 일이다. notification이 `MarketMapCategoryRepository`를 다시
+  물지 않도록 이름까지 담아서 넘긴다
+- 이동한 로직의 동작이 바뀌면 안 된다. 기존 `CategoryRankingTextBuilderTest`가 검증하던 것(TOP3
+  선정, 대분류 필터, 구간 제외, 포맷)은 옮겨간 자리에서 그대로 검증되어야 한다
+
+## 이 단계에서 하지 않는 것
+
+랭킹 규칙이 프론트와 백엔드에 각각 구현되어 있는 문제는 이번 범위가 아니다. 텔레그램은 프론트가
+그린 이미지와 백엔드가 만든 텍스트를 한 메시지로 붙여 보내는데, 두 규칙이 어긋나면 같은 메시지
+안에서 이미지와 텍스트가 다른 순위를 말하게 된다. 지금은 맞춰져 있고 유지가 사람 손에 달려 있다.
+프론트 레포 변경과 배포가 함께 필요해서 미뤘다. `docs/backlog.md` 참고.
+
+## PR 설명에 적을 것
+
+- 08:40 발송이 복구된다는 것. 배포 후 다음 영업일 08:40 텔레그램이 오는지가 확인 지점이다
+- `CategoryRankingTextBuilder`에서 옮긴 로직의 목록과 옮긴 자리
 
 # 마지막 단계 — 문서 마무리
 

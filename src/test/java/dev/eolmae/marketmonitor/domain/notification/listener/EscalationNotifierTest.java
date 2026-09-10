@@ -5,10 +5,9 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 
 import dev.eolmae.marketmonitor.common.event.EscalationEvent;
-import dev.eolmae.marketmonitor.common.exception.ErrorCode;
-import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.domain.notification.client.TelegramClient;
 import dev.eolmae.marketmonitor.domain.notification.enums.TelegramOverlap;
+import dev.eolmae.marketmonitor.domain.notification.exception.TelegramSendException;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -23,7 +22,7 @@ class EscalationNotifierTest {
 
     @Test
     void onEscalation_발송이_실패해도_예외를_전파하지_않는다() {
-        doThrow(new EscalateException(ErrorCode.TELEGRAM_MESSAGE_SEND_FAILED))
+        doThrow(new TelegramSendException("RestClientException", "발송 실패"))
                 .when(telegramClient)
                 .sendMessage("dev-chat", "장애 발생");
 

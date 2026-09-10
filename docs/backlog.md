@@ -309,17 +309,34 @@ CI에 `docker build` 한 단계를 넣으면 이 부류가 걸린다. 이미지�
 
 왜 미뤘나: CI 시간이 늘고, 지금은 `lombok.config`를 필터와 Dockerfile 양쪽에 넣어 급한 불은 껐다.
 
-## `release.yml`의 application 필터에서 `src/test/**` 빼기
+## 스냅샷 정리를 실삭제로 전환한다
 
-2026-09-09에 "테스트만 바뀐 커밋이 브랜치 tip이면 `:sha-` 이미지가 없어 승격이 깨진다"는 판단으로
-넣었는데, 그 판단이 틀렸다. `dorny/paths-filter`는 push 이벤트에서 직전 커밋이 아니라 레포 기본
-브랜치를 기준으로 비교한다. 브랜치 어딘가에 `src/main/**` 변경이 있으면 tip이 무엇이든
-`application`이 true가 되므로 원래 깨지지 않는다.
+`market-monitor.retention.dry-run`이 아직 `true`다. 배치는 매일 돌지만 아무것도 지우지 않는다.
 
-지금 상태로 두면 테스트만 바뀐 PR도 이미지를 만들고 병합 시 승격이 돈다. 해롭지는 않지만
-불필요하다. 배포까지 하면 `:previous` 슬롯이 실질 변화 없는 이미지로 채워진다.
+**지금 막혀 있는 이유는 드라이런 로그가 아무것도 증명하지 못했기 때문이다.** 판정 기준은 "삭제
+대상 건수가 cutoff 이전 전체 건수의 대부분일 것"인데, 두 값이 똑같이 나왔다. 확인해보니 cutoff
+(30일 전) 이전에는 15:30 스냅샷이 한 건도 없었다. 5분 간격 수집을 시작한 지 30일이 안 됐기
+때문이다. 남길 것이 애초에 없으니 "전부 삭제 대상"이 나온 것이고, 술어가 뒤집혀 있어도 같은
+숫자가 나온다.
 
-4단계(정리)에서 뺀다.
+**선행 조건**: 15:30 스냅샷의 `min(snapshot_time)`이 30일을 넘길 것. 그때 다시 드라이런 로그를
+읽으면 대상 건수 < cutoff 이전 전체 건수가 되고, 그게 술어가 옳다는 증거다.
+
+그 뒤 순서는 이렇다.
+
+1. 드라이런 로그로 판정 (대상 건수 < cutoff 이전 전체, 시각 표본에 `15:30`이 없을 것)
+2. **초기 정리 SQL 수동 실행.** 배치는 정상 운영(하루치씩)만 가정하므로 쌓여 있는 30일치를
+   감당하지 못한다. 단일 DELETE는 락과 테이블 팽창을 부른다
+   - `sector_price_snapshot`은 청크 삭제. `snapshot_time` 인덱스가 있어 청크 반복이 싸다.
+     한 번에 5만 행씩, 0행이 나올 때까지 반복. 멱등이어야 한다
+   - `market_map_category_change_rate_snapshot`은 `snapshot_time` 인덱스가 **없어서** 청크마다
+     풀스캔이 된다. 쪼개면 손해다 — 단일 문으로
+   - 끝나고 `VACUUM (ANALYZE)`. 대량 DELETE 후 공간이 회수되지 않는다
+   - 실행은 `docker exec -it market-monitor-postgres psql -U market_monitor -d market_monitor_db`
+3. `~/env/market-monitor.env`에 환경변수를 넣고 컨테이너 재기동 →
+   `MARKET_MONITOR_RETENTION_DRY_RUN=false`
+4. 다음날 로그에 삭제 완료가 찍히는지 확인
+5. 그다음 아래 「드라이런 경로 제거」
 
 ---
 
@@ -330,8 +347,9 @@ QueryDSL이 만드는 쿼리가 결정하는데 이 프로젝트에 DB 테스트
 있어도 컴파일과 단위 테스트가 전부 통과한다. 그래서 사람이 로그를 한 번 읽고 판정하는 경로를
 뒀다.
 
-검증이 끝나 실삭제로 전환하면 다시 `true`가 될 일이 없다. 4단계에서 걷어낸다. 지우는 범위는
-`if (dryRun) return;` 한 줄이 아니라 드라이런 로그를 위해서만 존재하는 조회 경로 전체다.
+검증이 끝나 실삭제로 전환하면 다시 `true`가 될 일이 없다. **위 항목이 끝난 뒤에 걷어낸다.**
+지우는 범위는 `if (dryRun) return;` 한 줄이 아니라 드라이런 로그를 위해서만 존재하는 조회 경로
+전체다.
 
 - `dry-run` 프로퍼티와 `@Value`
 - 두 리포지토리의 `summarizeSnapshotsToDelete()`와 `SnapshotRetentionSummary`

@@ -3,6 +3,8 @@ package dev.eolmae.marketmonitor.common.util;
 /** apache commons-lang3 StringUtils 의존성 제거를 위한 내부 문자열 유틸리티. */
 public final class Strings {
 
+    // errorprone은 인라인을 제안하지만, style.md §2(매직 리터럴 → 명명 상수)를 우선한다.
+    @SuppressWarnings("InlineTrivialConstant")
     private static final String EMPTY = "";
 
     private Strings() {}

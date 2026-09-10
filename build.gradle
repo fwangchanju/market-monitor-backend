@@ -54,9 +54,6 @@ dependencies {
 	// caffeine
 	implementation 'com.github.ben-manes.caffeine:caffeine'
 
-	// commons-lang3
-	implementation 'org.apache.commons:commons-lang3'
-
 	// ok http, krx data market login
 	implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 	implementation 'com.squareup.okhttp3:okhttp-urlconnection:4.12.0'
@@ -109,4 +106,9 @@ spotless {
 tasks.named('compileTestJava') {
 	// 테스트 코드는 검사 대상에서 제외
 	options.errorprone.enabled = false
+}
+
+tasks.named('compileJava') {
+	// 경고를 빌드 실패로 승격 — 경고가 다시 쌓이지 않게 CI가 잡는다
+	options.compilerArgs << '-Werror'
 }

@@ -23,7 +23,11 @@ public class StartupRunner implements ApplicationRunner {
     private final StockInfoCacheService stockInfoCacheService;
     private final HoldingsSyncService holdingsSyncService;
     private final WatchStockCacheService watchStockCacheService;
+
+    // 관심종목 구조 정리 전까지 run()의 호출부가 주석 처리돼 있어 미사용 상태(docs/backlog.md).
+    @SuppressWarnings("UnusedVariable")
     private final WatchStockBackfillService watchStockBackfillService;
+
     private final AdminTokenRepository adminTokenRepository;
     private final AdminProperties adminProperties;
 
@@ -54,6 +58,8 @@ public class StartupRunner implements ApplicationRunner {
         }
     }
 
+    // 관심종목 구조 정리 전까지 run()의 호출부가 주석 처리돼 있어 미사용 상태(docs/backlog.md).
+    @SuppressWarnings("UnusedMethod")
     private void syncHoldings() {
 
         try {
@@ -64,6 +70,8 @@ public class StartupRunner implements ApplicationRunner {
         }
     }
 
+    // 관심종목 구조 정리 전까지 run()의 호출부가 주석 처리돼 있어 미사용 상태(docs/backlog.md).
+    @SuppressWarnings("UnusedMethod")
     private List<WatchStock> getWatchStockCache() {
 
         try {

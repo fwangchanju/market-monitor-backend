@@ -57,13 +57,31 @@ public class MarketQueryService {
 
     private final MarketOverviewSnapshotRepository marketOverviewSnapshotRepository;
     private final InvestorTradingSummarySnapshotRepository investorTradingSummarySnapshotRepository;
+
+    // 관심종목 구조 정리 전까지 호출부(getIntradayTop 사설 오버로드 본문)가 주석 처리돼 있어 미사용
+    // 상태(docs/backlog.md).
+    @SuppressWarnings("UnusedVariable")
     private final IntradayInvestorRankingSnapshotRepository intradayInvestorRankingSnapshotRepository;
+
     private final ProgramTradingRankingSnapshotRepository programTradingRankingSnapshotRepository;
     private final IndexContributionRankingSnapshotRepository indexContributionRankingSnapshotRepository;
     private final StockInfoRepository stockInfoRepository;
+
+    // 관심종목 구조 정리 전까지 호출부(getProgramTradingHistory 본문)가 주석 처리돼 있어 미사용
+    // 상태(docs/backlog.md).
+    @SuppressWarnings("UnusedVariable")
     private final ProgramTradingHistoryRepository programTradingHistoryRepository;
+
+    // 관심종목 구조 정리 전까지 호출부(getProgramTradingDailyHistory 본문)가 주석 처리돼 있어 미사용
+    // 상태(docs/backlog.md).
+    @SuppressWarnings("UnusedVariable")
     private final ProgramTradingDailyHistoryRepository programTradingDailyHistoryRepository;
+
+    // 관심종목 구조 정리 전까지 호출부(getShortSellingHistory 본문)가 주석 처리돼 있어 미사용
+    // 상태(docs/backlog.md).
+    @SuppressWarnings("UnusedVariable")
     private final ShortSellingDailyHistoryRepository shortSellingDailyHistoryRepository;
+
     private final WatchStockCacheService watchStockCacheService;
     private final StockInfoCacheService stockInfoCacheService;
 
@@ -324,6 +342,9 @@ public class MarketQueryService {
         return StockHistoryResponse.empty();
     }
 
+    // 호출부(getProgramTradingDailyHistory)가 관심종목 구조 정리 전까지 주석 처리돼 있어 미사용
+    // 상태다(docs/backlog.md).
+    @SuppressWarnings("UnusedMethod")
     private StockHistoryResponse<ProgramTradingDailyHistoryItem> toProgramTradingDailyHistoryResponse(
             String stockCode, List<ProgramTradingDailyHistory> history) {
         // 호출부(getProgramTradingDailyHistory)가 주석 처리돼 있어 도달 불가능한 코드다. 2-6에서
@@ -373,6 +394,8 @@ public class MarketQueryService {
      * intradayInvestorRankingCollector 비활성화(관심종목 구조 정리 전까지)로 신규 데이터가 없어, 오래된
      * 데이터를 최신인 것처럼 계속 보여주지 않도록 조회 없이 항상 빈 값을 반환한다.
      */
+    // 관심종목 구조 정리 전까지 본문이 주석 처리돼 있어 파라미터가 미사용 상태다(docs/backlog.md).
+    @SuppressWarnings("UnusedVariable")
     private SnapshotResponse<IntradayInvestorSummaryItem> getIntradayTop(
             List<Market> markets, List<IntradayInvestor> investors, IntradayRanking ranking, AmtQty amtQty) {
         // record StockNet(String stockCode, String stockName, BigDecimal netAmount) {}

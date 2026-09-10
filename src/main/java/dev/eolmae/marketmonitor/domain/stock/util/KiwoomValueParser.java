@@ -9,7 +9,10 @@ public final class KiwoomValueParser {
 
     private static final String NO_DATA_MARKER = "-";
     private static final String COMMA = ",";
+    // errorprone은 인라인을 제안하지만, style.md §2(매직 리터럴 → 명명 상수)를 우선한다.
+    @SuppressWarnings("InlineTrivialConstant")
     private static final String EMPTY = "";
+
     private static final String DOUBLE_NEGATIVE_PREFIX = "--";
 
     private KiwoomValueParser() {}

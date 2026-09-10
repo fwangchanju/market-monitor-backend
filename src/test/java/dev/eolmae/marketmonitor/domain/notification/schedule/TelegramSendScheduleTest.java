@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.domain.notification.enums.TelegramOverlap;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -32,6 +31,15 @@ class TelegramSendScheduleTest {
 
         assertThat(due(now, true, TelegramOverlap.ALL)).containsExactly(15, 120);
         assertThat(due(now, true, TelegramOverlap.LONGEST_ONLY)).containsExactly(120);
+    }
+
+    @Test
+    void due_어느_주기의_간격에도_맞지_않는_시각은_발송되지_않는다() {
+        LocalDateTime now = DATE.withHour(8).withMinute(20);
+
+        // 경과분 10 — 15의 배수도 120의 배수도 아니다. 모듈로 판정이 깨지면 여기서 잡힌다.
+        assertThat(due(now, true, TelegramOverlap.ALL)).isEmpty();
+        assertThat(due(now, true, TelegramOverlap.LONGEST_ONLY)).isEmpty();
     }
 
     @Test
@@ -69,18 +77,30 @@ class TelegramSendScheduleTest {
 
     @Test
     void validate_sendMinute이_0이하이면_기동을_막는다() {
-        assertThatThrownBy(() -> TelegramSendSchedule.validate(CYCLES, 0, 5)).isInstanceOf(EscalateException.class);
+        assertThatThrownBy(() -> TelegramSendSchedule.validate(CYCLES, 0, 5)).isInstanceOf(IllegalStateException.class);
     }
 
     @Test
     void validate_sendMinute이_collect_interval의_배수가_아니면_기동을_막는다() {
-        assertThatThrownBy(() -> TelegramSendSchedule.validate(CYCLES, 7, 5)).isInstanceOf(EscalateException.class);
+        assertThatThrownBy(() -> TelegramSendSchedule.validate(CYCLES, 7, 5)).isInstanceOf(IllegalStateException.class);
     }
 
     @Test
     void validate_주기가_collect_interval의_배수가_아니면_기동을_막는다() {
         assertThatThrownBy(() -> TelegramSendSchedule.validate(List.of(15, 17), SEND_MINUTE, 5))
-                .isInstanceOf(EscalateException.class);
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void validate_주기_목록이_비어_있으면_기동을_막는다() {
+        assertThatThrownBy(() -> TelegramSendSchedule.validate(List.of(), SEND_MINUTE, 5))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void validate_주기에_0_이하_값이_있으면_기동을_막는다() {
+        assertThatThrownBy(() -> TelegramSendSchedule.validate(List.of(0, 15), SEND_MINUTE, 5))
+                .isInstanceOf(IllegalStateException.class);
     }
 
     @Test

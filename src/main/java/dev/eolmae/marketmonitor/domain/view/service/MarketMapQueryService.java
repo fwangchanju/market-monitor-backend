@@ -168,7 +168,11 @@ public class MarketMapQueryService {
             CategoryChangeRateMarketRanking marketRanking,
             Map<Market, BigDecimal> indexChangeRateByMarket,
             Map<Long, MarketMapCategory> categoryById) {
+        // 카테고리 버전 복원(MarketMapCategoryTreeService.restore) 직후에는 스냅샷 row가 이미 없어진
+        // categoryId를 가리킬 수 있다 — 다음 수집 tick까지 그 항목만 결과에서 뺀다. 잘못된 depth를
+        // 채워 넣지 않는다(대분류 판정에 영향을 준다).
         List<CategoryChangeRateItem> items = marketRanking.items().stream()
+                .filter(item -> categoryById.containsKey(item.categoryId()))
                 .map(item -> decorateWithCategory(item, categoryById))
                 .toList();
         return new CategoryChangeRateMarketRanking(

@@ -1,7 +1,5 @@
 package dev.eolmae.marketmonitor.domain.notification.schedule;
 
-import dev.eolmae.marketmonitor.common.exception.ErrorCode;
-import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.domain.notification.enums.TelegramOverlap;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
 import jakarta.annotation.PostConstruct;
@@ -87,27 +85,33 @@ public class TelegramSendSchedule {
         return List.of(Collections.max(due));
     }
 
+    // 기동 실패 자체가 신호라 EscalateException을 쓰지 않는다 — @PostConstruct에서 던지면
+    // EscalationPublisher를 거치지 않아 텔레그램 알림이 가지 않는데, EscalateException의 javadoc은
+    // "발생 즉시 개발자에게 텔레그램 알림을 발송하는 예외"라 실제와 다르게 읽힌다.
+    //
     // send-minute이 0이면 마감 리포트 조건(shouldCollect가 꺼지고 endHour:sendMinute)이 절대 성립하지
     // 않는다 — shouldCollect는 "시각 <= endHour:00"까지 true라서 20:00 정각엔 아직 꺼지지 않는다.
-    // 배수 검증만으로는 0 % n == 0이라 통과하므로 별도 조건으로 막는다.
+    // 배수 검증만으로는 0 % n == 0이라 통과하므로 별도 조건으로 막는다. 주기가 비어 있거나 0 이하인
+    // 값을 포함하면 배수 검증은 통과하지만 due()의 나눗셈·Collections.max에서 런타임에 터진다.
     static void validate(List<Integer> cycles, int sendMinute, int intervalMinutes) {
         if (sendMinute <= 0) {
-            throw new EscalateException(ErrorCode.TELEGRAM_SCHEDULE_MISCONFIGURED, "send-minute은 0보다 커야 함", sendMinute);
+            throw new IllegalStateException("telegram.send-minute은 0보다 커야 함: " + sendMinute);
+        }
+        if (cycles.isEmpty()) {
+            throw new IllegalStateException("telegram.send-interval-minutes가 비어 있음");
         }
         if (sendMinute % intervalMinutes != 0) {
-            throw new EscalateException(
-                    ErrorCode.TELEGRAM_SCHEDULE_MISCONFIGURED,
-                    "send-minute이 collect.interval-minutes의 배수가 아님",
-                    sendMinute,
-                    intervalMinutes);
+            throw new IllegalStateException("telegram.send-minute(%d)이 collect.interval-minutes(%d)의 배수가 아님"
+                    .formatted(sendMinute, intervalMinutes));
         }
         for (int cycle : cycles) {
+            if (cycle <= 0) {
+                throw new IllegalStateException("telegram.send-interval-minutes 값은 0보다 커야 함: " + cycle);
+            }
             if (cycle % intervalMinutes != 0) {
-                throw new EscalateException(
-                        ErrorCode.TELEGRAM_SCHEDULE_MISCONFIGURED,
-                        "send-interval-minutes 값이 collect.interval-minutes의 배수가 아님",
-                        cycle,
-                        intervalMinutes);
+                throw new IllegalStateException(
+                        "telegram.send-interval-minutes 값(%d)이 collect.interval-minutes(%d)의 배수가 아님"
+                                .formatted(cycle, intervalMinutes));
             }
         }
     }

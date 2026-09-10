@@ -425,6 +425,29 @@ class MarketMapQueryServiceTest {
     }
 
     @Test
+    void getCategoryChangeRates_스냅샷의_categoryId가_카테고리_테이블에_없으면_그_항목만_빠진다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        // 카테고리 버전 복원 직후처럼, 스냅샷 row는 이미 지워진 categoryId(99L)를 가리킬 수 있다.
+        CategoryChangeRateMarketRanking kospiRanking = new CategoryChangeRateMarketRanking(
+                Market.KOSPI,
+                List.of(
+                        CategoryChangeRateItem.withoutBefore(1L, List.of()),
+                        CategoryChangeRateItem.withoutBefore(99L, List.of())));
+        when(marketMapCategoryChangeRateSnapshotService.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
+                .thenReturn(Optional.of(snapshotTime));
+        when(marketMapCategoryChangeRateSnapshotService.findRankingForMarkets(List.of(Market.KOSPI), snapshotTime, 60))
+                .thenReturn(new SnapshotResponse<>(snapshotTime, List.of(kospiRanking)));
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(category(1L, null, "반도체")));
+        when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
+
+        SnapshotResponse<CategoryChangeRateMarketRanking> response =
+                service.getCategoryChangeRates(MarketQuery.KOSPI, 60);
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().get(0).items()).extracting("categoryId").containsExactly(1L);
+    }
+
+    @Test
     void getTopCategoryRankings_자식_카테고리는_랭킹에서_제외된다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
         MarketMapCategory root = category(1L, null, "반도체");

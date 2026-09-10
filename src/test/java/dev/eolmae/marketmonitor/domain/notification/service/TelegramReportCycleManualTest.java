@@ -38,6 +38,6 @@ class TelegramReportCycleManualTest {
                 .findLatestCommonSnapshotTime(List.of(Market.KOSPI, Market.KOSDAQ))
                 .orElseThrow(() -> new IllegalStateException("스냅샷 데이터가 없습니다"));
 
-        dailyMarketReportSender.send(dataTime, true);
+        dailyMarketReportSender.send(dataTime, true, 15);
     }
 }

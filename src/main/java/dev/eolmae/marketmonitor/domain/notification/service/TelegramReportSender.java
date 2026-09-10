@@ -27,19 +27,19 @@ public abstract class TelegramReportSender {
 
     protected abstract RenderTarget target();
 
-    protected abstract String buildText(LocalDateTime dataTime, MarketQuery query);
+    protected abstract String buildText(LocalDateTime dataTime, MarketQuery query, int beforeMinutes);
 
     // 캡처할 프론트 페이지에 ?market=으로 넘길 값들 — 화면이 query를 어떻게 소화하는지는 sender마다
     // 다르므로 여기서 직접 정한다(맵: 마켓별로 펼쳐서 각각 캡처, 섹터: query 값 그대로 하나만 캡처).
     protected abstract List<String> captureQueryValues(MarketQuery query);
 
-    public void send(LocalDateTime dataTime, MarketQuery query) {
+    public void send(LocalDateTime dataTime, MarketQuery query, int beforeMinutes) {
         RenderTarget target = target();
         List<byte[]> images = captureQueryValues(query).stream()
                 .flatMap(value ->
                         screenshotClient.capture(target.path() + "?market=" + value, target.selector()).stream())
                 .toList();
-        telegramClient.sendMediaGroup(telegramProperties.chatId(), images, buildText(dataTime, query));
+        telegramClient.sendMediaGroup(telegramProperties.chatId(), images, buildText(dataTime, query, beforeMinutes));
         log.info("{}({}) 이미지 발송 완료: {}장", target, query, images.size());
     }
 }

@@ -15,8 +15,10 @@ public class DailyMarketReportSender {
 
     private final MarketMapAndSectorTelegramReportSender marketMapAndSectorTelegramReportSender;
 
-    public void send(LocalDateTime dataTime, boolean changeSuccess) {
-        marketMapAndSectorTelegramReportSender.send(dataTime, Market.KOSPI, changeSuccess);
-        marketMapAndSectorTelegramReportSender.send(dataTime, Market.KOSDAQ, changeSuccess);
+    public void send(LocalDateTime dataTime, boolean changeSuccess, int beforeMinutes) {
+        // KOSPI를 더 중요하게 본다. KOSPI가 성공하고 KOSDAQ이 실패하면 KOSPI는 그대로 나가고,
+        // KOSPI가 실패하면 예외가 올라가 KOSDAQ은 시도하지 않는다. 이 두 줄의 순서가 그 규칙이다.
+        marketMapAndSectorTelegramReportSender.send(dataTime, Market.KOSPI, changeSuccess, beforeMinutes);
+        marketMapAndSectorTelegramReportSender.send(dataTime, Market.KOSDAQ, changeSuccess, beforeMinutes);
     }
 }

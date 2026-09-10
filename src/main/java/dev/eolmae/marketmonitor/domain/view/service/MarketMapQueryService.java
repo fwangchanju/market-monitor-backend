@@ -1,6 +1,7 @@
 package dev.eolmae.marketmonitor.domain.view.service;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
+import dev.eolmae.marketmonitor.domain.marketmap.dto.MarketValueTierItem;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategory;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapStockCategory;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketValueTierThreshold;
@@ -15,21 +16,27 @@ import dev.eolmae.marketmonitor.domain.stock.repository.MarketMapExcludedStockRe
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketOverviewSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceSnapshotService;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
+import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateItem;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateMarketRanking;
+import dev.eolmae.marketmonitor.domain.view.dto.CategoryRankingSummary;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryTierBreakdown;
 import dev.eolmae.marketmonitor.domain.view.dto.ExcludedStockItem;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapItem;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapResponse;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketOverviewItem;
+import dev.eolmae.marketmonitor.domain.view.dto.SnapshotAverages;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
+import dev.eolmae.marketmonitor.domain.view.dto.TopCategoryItem;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -45,6 +52,8 @@ public class MarketMapQueryService {
     private static final long NO_PARENT_KEY = 0L;
     /** 기본 마켓맵은 어드민이 구성한 카테고리 트리를 안 쓰므로 exclude 판정 대상 자체가 아님 — id는 관례상 0 고정 */
     private static final Long NO_CATEGORY_ID = 0L;
+
+    private static final int TOP_N = 3;
 
     private final StockInfoCacheService stockInfoCacheService;
     private final SectorPriceSnapshotService sectorPriceSnapshotService;
@@ -120,30 +129,96 @@ public class MarketMapQueryService {
     }
 
     /**
-     * 마켓맵 카테고리별 등락률 랭킹(섹터 페이지) — 조회로 이미 확정된 snapshotTime을 그대로 키로 써서
-     * 마켓 지수 등락률을 붙인다. "최신"을 지수 쪽에서 또 조회하면, 이번 수집 주기에 지수기여도랭킹
-     * 수집만 부분 실패했을 때(카테고리 등락률 수집은 그 뒤 스킵되므로 둘의 최신 시각이 어긋난다) 서로 다른
-     * 시점의 값이 나란히 표시될 수 있다. 그 시각에 지수 스냅샷이 없으면(부분 실패로 아예 없는 경우) 조용히
-     * 비워서 내려준다 — 다른 시점 값으로 대체하지 않는다.
+     * 마켓맵 카테고리별 등락률 랭킹(섹터 페이지) — markets 전부가 공통으로 가진 최신 시각을 구한 뒤
+     * 시각 인자 변형에 위임한다.
      */
     public SnapshotResponse<CategoryChangeRateMarketRanking> getCategoryChangeRates(
             MarketQuery marketQuery, int beforeMinutes) {
-        SnapshotResponse<CategoryChangeRateMarketRanking> ranking =
-                marketMapCategoryChangeRateSnapshotService.findLatestRankingForMarkets(
-                        marketQuery.toMarkets(), beforeMinutes);
-        if (ranking.snapshotTime() == null) {
-            return ranking;
-        }
+        return marketMapCategoryChangeRateSnapshotService
+                .findLatestCommonSnapshotTime(marketQuery.toMarkets())
+                .map(snapshotTime -> getCategoryChangeRates(marketQuery, snapshotTime, beforeMinutes))
+                .orElseGet(SnapshotResponse::empty);
+    }
 
-        Map<Market, BigDecimal> indexChangeRateByMarket =
-                findOverviewsBySnapshotTime(ranking.snapshotTime()).entrySet().stream()
-                        .collect(Collectors.toMap(
-                                Map.Entry::getKey, entry -> entry.getValue().getChangeRate()));
+    /**
+     * 스냅샷 시각을 인자로 받는 변형 — 텔레그램 발송 경로처럼 이미 확정된 dataTime을 그대로 써야 하는
+     * 호출부(getTopCategoryRankings)용. 그 시각에 지수 스냅샷이 없으면(부분 실패로 아예 없는 경우)
+     * 조용히 비워서 내려준다 — 다른 시점 값으로 대체하지 않는다.
+     */
+    public SnapshotResponse<CategoryChangeRateMarketRanking> getCategoryChangeRates(
+            MarketQuery marketQuery, LocalDateTime snapshotTime, int beforeMinutes) {
+        List<Market> markets = marketQuery.toMarkets();
+        SnapshotResponse<CategoryChangeRateMarketRanking> ranking =
+                marketMapCategoryChangeRateSnapshotService.findRankingForMarkets(markets, snapshotTime, beforeMinutes);
+
+        Map<Market, BigDecimal> indexChangeRateByMarket = findOverviewsBySnapshotTime(snapshotTime).entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey, entry -> entry.getValue().getChangeRate()));
+        Map<Long, MarketMapCategory> categoryById = marketMapCategoryRepository.findAll().stream()
+                .collect(Collectors.toMap(MarketMapCategory::getId, Function.identity()));
+
         return new SnapshotResponse<>(
-                ranking.snapshotTime(),
+                snapshotTime,
                 ranking.items().stream()
-                        .map(item -> item.withIndexChangeRate(indexChangeRateByMarket.get(item.market())))
+                        .map(marketRanking -> decorateRanking(marketRanking, indexChangeRateByMarket, categoryById))
                         .toList());
+    }
+
+    private CategoryChangeRateMarketRanking decorateRanking(
+            CategoryChangeRateMarketRanking marketRanking,
+            Map<Market, BigDecimal> indexChangeRateByMarket,
+            Map<Long, MarketMapCategory> categoryById) {
+        List<CategoryChangeRateItem> items = marketRanking.items().stream()
+                .map(item -> decorateWithCategory(item, categoryById))
+                .toList();
+        return new CategoryChangeRateMarketRanking(
+                marketRanking.market(), items, indexChangeRateByMarket.get(marketRanking.market()));
+    }
+
+    private CategoryChangeRateItem decorateWithCategory(
+            CategoryChangeRateItem item, Map<Long, MarketMapCategory> categoryById) {
+        MarketMapCategory category = categoryById.get(item.categoryId());
+        return item.withCategory(category.getName(), category.getDepth());
+    }
+
+    /**
+     * 텔레그램 캡션용 카테고리 TOP3 랭킹 — 대분류(depth 0)만, 기본 제외 구간(market_value_tier_threshold
+     * .is_excluded_by_default)을 뺀 가중평균 기준 내림차순 TOP3. 필터·정렬·TOP3 확정까지 전부 여기서
+     * 끝내고, notification 쪽(CategoryRankingTextBuilder)은 텍스트 포매팅만 한다. 데이터 없는 마켓은
+     * getCategoryChangeRates가 이미 결과에서 뺀 상태라 자동으로 여기서도 빠진다.
+     */
+    public List<CategoryRankingSummary> getTopCategoryRankings(
+            MarketQuery marketQuery, LocalDateTime snapshotTime, int beforeMinutes) {
+        SnapshotResponse<CategoryChangeRateMarketRanking> ranking =
+                getCategoryChangeRates(marketQuery, snapshotTime, beforeMinutes);
+
+        Set<Long> excludedTierIds = marketValueTierThresholdService.getValueTiers().stream()
+                .filter(MarketValueTierItem::isExcludedByDefault)
+                .map(MarketValueTierItem::id)
+                .collect(Collectors.toSet());
+
+        return ranking.items().stream()
+                .map(marketRanking -> toCategoryRankingSummary(marketRanking, excludedTierIds))
+                .toList();
+    }
+
+    private CategoryRankingSummary toCategoryRankingSummary(
+            CategoryChangeRateMarketRanking marketRanking, Set<Long> excludedTierIds) {
+        List<TopCategoryItem> topCategories = marketRanking.items().stream()
+                .filter(item -> item.depth() == 0)
+                .map(item -> toTopCategoryItem(item, excludedTierIds))
+                .sorted(Comparator.comparing(TopCategoryItem::changeRate).reversed())
+                .limit(TOP_N)
+                .toList();
+        return new CategoryRankingSummary(marketRanking.market(), marketRanking.indexChangeRate(), topCategories);
+    }
+
+    private TopCategoryItem toTopCategoryItem(CategoryChangeRateItem item, Set<Long> excludedTierIds) {
+        List<CategoryTierBreakdown> included = item.now().stream()
+                .filter(breakdown -> !excludedTierIds.contains(breakdown.tierId()))
+                .toList();
+        SnapshotAverages averages = marketMapCategoryChangeRateSnapshotService.combine(included);
+        return new TopCategoryItem(item.categoryName(), averages.weightedAvgChangeRate());
     }
 
     /** markets가 정확히 하나일 때만 의미 있는 단일 지수 개요 — ALL_STOCK처럼 여럿이면 단일 값이 없어 null. */

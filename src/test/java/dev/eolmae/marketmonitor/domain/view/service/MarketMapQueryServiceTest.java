@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
+import dev.eolmae.marketmonitor.domain.marketmap.dto.MarketValueTierItem;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategory;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapStockCategory;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRepository;
@@ -21,11 +22,16 @@ import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceSnapshotService;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateItem;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateMarketRanking;
+import dev.eolmae.marketmonitor.domain.view.dto.CategoryRankingSummary;
+import dev.eolmae.marketmonitor.domain.view.dto.CategoryTierBreakdown;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapResponse;
+import dev.eolmae.marketmonitor.domain.view.dto.SnapshotAverages;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
+import dev.eolmae.marketmonitor.domain.view.dto.TopCategoryItem;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -350,8 +356,8 @@ class MarketMapQueryServiceTest {
 
     @Test
     void getCategoryChangeRates_랭킹_스냅샷이_없으면_빈_응답을_그대로_반환한다() {
-        when(marketMapCategoryChangeRateSnapshotService.findLatestRankingForMarkets(List.of(Market.KOSPI), 60))
-                .thenReturn(SnapshotResponse.empty());
+        when(marketMapCategoryChangeRateSnapshotService.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
+                .thenReturn(Optional.empty());
 
         SnapshotResponse<CategoryChangeRateMarketRanking> response =
                 service.getCategoryChangeRates(MarketQuery.KOSPI, 60);
@@ -368,9 +374,14 @@ class MarketMapQueryServiceTest {
                 Market.KOSPI, List.of(CategoryChangeRateItem.withoutBefore(1L, List.of())));
         CategoryChangeRateMarketRanking kosdaqRanking = new CategoryChangeRateMarketRanking(
                 Market.KOSDAQ, List.of(CategoryChangeRateItem.withoutBefore(2L, List.of())));
-        when(marketMapCategoryChangeRateSnapshotService.findLatestRankingForMarkets(
-                        List.of(Market.KOSPI, Market.KOSDAQ), 60))
+        when(marketMapCategoryChangeRateSnapshotService.findLatestCommonSnapshotTime(
+                        List.of(Market.KOSPI, Market.KOSDAQ)))
+                .thenReturn(Optional.of(snapshotTime));
+        when(marketMapCategoryChangeRateSnapshotService.findRankingForMarkets(
+                        List.of(Market.KOSPI, Market.KOSDAQ), snapshotTime, 60))
                 .thenReturn(new SnapshotResponse<>(snapshotTime, List.of(kospiRanking, kosdaqRanking)));
+        when(marketMapCategoryRepository.findAll())
+                .thenReturn(List.of(category(1L, null, "반도체"), category(2L, null, "제약")));
         when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime))
                 .thenReturn(List.of(
                         marketOverviewSnapshot(Market.KOSPI, snapshotTime, BigDecimal.valueOf(1.23)),
@@ -397,8 +408,11 @@ class MarketMapQueryServiceTest {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
         CategoryChangeRateMarketRanking kospiRanking = new CategoryChangeRateMarketRanking(
                 Market.KOSPI, List.of(CategoryChangeRateItem.withoutBefore(1L, List.of())));
-        when(marketMapCategoryChangeRateSnapshotService.findLatestRankingForMarkets(List.of(Market.KOSPI), 60))
+        when(marketMapCategoryChangeRateSnapshotService.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
+                .thenReturn(Optional.of(snapshotTime));
+        when(marketMapCategoryChangeRateSnapshotService.findRankingForMarkets(List.of(Market.KOSPI), snapshotTime, 60))
                 .thenReturn(new SnapshotResponse<>(snapshotTime, List.of(kospiRanking)));
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(category(1L, null, "반도체")));
         // 이번 수집 주기에 지수기여도랭킹 수집만 실패해서, 카테고리 랭킹은 있는데 지수 스냅샷은 그 시각에
         // 없는 경우 — 다른 시각 값으로 조용히 대체하지 않고 null로 내려간다.
         when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
@@ -408,6 +422,114 @@ class MarketMapQueryServiceTest {
 
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().get(0).indexChangeRate()).isNull();
+    }
+
+    @Test
+    void getTopCategoryRankings_자식_카테고리는_랭킹에서_제외된다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        MarketMapCategory root = category(1L, null, "반도체");
+        MarketMapCategory child = category(2L, 1L, "반도체 소재");
+        // child가 root보다 등락률이 훨씬 높아도, 대분류가 아니므로 결과에 나오면 안 된다.
+        stubRankingForTopCategories(
+                snapshotTime,
+                List.of(root, child),
+                List.of(),
+                changeRateItem(root.getId(), tier(10L, "대형", 50_000, 10000)), // +5%
+                changeRateItem(child.getId(), tier(10L, "대형", 900_000, 10000))); // +90%
+
+        List<CategoryRankingSummary> summaries = service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60);
+
+        assertThat(summaries).hasSize(1);
+        assertThat(summaries.get(0).topCategories())
+                .extracting(TopCategoryItem::categoryName)
+                .containsExactly("반도체");
+    }
+
+    @Test
+    void getTopCategoryRankings_TOP3까지만_등락률_내림차순으로_노출된다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        MarketMapCategory a = category(1L, null, "반도체");
+        MarketMapCategory b = category(2L, null, "화학");
+        MarketMapCategory c = category(3L, null, "자동차");
+        MarketMapCategory d = category(4L, null, "철강");
+        stubRankingForTopCategories(
+                snapshotTime,
+                List.of(a, b, c, d),
+                List.of(),
+                changeRateItem(a.getId(), tier(10L, "대형", 100_000, 10000)), // +10%
+                changeRateItem(b.getId(), tier(10L, "대형", 50_000, 10000)), // +5%
+                changeRateItem(c.getId(), tier(10L, "대형", 20_000, 10000)), // +2%
+                changeRateItem(d.getId(), tier(10L, "대형", 10_000, 10000))); // +1%, 4위라 빠져야 함
+
+        List<CategoryRankingSummary> summaries = service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60);
+
+        assertThat(summaries.get(0).topCategories())
+                .extracting(TopCategoryItem::categoryName)
+                .containsExactly("반도체", "화학", "자동차");
+    }
+
+    @Test
+    void getTopCategoryRankings_기본_제외_구간은_평균_계산에서_빠진다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        MarketMapCategory root = category(1L, null, "반도체");
+        // tier(20L)이 결과에 포함되면 -20%, 빠지면 +10% — 제외가 실제로 적용됐는지 값으로 검증한다.
+        stubRankingForTopCategories(
+                snapshotTime,
+                List.of(root),
+                List.of(20L),
+                changeRateItem(
+                        root.getId(),
+                        tier(10L, "대형", 100_000, 10000), // +10%, 포함
+                        tier(20L, "소형", -500_000, 10000))); // -50%, 제외 대상
+
+        List<CategoryRankingSummary> summaries = service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60);
+
+        assertThat(summaries.get(0).topCategories().get(0).changeRate()).isEqualByComparingTo(BigDecimal.TEN);
+    }
+
+    private void stubRankingForTopCategories(
+            LocalDateTime snapshotTime,
+            List<MarketMapCategory> categories,
+            List<Long> excludedTierIds,
+            CategoryChangeRateItem... items) {
+        when(marketMapCategoryChangeRateSnapshotService.findRankingForMarkets(List.of(Market.KOSPI), snapshotTime, 60))
+                .thenReturn(new SnapshotResponse<>(
+                        snapshotTime, List.of(new CategoryChangeRateMarketRanking(Market.KOSPI, List.of(items)))));
+        when(marketMapCategoryRepository.findAll()).thenReturn(categories);
+        when(marketValueTierThresholdService.getValueTiers())
+                .thenReturn(excludedTierIds.stream()
+                        .map(id -> new MarketValueTierItem(id, "제외구간", 0L, true))
+                        .toList());
+        when(marketMapCategoryChangeRateSnapshotService.combine(Mockito.anyList()))
+                .thenAnswer(invocation -> combine(invocation.getArgument(0)));
+        when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
+    }
+
+    // combine()이 필드를 전혀 참조하지 않는 순수 계산이라, 스텁 대신 같은 식을 여기서 재현해서 쓴다.
+    private SnapshotAverages combine(List<CategoryTierBreakdown> breakdowns) {
+        BigDecimal weightedSum = BigDecimal.ZERO;
+        BigDecimal totalValue = BigDecimal.ZERO;
+        for (CategoryTierBreakdown breakdown : breakdowns) {
+            weightedSum = weightedSum.add(breakdown.weightedSum());
+            totalValue = totalValue.add(breakdown.totalValue());
+        }
+        BigDecimal weightedAvg =
+                totalValue.signum() == 0 ? BigDecimal.ZERO : weightedSum.divide(totalValue, 4, RoundingMode.HALF_UP);
+        return new SnapshotAverages(weightedAvg, BigDecimal.ZERO);
+    }
+
+    private CategoryChangeRateItem changeRateItem(Long categoryId, CategoryTierBreakdown... breakdowns) {
+        return CategoryChangeRateItem.withoutBefore(categoryId, List.of(breakdowns));
+    }
+
+    private CategoryTierBreakdown tier(Long tierId, String label, long weightedSum, long totalValue) {
+        return new CategoryTierBreakdown(
+                tierId,
+                label,
+                BigDecimal.valueOf(weightedSum),
+                BigDecimal.valueOf(totalValue),
+                BigDecimal.valueOf(weightedSum),
+                1);
     }
 
     private MarketOverviewSnapshot marketOverviewSnapshot(

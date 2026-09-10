@@ -40,6 +40,7 @@ public enum ErrorCode {
     IMAGE_STITCH_FAILED("이미지 병합에 실패했습니다."),
     TELEGRAM_MESSAGE_SEND_FAILED("텔레그램 메시지 발송에 실패했습니다."),
     TELEGRAM_IMAGE_SEND_FAILED("텔레그램 이미지 발송에 실패했습니다."),
+    TELEGRAM_SCHEDULE_MISCONFIGURED("텔레그램 발송 주기 설정이 올바르지 않습니다."),
 
     // Market map
     CATEGORY_TREE_SERIALIZE_FAILED("카테고리 트리 직렬화에 실패했습니다."),

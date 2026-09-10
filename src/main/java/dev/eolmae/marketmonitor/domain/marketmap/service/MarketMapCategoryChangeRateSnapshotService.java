@@ -20,6 +20,7 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -58,6 +59,12 @@ public class MarketMapCategoryChangeRateSnapshotService {
         List<MarketMapCategoryChangeRateSnapshot> snapshots = new ArrayList<>();
         collectSnapshots(tree, market, snapshotTime, tierByLabel, snapshots);
         marketMapCategoryChangeRateSnapshotRepository.saveAll(snapshots);
+    }
+
+    /** markets 전부가 공통으로 가진 최신 스냅샷 시각 — 위 findLatestRankingForMarkets와 같은 조회를
+     * 재사용하지 않고 시각만 필요한 호출부(MarketMapQueryService)용으로 별도로 노출한다. */
+    public Optional<LocalDateTime> findLatestCommonSnapshotTime(List<Market> markets) {
+        return marketMapCategoryChangeRateSnapshotRepository.findLatestCommonSnapshotTime(markets);
     }
 
     /** 라이브 조회용 — markets 전부가 공통으로 가진 최신 시각을 먼저 찾은 뒤 findRankingForMarkets를

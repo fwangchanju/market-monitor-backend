@@ -15,6 +15,7 @@
 > | 3 운영 | 완료 (PR #94) |
 > | 4 정리 | 완료 (PR #97) |
 > | 5 텔레그램 발송 주기 재구성 | 다음 |
+> | 6 예외 로그 정리 | |
 > | 마지막 문서 마무리 | |
 
 > **⚠️ 라인 번호는 참고용이다.** 1B 단계의 `spotlessApply`가 23개 파일의 라인을 밀어버린다.
@@ -1152,7 +1153,7 @@ CategoryRankingTextBuilder.buildRankingText    findBySnapshotTime → Market별 
   `COLLECTOR_EXECUTION_FAILED | context : 일일마켓리포트발송`이 되고, 원인은 cause로 붙는다. 지금은
   `collectorName`이 안 붙으니 정보가 줄지 않는다
 - **원본 예외를 cause로 달지 않는다.** RestClient 예외 메시지에는 요청 URI가 들어 있고 거기에 봇
-  토큰이 박혀 있다. cause로 달면 `ESCALATION_LOG`의 스택트레이스와 알림 본문에 토큰이 샌다. 새 예외는
+  토큰이 박혀 있다. cause로 달면 예외 로그 파일의 스택트레이스와 알림 본문에 토큰이 샌다. 새 예외는
   `SecretMasker`로 마스킹한 메시지와 원본 타입명만 갖는다
 - 4단계에서 넣은 `maskedFailure` 헬퍼는 이 과정에서 사라진다. `Object[]`를 반환하는 형태였는데 타입
   정보가 없어 좋은 모양이 아니었다. 새 예외를 만들어 돌려주는 메서드로 대체한다
@@ -1175,7 +1176,7 @@ CategoryRankingTextBuilder.buildRankingText    findBySnapshotTime → Market별 
   전체를 보여주고 텍스트만 TOP3라서 단순히 합칠 수 없다. `docs/backlog.md` 참고
 - **렌더러 Chromium 재사용.** backlog에 있다. 아래 부하 항목과 관련되지만 이번 범위가 아니다
 - **`ScreenshotClient`와 `KrxCrawler`의 예외 구조.** 5-6 참고. `TelegramClient`만 바꾼다
-- **알림 채널 이중화.** 텔레그램이 통째로 죽으면 알림이 전달되지 않고 `ESCALATION_LOG` 파일만 남는다.
+- **알림 채널 이중화.** 텔레그램이 통째로 죽으면 알림이 전달되지 않고 `exception.log`만 남는다.
   5-6으로도 이건 안 풀린다. `docs/backlog.md` 참고
 - **KOSPI 실패 시 KOSDAQ 부분 발송.** 5-5 참고. 지금 동작을 유지한다
 
@@ -1203,6 +1204,131 @@ CategoryRankingTextBuilder.buildRankingText    findBySnapshotTime → Market별 
 - 그 시각 스냅샷이 없어 발송을 건너뛰는 경로를 어떻게 검증했는지(5-4)
 - `TelegramClient`가 던지는 예외가 바뀌면서 알림 문구가 어떻게 달라지는지(5-6). 배포 후 실패 알림이
   실제로 그 형태로 오는지가 확인 지점이다
+
+# 6단계 — 예외 로그를 한곳에 모은다
+
+브랜치명 예: `claude/refactor/exception-log`
+
+5단계가 병합된 뒤에 시작한다. 백엔드 레포만 바꾼다.
+
+## 이 단계가 하는 일
+
+지금은 텔레그램 알림과 파일 기록이 한 경로에 묶여 있다. `EscalationPublisher.report()`를 거친
+것만 `exception.log`에 들어가고, 나머지 예외는 `application.log`에 섞여 있다.
+
+둘을 나눈다. **텔레그램은 즉시 대응이 필요한 것만, 파일은 전체 예외.** 사용자가 정한 방향이다.
+
+지금 `exception.log`에 들어가지 않는 것들이다.
+
+- `BadRequestException`, `NotFoundException`, `ConflictException` (400/404/409)
+- `MethodArgumentNotValidException`
+- catch-all에서 5분 억제 창에 걸린 반복 예외
+- 클래스 로거로 찍는 `log.error` 전부. `EscalationNotifier`의 "에스컬레이션 알림 발송에 실패했습니다"가
+  대표적이다. 알림이 실패한 사실이 정작 예외 파일에 안 남는다
+
+## 6-1. throwable이 붙은 로그를 전부 예외 파일로 보낸다
+
+로깅 호출부를 하나씩 고치지 않는다. logback appender에 필터를 걸고 그 appender를 root에 붙인다.
+
+```java
+public class ThrowableFilter extends Filter<ILoggingEvent> {
+    @Override
+    public FilterReply decide(ILoggingEvent event) {
+        return event.getThrowableProxy() != null ? FilterReply.ACCEPT : FilterReply.DENY;
+    }
+}
+```
+
+```xml
+<appender name="EXCEPTION_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <filter class="..." />
+    <file>logs/exception.log</file>
+    ...
+</appender>
+
+<root level="INFO">
+    <appender-ref ref="CONSOLE" />
+    <appender-ref ref="APP_FILE" />
+    <appender-ref ref="EXCEPTION_FILE" />
+</root>
+```
+
+- **잡는 지점마다 전용 로거를 쓰는 방식은 채택하지 않는다.** 지금 있는 호출부를 다 찾아 고쳐도 앞으로
+  추가되는 것을 강제할 방법이 없어서 누락이 조용히 생긴다. 필터는 어느 로거로 찍든 걸린다
+- 필터 클래스 위치는 `docs/architecture.md`의 배치 기준을 따르고 이유를 PR 설명에 적는다
+- 예외가 붙지 않은 로그는 들어가지 않는다. 그게 의도다
+- 예외는 `application.log`에도 그대로 남는다. 시간순 전체 흐름과 예외만 추린 뷰는 용도가 다르다
+
+## 6-2. ESCALATION 전용 로거를 없앤다
+
+6-1이 들어가면 전용 로거가 필요 없어진다.
+
+- logback의 `<logger name="ESCALATION">` 블록을 제거한다
+- `EscalationPublisher`의 `ESCALATION_LOG`를 평범한 클래스 로거로 바꾼다. root를 타고 같은 파일에
+  들어간다
+- **텔레그램 알림 경로(`EscalationEvent` 발행)는 그대로 둔다.** 그것이 즉시 대응 채널이다. 이번에
+  나누는 것은 파일 기록 쪽이다
+
+logback의 `name="ESCALATION"`과 코드의 `LoggerFactory.getLogger("ESCALATION")`은 문자열로만 짝지어져
+있다. 한쪽만 지우면 컴파일도 되고 테스트도 통과하는데 로거가 root로 떨어진다. 이번에는 둘 다
+없애므로 해당 없지만, 부분적으로 바꾸지 않는다.
+
+`EscalationPublisher`, `EscalationNotifier`, `EscalateException` 같은 클래스 이름은 바꾸지 않는다.
+"즉시 알린다"는 개념의 이름이고 파일명과는 층위가 다르다.
+
+## 6-3. 두 로그 파일에 용량 상한을 건다
+
+`application.log`에 지금 상한이 없다. `maxHistory 7`만 있어서 하루에 로그가 폭주하면 그 하루가 디스크를
+채운다. 새로 생기는 위험이 아니라 지금 있는 위험이다. 예외 파일에 400/404가 들어오기 시작하면 같은
+문제가 한 겹 더 생기므로 함께 막는다.
+
+`SizeAndTimeBasedRollingPolicy`로 바꾸고 아래 값을 건다.
+
+| 파일 | maxFileSize | maxHistory | totalSizeCap |
+|---|---|---|---|
+| `application.log` | 100MB | 7 | 1GB |
+| `exception.log` | 50MB | 30 | 500MB |
+
+상한은 평소 사용량이 아니라 **폭주했을 때 잃어도 되는 양**으로 잡는다. 로그 디렉터리 실측이 2.2MB라
+정상 운영에서는 이 값에 닿지 않는다. 봇 스캔으로 400이 쏟아지거나 재시도 루프가 도는 경우에만
+의미가 있다.
+
+`${LOG_DIR}:/app/logs` 바인드 마운트라 컨테이너가 아니라 호스트 디스크를 쓴다. `/dev/sda1`이 49G에
+32G 여유이므로 최악의 경우 1.5GB는 여유 안에 들어온다.
+
+## 6-4. 억제된 예외에도 스택을 남긴다
+
+`GlobalExceptionHandler`의 catch-all이 5분 억제 창에 걸린 예외를 이렇게 찍는다.
+
+```java
+log.warn("[예상 못한 예외 알림 억제] | key : {} | 억제 누적 : {}건", key, suppressedCount.incrementAndGet());
+```
+
+throwable이 안 붙어서 6-1의 필터에 걸리지 않는다. **알림은 억제하되 기록은 남긴다**가 맞으므로 예외를
+인자로 붙인다. 한 줄이다.
+
+## 이 단계에서 하지 않는 것
+
+- **로그 수집 플랫폼 도입.** 파일로 남기는 것까지만 한다
+- **파일 이름 변경.** `application.log`와 `exception.log`를 그대로 쓴다
+- **클래스 이름 변경.** 6-2 참고
+- **알림 채널 이중화.** `docs/backlog.md` 참고. 이번 변경으로 풀리지 않는다
+
+## 검증
+
+파일 appender는 `prod` 프로파일에만 붙어 있다. 로컬 검증은 프로파일을 `prod`로 띄워야 한다.
+
+- 예외가 붙은 로그가 `application.log`와 `exception.log` 양쪽에 들어가는지
+- 예외가 없는 INFO 로그가 `exception.log`에 들어가지 **않는지**
+- 400을 내는 요청(존재하지 않는 마켓 파라미터 등)을 한 번 보내 `exception.log`에 남는지. 이게 이번
+  변경의 핵심이라 반드시 확인한다
+- 롤링 정책 변경 후 앱이 정상 기동하는지
+
+## PR 설명에 적을 것
+
+- 필터 클래스를 어디에 뒀고 왜 거기인지
+- 배포 후 `exception.log`에 무엇이 새로 들어오게 되는지. 운영자가 파일을 열었을 때 내용이 달라진다
+- 용량 상한 값과 근거
 
 # 마지막 단계 — 문서 마무리
 

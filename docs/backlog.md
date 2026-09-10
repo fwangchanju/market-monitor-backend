@@ -369,7 +369,7 @@ QueryDSL이 만드는 쿼리가 결정하는데 이 프로젝트에 DB 테스트
 ## 알림 채널이 텔레그램 하나뿐이다
 
 장애 알림이 `EscalationPublisher` → `EscalationNotifier` → 텔레그램 한 경로로만 나간다. 텔레그램이
-통째로 죽으면 알림이 전달되지 않고 `ESCALATION_LOG` 파일만 남는다. 파일은 서버에 들어가야 보이므로
+통째로 죽으면 알림이 전달되지 않고 `exception.log`만 남는다. 파일은 서버에 들어가야 보이므로
 사실상 알림이 없는 것과 같다.
 
 `TelegramClient`가 실패했을 때도 마찬가지다. `EscalationNotifier`가 예외를 잡아 로그만 남기므로

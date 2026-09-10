@@ -3,10 +3,9 @@ package dev.eolmae.marketmonitor.domain.notification.client;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import dev.eolmae.marketmonitor.common.exception.ErrorCode;
-import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.common.util.SecretMasker;
 import dev.eolmae.marketmonitor.domain.notification.dto.TelegramRequest;
+import dev.eolmae.marketmonitor.domain.notification.exception.TelegramSendException;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -45,7 +44,7 @@ public class TelegramClient {
 
             log.debug("텔레그램 메시지 발송 완료: chatId={}", chatId);
         } catch (Exception e) {
-            throw new EscalateException(ErrorCode.TELEGRAM_MESSAGE_SEND_FAILED, maskedFailure(e));
+            throw toSendException(e);
         }
     }
 
@@ -68,7 +67,7 @@ public class TelegramClient {
 
             log.debug("텔레그램 사진 발송 완료: chatId={}", chatId);
         } catch (Exception e) {
-            throw new EscalateException(ErrorCode.TELEGRAM_IMAGE_SEND_FAILED, maskedFailure(e));
+            throw toSendException(e);
         }
     }
 
@@ -104,15 +103,16 @@ public class TelegramClient {
 
             log.debug("텔레그램 앨범 발송 완료: chatId={}, {}장", chatId, images.size());
         } catch (Exception e) {
-            throw new EscalateException(ErrorCode.TELEGRAM_IMAGE_SEND_FAILED, maskedFailure(e));
+            throw toSendException(e);
         }
     }
 
     // RestClient 예외 메시지에는 요청 URI가 들어 있고 거기에 봇 토큰이 박혀 있다. 원본 예외를 cause로 달면
-    // ESCALATION_LOG의 스택트레이스와 텔레그램 알림 본문(getCauseMessage)에 토큰이 그대로 새어나간다.
-    // 그래서 cause 없이 원본 타입명과 마스킹한 메시지만 context로 남긴다.
-    private Object[] maskedFailure(Exception e) {
-        return new Object[] {e.getClass().getSimpleName(), SecretMasker.mask(e.getMessage(), properties.botToken())};
+    // 예외 로그의 스택트레이스와 텔레그램 알림 본문(getCauseMessage)에 토큰이 그대로 새어나간다. 그래서
+    // cause 없이 원본 타입명과 마스킹한 메시지만 갖는 전용 예외로 갈아끼운다.
+    private TelegramSendException toSendException(Exception e) {
+        return new TelegramSendException(
+                e.getClass().getSimpleName(), SecretMasker.mask(e.getMessage(), properties.botToken()));
     }
 
     private String botUrl(String endpoint) {

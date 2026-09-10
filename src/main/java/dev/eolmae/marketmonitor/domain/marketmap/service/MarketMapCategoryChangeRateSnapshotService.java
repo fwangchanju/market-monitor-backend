@@ -20,6 +20,7 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -60,20 +61,16 @@ public class MarketMapCategoryChangeRateSnapshotService {
         marketMapCategoryChangeRateSnapshotRepository.saveAll(snapshots);
     }
 
-    /** 라이브 조회용 — markets 전부가 공통으로 가진 최신 시각을 먼저 찾은 뒤 findRankingForMarkets를
-     * 호출한다. */
-    public SnapshotResponse<CategoryChangeRateMarketRanking> findLatestRankingForMarkets(
-            List<Market> markets, int beforeMinutes) {
-        return marketMapCategoryChangeRateSnapshotRepository
-                .findLatestCommonSnapshotTime(markets)
-                .map(snapshotTime -> findRankingForMarkets(markets, snapshotTime, beforeMinutes))
-                .orElseGet(SnapshotResponse::empty);
+    /** markets 전부가 공통으로 가진 최신 스냅샷 시각 — 호출부(MarketMapQueryService)가 이 시각을 받아
+     * 아래 findRankingForMarkets에 그대로 넘긴다. 시각이 없으면(수집 전, 공통 시각 부재) 비어 있다. */
+    public Optional<LocalDateTime> findLatestCommonSnapshotTime(List<Market> markets) {
+        return marketMapCategoryChangeRateSnapshotRepository.findLatestCommonSnapshotTime(markets);
     }
 
     /**
      * markets가 정확히 snapshotTime 시각에 가진 카테고리별 현재/직전(beforeMinutes분 전) 등락률 랭킹.
-     * 호출부가 이미 알고 있는 정확한 snapshotTime을 받는다 — 텔레그램 캡션처럼 특정 시각이 이미 정해진
-     * 호출부용(findLatestRankingForMarkets가 시각을 찾은 뒤 이 메서드에 위임하는 것과 동일한 코어).
+     * 호출부가 이미 알고 있는 정확한 snapshotTime을 받는다 — 라이브 조회든 텔레그램 캡션이든 시각은
+     * 호출부가 정해서 넘긴다.
      * 그 시각에 데이터가 없는 마켓은 결과 목록에서 아예 빠진다 — 부분적으로만 데이터가 있어도 있는
      * 마켓만으로 랭킹을 구성할 수 있다. beforeMinutes 시각에 정확히 일치하는 스냅샷이 없으면(장 시작
      * 직후, 수집 gap 등) 해당 카테고리는 before 없이 내려준다 — 가장 가까운 다른 시점 데이터로 조용히

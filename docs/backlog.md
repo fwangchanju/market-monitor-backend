@@ -419,3 +419,85 @@ QueryDSL이 만드는 쿼리가 결정하는데 이 프로젝트에 DB 테스트
 판단할 문제다. 지금 나눠서 보면 매번 같은 논의를 반복하게 된다.
 
 `domain/renderer`와 `domain/krx`를 만질 일이 생길 때 함께 본다.
+
+---
+
+## 섹터 페이지 "변화율" 그래프에 마켓 지수를 넣는다
+
+섹터 페이지는 그래프 두 개("현재", "변화율")를 그리는데, **마켓 지수 바(노란색)는 "현재"에만
+붙는다.** "변화율"은 N분 전 대비 %p 차이인데 지수 쪽 과거값을 백엔드가 안 내려주기 때문이다.
+`CategoryChangeRatePage`의 주석에 그 이유가 적혀 있다.
+
+지수도 양쪽에 그려달라는 요청이 있다.
+
+### 지금 구조
+
+```java
+public record CategoryChangeRateMarketRanking(
+        Market market, List<CategoryChangeRateItem> items, BigDecimal indexChangeRate)
+```
+
+`indexChangeRate`는 `items` 안에 섞이지 않고 랭킹의 형제 필드로 붙는다. 스냅샷 서비스는 지수
+개념을 모르고, `MarketMapQueryService.getCategoryChangeRates`가 마지막에 `withIndexChangeRate`로
+붙인다. 노란 바는 프론트가 `categoryId: -1`짜리 가짜 엔트리를 지어내 그린다.
+
+### `CategoryTierBreakdown`에 담지 않는다
+
+지수를 breakdown 리스트에 끼워넣는 방법이 먼저 떠오르는데, 그러면 안 된다. `CategoryTierBreakdown`은
+**시가총액 구간별 원시 합계**이고 프론트가 `tierId`로 제외 구간을 걸러낸 뒤 합산한다
+(`combineTierBreakdowns`). 지수에는 시가총액 구간이라는 개념이 없다. 끼워넣으면 "이 리스트의
+원소는 전부 구간별 합계"라는 약속이 깨지고, 구간 필터가 지수를 어떻게 다룰지가 매번 예외 처리가
+된다. 카테고리 id가 없다는 것보다 이쪽이 더 근본적인 이유다.
+
+### 조치 — `indexChangeRate`를 now/before 짝으로 바꾼다
+
+```java
+public record MarketIndexChangeRate(BigDecimal now, BigDecimal before) {}
+
+public record CategoryChangeRateMarketRanking(
+        Market market, List<CategoryChangeRateItem> items, MarketIndexChangeRate index)
+```
+
+`beforeIndexChangeRate`를 옆에 하나 더 다는 것보다 낫다. **같은 모양이 이미 응답 안에 있기
+때문이다.**
+
+```java
+public record CategoryChangeRateItem(
+        Long categoryId, List<CategoryTierBreakdown> now, List<CategoryTierBreakdown> before)
+```
+
+카테고리도 "두 시점의 값, before는 없을 수 있음"이다. 지수도 성격이 같다. 한 응답 안에서 같은
+개념을 두 가지 방식으로 표현하지 않는다. 필드를 평평하게 둘로 늘리면 두 값이 항상 같이 움직여야
+한다는 사실이 타입 어디에도 안 적히고, 프론트가 `beforeAvailable` 플래그를 따로 들고 다니며 겪는
+문제가 하나 더 생긴다.
+
+**before 시각에 지수 스냅샷이 정확히 없으면 `null`이다.** 카테고리 before가 이미 그 규칙이므로
+그대로 따른다. 가장 가까운 다른 시점 값으로 조용히 대체하지 않는다.
+
+### 규모
+
+백엔드는 record 하나와 메서드 하나다.
+
+- `CategoryChangeRateMarketRanking`의 필드 타입, `withIndexChangeRate` → `withIndex`
+- `MarketMapQueryService.getCategoryChangeRates`가 `findOverviewsBySnapshotTime`을 before 시각으로
+  한 번 더 부른다. `beforeMinutes`는 이미 파라미터로 갖고 있다
+- 텍스트 경로는 영향 없다. 헤더에 현재 등락률만 붙지 before를 안 쓴다
+
+프론트는 15~20줄이다.
+
+- zod 스키마
+- `currentEntriesWithIndex`가 `index.now`를 보게
+- `deltaEntries`에 지수 엔트리 추가. `index.before != null`일 때만
+- "지수 쪽 과거값이 없어서 뺀다"는 주석 두 개 갱신
+
+DB 마이그레이션은 없다. `market_overview_snapshot`을 시각만 바꿔 한 번 더 읽는다.
+
+### 선행 조건 — 5단계 병합
+
+지금 하면 지수 등락률을 붙이는 코드가 `MarketMapQueryService`와 `CategoryRankingTextBuilder`
+**두 곳**이라 둘 다 고쳐야 하고, 5-3이 그것을 다시 하나로 합친다. 5단계가 끝나면 고칠 자리가
+하나가 된다.
+
+5단계 지시서를 고칠 필요는 없다. 5-3이 `CategoryChangeRateItem`에 `depth`와 `categoryName`을
+추가하지만 그것은 아이템 안쪽이고, 지수는 랭킹 바깥쪽 형제 필드라 서로 닿지 않는다. 5-3에 끼워넣을
+수도 있으나 범위만 늘어난다.

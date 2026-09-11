@@ -167,7 +167,14 @@ before        15분 고정 (주기와 무관)
   메시지 1   코스피 섹터 + 코스닥 섹터 + 캡션(코스피 TOP3 + 코스닥 TOP3)
 ```
 
-2시간 격자는 **지금 동작 그대로**다. 새로 생기는 것은 "섹터만, 두 마켓 한 메시지" 한 가지다.
+2시간 격자의 **메시지 구성**은 지금 그대로다. 마켓별 2건, 각각 맵+섹터 2장에 그 마켓 TOP3 캡션.
+
+**다만 그 섹터 이미지의 before 기준은 바뀐다.** 지금은 2시간 격자 tick에서 `beforeMinutes=120`이
+캡처 URL로 넘어가 화면이 "120 분 전 대비"로 그려진다. before를 15분으로 고정하면 같은 자리가
+"15 분 전 대비"가 된다. 사용자가 그렇게 정했다 — 맵을 덜 자주 보는 것과 델타 기준을 길게 잡는 것은
+별개다.
+
+새로 생기는 것은 "섹터만, 두 마켓 한 메시지" 한 가지다.
 
 ## 부하가 절반 가까이 준다
 
@@ -221,15 +228,31 @@ telegram.before-minutes=15
 - **`map-interval-minutes`가 `send-interval-minutes`의 배수** — 새로 필요한 검증이다. 배수가
   아니면 맵 포함 tick이 발송 격자와 어긋나 맵이 영영 안 나가거나 엉뚱한 시각에 나간다
 
+**프로퍼티 바인딩 자체를 검증하는 테스트를 산출물에 넣는다.** `TelegramProperties`는 record라
+프로퍼티 이름을 틀리면 `int`가 0으로 바인딩되고, 위 검증이 기동을 막는다. 설계대로 동작하지만
+**드러나는 시점이 배포 직후 컨테이너 기동 실패**다. 이 레포에는 `@Tag("manual")`이 아닌
+`@SpringBootTest`가 하나도 없어서 `./gradlew test`로는 이 배선이 한 번도 돌지 않는다.
+
+`ApplicationContextRunner`에 `@EnableConfigurationProperties(TelegramProperties.class)`와
+`application.properties`의 네 값을 그대로 주고, 바인딩된 record의 필드가 그 값과 같은지 단언한다.
+DB도 외부 API도 필요 없어 CI에서 돈다. 7단계가 같은 이유로 logback 결선 테스트를 산출물에 넣는
+것과 같은 성격이다.
+
 ## 6-2. 판정을 "보낼지 + 맵을 포함할지"로 바꾼다
 
 `TelegramSendSchedule.due()`가 지금은 주기 목록(`List<Integer>`)을 돌려준다. 주기가 하나가 되면
 목록일 이유가 없고, 대신 "이번 tick에 맵을 함께 보내는가"를 답해야 한다.
 
 ```java
-public enum TelegramSendKind { NONE, SECTOR_ONLY, WITH_MAP }
-
 public TelegramSendKind due(LocalDateTime now, boolean shouldCollect)
+```
+
+**`TelegramSendKind`는 `domain/notification/enums`에 별도 파일로 만든다.** `docs/architecture.md`가
+`enums/`를 도메인 enum의 자리로 정해두었고, 마침 같은 패키지에서 `TelegramOverlap`이 사라지는
+참이다. `TelegramSendSchedule` 안의 중첩 enum으로 두지 않는다.
+
+```java
+public enum TelegramSendKind { NONE, SECTOR_ONLY, WITH_MAP }
 ```
 
 판정 규칙이다.
@@ -258,22 +281,46 @@ shouldCollect 가 꺼졌고
 기대값만 바꾼다. 08:00(기준점 이전), 08:10(맵 포함), 08:20(격자 밖), 08:40(섹터만), 10:10(맵 포함),
 20:10(마감), 20:40(발송 없음).
 
+**그 목록만으로는 `경과분 >= 0` 가드가 검증되지 않는다.** 지금 상수 조합(sendMinute 10,
+send-interval 15)에서 08:00의 경과분은 -10이고 `-10 % 15 == -10`이라, 가드를 통째로 빼도 08:00
+테스트가 그대로 통과한다. 5단계 테스트가 이미 그 구멍을 갖고 있다. **`sendMinute`이
+`send-interval`의 배수인 조합을 한 케이스 더 넣는다** — 예를 들어 sendMinute 10, send-interval 5,
+08:00이면 경과분 -10에 `-10 % 5 == 0`이라 가드가 없으면 발송으로 판정된다. 그 케이스에서만
+가드 누락이 드러난다.
+
+**`validate` 테스트도 새 검증 네 가지를 각각 덮게 다시 쓴다.** 기존 6개 중 `주기_목록이_비어_있으면`과
+`주기에_0_이하_값이_있으면`은 `List<Integer>`가 사라지면서 의미가 없어진다. 새로 생기는
+`map-interval-minutes`가 `send-interval-minutes`의 배수가 아닌 경우를 덮는 테스트가 없으면 그
+검증은 아무도 검증하지 않는다.
+
 ## 6-3. `beforeMinutes` 인자 연쇄를 걷어낸다
 
 5단계에서 `beforeMinutes`를 `CollectionScheduler → DailyMarketReportSender →
 MarketMapAndSectorTelegramReportSender → …`로 흘렸다. 주기마다 값이 달라지기 때문이었다.
 
 **이제 고정값이라 흘릴 이유가 없다.** 인자를 걷어내고 sender가 `TelegramProperties.beforeMinutes()`를
-직접 읽는다. sender들은 이미 `TelegramProperties`를 주입받고 있다(`chatId()` 때문에).
+직접 읽는다.
 
 되돌아가는 자리다.
 
 - `DailyMarketReportSender.send(dataTime, sectorAvailable, beforeMinutes)`에서 인자 제거
-- `MarketMapAndSectorTelegramReportSender.send(...)`에서 인자 제거
-- `TelegramReportSender.buildText(dataTime, query, beforeMinutes)`에서 인자 제거
-- `MarketMapTelegramReportSender.buildText(...)`에서 인자 제거
+- `MarketMapAndSectorTelegramReportSender.send(...)`에서 인자 제거. 이 클래스는 `TelegramProperties`를
+  이미 자기 필드로 갖고 있다
+- `TelegramReportSender.buildText(dataTime, query, beforeMinutes)`와
+  `TelegramReportSender.send(dataTime, query, beforeMinutes)` 둘 다 인자 제거
+- `MarketMapTelegramReportSender.buildText(...)`에서 인자 제거. **이 클래스는 `TelegramProperties`를
+  생성자로 받아 `super(...)`에 넘기기만 하고 자기 필드로 보관하지 않는다.** 부모의
+  `private final telegramProperties`는 서브클래스에서 못 읽는다. **자기 필드로도 보관하도록
+  고친다.** 부모 필드를 `protected`로 열거나 게터를 만드는 방식은 쓰지 않는다 — 부모는 발송 흐름만
+  담당하고 값 해석은 각 sender가 한다는 지금 구조를 유지한다
 - `CollectionScheduler.collectMarketDataHourly()`의 `send(snapshotTime, MarketQuery.KOSPI, 60)`에서
-  `60`과 그 주석이 사라진다
+  `60`과 그 주석이 사라진다. **메서드 자체는 건드리지 않는다** — 「절대 건드리지 말 것」의 주석 처리된
+  스케줄 메서드다. 인자만 시그니처에 맞춘다
+- `MarketMapAndSectorTelegramReportSenderTest` — `private final int beforeMinutes = 60;` 상수,
+  `getTopCategoryRankings(...)` stub 3곳, `sender.send(...)` 호출 3곳, 그리고
+  `"/category-change-rate?market=KOSPI&beforeMinutes=60"` 하드코딩된 URL. **테스트가 만드는
+  `TelegramProperties`의 `before-minutes` 값과 그 URL 리터럴을 맞춘다.** stub이 어긋나면 Mockito가
+  null을 돌려줘 NPE로 터진다
 - 매뉴얼 테스트 두 개(`TelegramReportCycleManualTest`, `MarketMapTelegramReportSenderManualTest`)도
   함께 고친다. `manualTest`는 `sourceSets.test.output.classesDirs`를 재사용하므로 `compileTestJava`에
   잡힌다
@@ -292,6 +339,16 @@ MarketMapAndSectorTelegramReportSender → …`로 흘렸다. 주기마다 값�
 호출부마다 다시 확인해야 한다.
 
 - 이름은 `SectorTelegramReportSender`. 위치는 `domain/notification/service`
+- 시그니처는 `send(LocalDateTime dataTime, boolean sectorAvailable)`. `beforeMinutes`는 6-3대로
+  `TelegramProperties`에서 직접 읽는다
+- **`TelegramReportSender`를 상속하지 않는다.** `MarketMapAndSectorTelegramReportSender`와 같은
+  독립 `@Component`로 만든다.
+
+  그 추상 클래스의 javadoc이 "새 발송 양식이 필요하면 이 클래스를 상속해서…"라고 권하고 있지만
+  여기서는 따르지 않는다. 부모의 `send()`가 캡처 URL을 `target.path() + "?market=" + value`로만
+  만들어 **`&beforeMinutes=`를 붙이지 않기 때문이다.** 상속하면 부모 `send()`를 통째로
+  오버라이드해야 하는데, 그러면 상속으로 얻는 것이 없다. 더 나쁜 것은 오버라이드를 빠뜨렸을 때
+  **컴파일도 테스트도 안 깨진 채** 이미지가 프론트 기본값(30분) 기준으로 나간다는 점이다
 - `MarketQuery.ALL_STOCK`으로 `getTopCategoryRankings`를 **한 번** 호출한다
 - 캡션은 그 결과를 `CategoryRankingTextBuilder.buildRankingText`에 그대로 넘긴다. 마켓별 블록을
   `\n\n`로 이어붙이는 동작이 이미 있어서 **새로 짤 것이 없다**
@@ -320,6 +377,19 @@ market)`이 `ALL_STOCK`과 일치하는 항목을 못 찾는다). 마켓별 비�
 `getTopCategoryRankings`가 그 시각 데이터 없는 마켓을 이미 결과에서 뺀다. **결과에 있는 마켓만
 캡처한다.** 목록을 상수로 박아두면 데이터 없는 마켓의 빈 화면이 앨범에 섞인다.
 
+### 마켓이 하나만 남으면 sendPhoto로 보낸다
+
+한 마켓만 수집에 실패해서 랭킹에 한 마켓만 남는 상태가 이 경로에서 새로 생긴다. 지금은 발송기가
+마켓별로 호출되고 맵 이미지가 항상 먼저 들어가서 1장짜리 앨범이 만들어질 일이 없었다.
+
+**텔레그램 `sendMediaGroup`은 media 배열이 2~10개여야 한다.** 1장으로 부르면 그 tick 발송이
+400으로 실패한다.
+
+- 이미지가 2장이면 `sendMediaGroup`, 1장이면 `TelegramClient.sendPhoto`로 보낸다. 캡션은 같다
+- 있는 데이터를 버리지 않는다. 이건 「부분 성공 포기」와 다른 얘기다 — 그쪽은 "발송하다 실패하면
+  둘 다 포기"이고, 이건 "애초에 한 마켓 데이터밖에 없다"는 상황이다. 기존 마켓별 발송 경로도 있는
+  것만 보낸다
+
 ### 부분 성공은 사라진다
 
 `DailyMarketReportSender`에 주석으로 고정해 둔 판단이 이 경로에는 적용되지 않는다.
@@ -343,6 +413,22 @@ market)`이 `ALL_STOCK`과 일치하는 항목을 못 찾는다). 마켓별 비�
 - 2시간 격자 발송은 지금 그대로다. 맵 이미지가 나가고 캡션에 "섹터 이미지 생성에 실패했습니다"가
   붙는다. 그러니 **최대 2시간 안에는 사용자 채널에서도 상태를 알 수 있다**
 
+### 테스트를 산출물에 포함한다
+
+`SectorTelegramReportSenderTest`를 함께 만든다. 분기가 넷이라 `docs/rules/testing.md`의 기준에
+걸리고, `docs/rules/process.md`는 테스트 없음을 리뷰 차단 사유로 정해두었다.
+
+| 덮을 것 | 기대 |
+|---|---|
+| `sectorAvailable == false` | 캡처도 발송도 하지 않는다. WARN만 |
+| 랭킹 결과가 통째로 빔 | 캡처도 발송도 하지 않는다 |
+| 두 마켓 다 있음 | 섹터 2장을 `sendMediaGroup` 하나로. 캡션에 두 마켓 블록 |
+| 한 마켓만 있음 | 그 마켓만 캡처해서 `sendPhoto`. `sendMediaGroup`을 부르지 않는다 |
+
+`MarketMapAndSectorTelegramReportSenderTest`가 같은 성격의 기존 테스트다(Mockito, DB 없음).
+그 패턴을 따른다. 캡처 URL에 `&beforeMinutes=`가 붙는지도 이 테스트에서 확인한다 — 상속을 쓰지
+않기로 한 이유가 그것이 조용히 빠지는 것을 막기 위해서다.
+
 `MarketMapAndSectorTelegramReportSender`에 있는 가드(수집은 성공했는데 그 시각 조회가 비는 경우)는
 이 발송기에도 같은 규칙으로 적용한다.
 조회 결과가 통째로 비면 발송하지 않는다.
@@ -353,15 +439,21 @@ market)`이 `ALL_STOCK`과 일치하는 항목을 못 찾는다). 마켓별 비�
 
 ```
 TelegramSendKind kind = telegramSendSchedule.due(snapshotTime, shouldCollect);
-kind == NONE          → 아무것도 하지 않는다
-수집 실패              → 지금처럼 데이터수집실패알림 한 번 (kind와 무관)
-kind == WITH_MAP      → dailyMarketReportSender.send(...)   (마켓별 2메시지)
-kind == SECTOR_ONLY   → sectorTelegramReportSender.send(...) (1메시지)
+
+kind == NONE          → 아무것도 하지 않는다. 실패 알림도 보내지 않는다
+그 밖:
+  수집 실패            → 데이터수집실패알림 한 번. WITH_MAP/SECTOR_ONLY 구분과 무관하다
+  kind == WITH_MAP    → dailyMarketReportSender.send(...)   (마켓별 2메시지)
+  kind == SECTOR_ONLY → sectorTelegramReportSender.send(dataTime, sectorAvailable) (1메시지)
 ```
 
+**실패 알림은 발송 tick 안에서만 나간다.** 지금 코드도 `if (!dueCycles.isEmpty())` 안쪽에 있다.
+`kind == NONE`일 때도 보내도록 만들면 cron이 도는 5분마다, 하루 150번 넘게 실패 알림이 나간다.
+`CollectionScheduler` 테스트가 없어서 이 회귀는 배포 전에 아무것도 못 잡는다.
+
 - 5단계의 `for (int beforeMinutes : dueCycles)` 반복은 사라진다. 한 tick에 한 종류만 나간다
-- **실패 알림은 그 tick에 한 번만.** 지금 구조 그대로다
 - `run(...)`으로 감싸는 것도 그대로다. 발송기 이름만 갈린다
+- `for` 루프 위의 "겹침 정책이 all이면 …" 주석도 루프와 함께 사라진다
 
 ## 이 단계에서 하지 않는 것
 
@@ -373,11 +465,22 @@ kind == SECTOR_ONLY   → sectorTelegramReportSender.send(...) (1메시지)
 - **`DailyMarketReportSender`의 마켓 순서 규칙.** 2시간 격자 경로에 그대로 살아 있다
 - **알림 채널 이중화.** `docs/backlog.md` 참고
 
+## 함께 고칠 주석
+
+지시서에 없다고 두면 코드와 주석이 어긋난 채 남는다. 아래는 이 단계에서 거짓이 되는 주석이다.
+
+- `TelegramSendSchedule`의 클래스 javadoc과 `due()` javadoc — "발송해야 할 주기(분) 목록",
+  "가장 긴 주기 하나로 마감 리포트"가 전부 사실이 아니게 된다
+- `DailyMarketReportSender`의 클래스 javadoc "5분 주기 발송용" — 5단계에서 이미 낡았고 이제는
+  "2시간 격자 전용"이다
+- `CollectionScheduler`의 겹침 정책 주석 — 위 6-5 참고
+- `TelegramReportSender` 클래스 javadoc의 `ALL_STOCKS` 표기 — enum은 `ALL_STOCK`이다
+
 ## 알아둘 것 — 15분 발송이 하루 42건이다
 
 합쳐도 하루 56건이다. 알림이 많다고 느껴지면 `telegram.send-interval-minutes`를 30으로 올리면
-된다. 그러면 하루 25회 발송, 메시지 30건 수준이 된다. `map-interval-minutes=120`은 30의 배수라
-검증에 걸리지 않는다.
+된다. 그러면 하루 25회 발송(WITH_MAP 7회, SECTOR_ONLY 18회), 메시지 32건이 된다.
+`map-interval-minutes=120`은 30의 배수라 검증에 걸리지 않는다.
 
 반대로 맵을 더 자주 보고 싶으면 `map-interval-minutes`를 60으로 내린다. 코드 수정 없이 둘 다
 프로퍼티로 조절된다.
@@ -389,7 +492,15 @@ kind == SECTOR_ONLY   → sectorTelegramReportSender.send(...) (1메시지)
 - `beforeMinutes` 인자 연쇄를 걷어낸 범위. 5단계를 되돌리는 것이 아니라는 설명
 - 섹터만 보내는 경로에서 부분 성공이 사라진다는 것과, 2시간 격자 경로에는 마켓 순서 규칙이 그대로 살아 있다는 것
 - `sectorAvailable`이 false일 때 섹터만 발송이 조용히 빠진다는 것. 배포 후 확인 지점이다
-- 배포 후 다음 영업일 08:10에 맵이 오고 08:25에 섹터만 오는지가 확인 지점이라는 것
+- **2시간 격자로 오는 섹터 이미지의 before 기준이 120분에서 15분으로 바뀐다는 것.** 사진에 찍히는
+  "N 분 전 대비" 글자가 눈에 띄게 달라진다. 메시지 구성은 그대로이므로 이것만 따로 적는다
+
+### 배포 후 확인 지점
+
+- **기동 로그부터 본다.** 프로퍼티 이름이 하나라도 틀리면 `IllegalStateException`으로 컨테이너가
+  안 뜬다. 6-1의 바인딩 테스트가 CI에서 이걸 잡아주지만, 실제 배포 환경의 값은 다를 수 있다
+- 다음 영업일 08:10에 맵+섹터가 마켓별 2건, 08:25에 섹터만 1건이 오는지
+- 08:10 사진과 08:25 사진의 "N 분 전 대비"가 둘 다 15인지
 
 # 7단계 — 예외 로그를 한곳에 모은다
 

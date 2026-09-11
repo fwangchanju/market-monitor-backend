@@ -6,10 +6,12 @@ import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.common.util.KstClock;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryChangeRateSnapshotService;
+import dev.eolmae.marketmonitor.domain.notification.enums.TelegramSendKind;
 import dev.eolmae.marketmonitor.domain.notification.listener.EscalationPublisher;
 import dev.eolmae.marketmonitor.domain.notification.schedule.TelegramSendSchedule;
 import dev.eolmae.marketmonitor.domain.notification.service.DailyMarketReportSender;
 import dev.eolmae.marketmonitor.domain.notification.service.MarketMapTelegramReportSender;
+import dev.eolmae.marketmonitor.domain.notification.service.SectorTelegramReportSender;
 import dev.eolmae.marketmonitor.domain.notification.service.TelegramCollectionFailureNotifier;
 import dev.eolmae.marketmonitor.domain.stock.collector.HoldingsSyncService;
 import dev.eolmae.marketmonitor.domain.stock.collector.IndexContributionRankingCollector;
@@ -53,6 +55,7 @@ public class CollectionScheduler {
     private final MarketMapCategoryChangeRateSnapshotService marketMapCategoryChangeRateSnapshotService;
     private final MarketMapTelegramReportSender marketMapTelegramReportSender;
     private final DailyMarketReportSender dailyMarketReportSender;
+    private final SectorTelegramReportSender sectorTelegramReportSender;
     private final TelegramCollectionFailureNotifier telegramCollectionFailureNotifier;
     private final TelegramSendSchedule telegramSendSchedule;
     private final EscalationPublisher escalationPublisher;
@@ -105,17 +108,18 @@ public class CollectionScheduler {
         LocalDateTime dataTime =
                 shouldCollect ? snapshotTime : LocalDateTime.of(snapshotTime.toLocalDate(), LocalTime.of(endHour, 0));
 
-        List<Integer> dueCycles = telegramSendSchedule.due(snapshotTime, shouldCollect);
-        if (!dueCycles.isEmpty()) {
+        TelegramSendKind sendKind = telegramSendSchedule.due(snapshotTime, shouldCollect);
+        if (sendKind != TelegramSendKind.NONE) {
             if (!lastIndexContributionSuccess) {
                 run("데이터수집실패알림", () -> telegramCollectionFailureNotifier.notify(dataTime));
             } else {
-                // 마켓맵 KOSPI/KOSDAQ + 섹터 All Stocks(성공했을 때만)를 앨범 하나로 묶어 알림 1번으로 발송.
-                // 겹침 정책이 all이면 같은 tick에 주기가 여럿 걸리는데, 실패 알림은 위에서 이미 한 번으로
-                // 게이팅했으므로 여기선 리포트만 주기 수만큼 반복해서 보낸다.
                 boolean sectorImageAvailable = lastChangeRateSuccess;
-                for (int beforeMinutes : dueCycles) {
-                    run("일일마켓리포트발송", () -> dailyMarketReportSender.send(dataTime, sectorImageAvailable, beforeMinutes));
+                if (sendKind == TelegramSendKind.WITH_MAP) {
+                    // 마켓맵 KOSPI/KOSDAQ + 섹터를 마켓별로 각각 한 메시지씩, 총 2건으로 발송.
+                    run("일일마켓리포트발송", () -> dailyMarketReportSender.send(dataTime, sectorImageAvailable));
+                } else {
+                    // 두 마켓 섹터만 한 메시지로 발송.
+                    run("섹터텔레그램발송", () -> sectorTelegramReportSender.send(dataTime, sectorImageAvailable));
                 }
             }
         }
@@ -137,8 +141,7 @@ public class CollectionScheduler {
         run("프로그램매매랭킹", () -> programNetBuyRankingCollector.collect(snapshotTime));
         run("프로그램매매히스토리", () -> programTradeIntradayCollector.collect(snapshotTime));
         run("지수기여도랭킹", () -> indexContributionRankingCollector.collect(snapshotTime));
-        // 60은 옛 BEFORE_MINUTES 상수 값을 그대로 옮긴 것 — 비활성 메서드라 실제로 쓰이지 않는다.
-        run("마켓맵텔레그램발송", () -> marketMapTelegramReportSender.send(snapshotTime, MarketQuery.KOSPI, 60));
+        run("마켓맵텔레그램발송", () -> marketMapTelegramReportSender.send(snapshotTime, MarketQuery.KOSPI));
 
         log.info("장중 시장 데이터 수집 완료: snapshotTime={}", snapshotTime);
     }

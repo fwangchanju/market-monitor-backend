@@ -8,7 +8,6 @@ import static org.mockito.Mockito.when;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.domain.notification.client.TelegramClient;
-import dev.eolmae.marketmonitor.domain.notification.enums.TelegramOverlap;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
 import dev.eolmae.marketmonitor.domain.renderer.client.ScreenshotClient;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryRankingSummary;
@@ -23,10 +22,14 @@ import org.mockito.Mockito;
 
 class MarketMapAndSectorTelegramReportSenderTest {
 
+    // 테스트가 만드는 TelegramProperties의 before-minutes 값과 스텁/URL 리터럴의 beforeMinutes를 맞춘다
+    // — 어긋나면 stub이 안 걸려 Mockito가 null을 돌려주고 NPE로 터진다.
+    private static final int BEFORE_MINUTES = 60;
+
     private final ScreenshotClient screenshotClient = Mockito.mock(ScreenshotClient.class);
     private final TelegramClient telegramClient = Mockito.mock(TelegramClient.class);
     private final TelegramProperties telegramProperties =
-            new TelegramProperties("token", "chat-id", "dev-chat", 10, List.of(15, 120), TelegramOverlap.LONGEST_ONLY);
+            new TelegramProperties("token", "chat-id", "dev-chat", 10, 15, 120, BEFORE_MINUTES);
     private final CategoryRankingTextBuilder categoryRankingTextBuilder =
             Mockito.mock(CategoryRankingTextBuilder.class);
     private final MarketMapQueryService marketMapQueryService = Mockito.mock(MarketMapQueryService.class);
@@ -34,7 +37,6 @@ class MarketMapAndSectorTelegramReportSenderTest {
             screenshotClient, telegramClient, telegramProperties, categoryRankingTextBuilder, marketMapQueryService);
 
     private final LocalDateTime dataTime = LocalDateTime.of(2025, 6, 2, 15, 0);
-    private final int beforeMinutes = 60;
     private final byte[] mapImage = {1};
     private final byte[] sectorImage = {2};
 
@@ -42,7 +44,7 @@ class MarketMapAndSectorTelegramReportSenderTest {
     void send_섹터가_가능하면_맵과_섹터_이미지를_함께_보낸다() {
         List<CategoryRankingSummary> rankings =
                 List.of(new CategoryRankingSummary(Market.KOSPI, BigDecimal.valueOf(1.23), List.of()));
-        when(marketMapQueryService.getTopCategoryRankings(MarketQuery.KOSPI, dataTime, beforeMinutes))
+        when(marketMapQueryService.getTopCategoryRankings(MarketQuery.KOSPI, dataTime, BEFORE_MINUTES))
                 .thenReturn(rankings);
         when(screenshotClient.capture("/market-map?market=KOSPI", "[data-captureid='market-map-capture']"))
                 .thenReturn(List.of(mapImage));
@@ -52,7 +54,7 @@ class MarketMapAndSectorTelegramReportSenderTest {
                 .thenReturn(List.of(sectorImage));
         when(categoryRankingTextBuilder.buildRankingText(rankings)).thenReturn("#코스피 +1.23%\n...");
 
-        sender.send(dataTime, Market.KOSPI, true, beforeMinutes);
+        sender.send(dataTime, Market.KOSPI, true);
 
         ArgumentCaptor<List<byte[]>> imagesCaptor = ArgumentCaptor.forClass(List.class);
         verify(telegramClient)
@@ -63,13 +65,13 @@ class MarketMapAndSectorTelegramReportSenderTest {
     @Test
     void send_섹터가_불가능하면_맵_이미지만_보내고_캡션에_실패_안내를_덧붙인다() {
         List<CategoryRankingSummary> rankings = List.of();
-        when(marketMapQueryService.getTopCategoryRankings(MarketQuery.KOSDAQ, dataTime, beforeMinutes))
+        when(marketMapQueryService.getTopCategoryRankings(MarketQuery.KOSDAQ, dataTime, BEFORE_MINUTES))
                 .thenReturn(rankings);
         when(screenshotClient.capture("/market-map?market=KOSDAQ", "[data-captureid='market-map-capture']"))
                 .thenReturn(List.of(mapImage));
         when(categoryRankingTextBuilder.buildRankingText(rankings)).thenReturn("#코스닥 -0.50%\n...");
 
-        sender.send(dataTime, Market.KOSDAQ, false, beforeMinutes);
+        sender.send(dataTime, Market.KOSDAQ, false);
 
         verify(screenshotClient, never()).capture(Mockito.contains("/category-change-rate"), Mockito.any());
         ArgumentCaptor<List<byte[]>> imagesCaptor = ArgumentCaptor.forClass(List.class);
@@ -81,10 +83,10 @@ class MarketMapAndSectorTelegramReportSenderTest {
 
     @Test
     void send_섹터가_가능한데_그_시각_조회가_비면_아무것도_보내지_않는다() {
-        when(marketMapQueryService.getTopCategoryRankings(MarketQuery.KOSPI, dataTime, beforeMinutes))
+        when(marketMapQueryService.getTopCategoryRankings(MarketQuery.KOSPI, dataTime, BEFORE_MINUTES))
                 .thenReturn(List.of());
 
-        sender.send(dataTime, Market.KOSPI, true, beforeMinutes);
+        sender.send(dataTime, Market.KOSPI, true);
 
         verifyNoInteractions(screenshotClient);
         verifyNoInteractions(telegramClient);

@@ -34,7 +34,8 @@ public class MarketMapAndSectorTelegramReportSender {
     private final CategoryRankingTextBuilder categoryRankingTextBuilder;
     private final MarketMapQueryService marketMapQueryService;
 
-    public void send(LocalDateTime dataTime, Market market, boolean sectorAvailable, int beforeMinutes) {
+    public void send(LocalDateTime dataTime, Market market, boolean sectorAvailable) {
+        int beforeMinutes = telegramProperties.beforeMinutes();
         List<CategoryRankingSummary> rankings = marketMapQueryService.getTopCategoryRankings(
                 MarketQuery.valueOf(market.name()), dataTime, beforeMinutes);
 

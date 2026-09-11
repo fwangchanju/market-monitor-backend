@@ -4,9 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import dev.eolmae.marketmonitor.domain.notification.enums.TelegramOverlap;
+import dev.eolmae.marketmonitor.domain.notification.enums.TelegramSendKind;
 import java.time.LocalDateTime;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class TelegramSendScheduleTest {
@@ -14,102 +13,133 @@ class TelegramSendScheduleTest {
     private static final int START_HOUR = 8;
     private static final int END_HOUR = 20;
     private static final int SEND_MINUTE = 10;
-    private static final List<Integer> CYCLES = List.of(15, 120);
+    private static final int SEND_INTERVAL_MINUTES = 15;
+    private static final int MAP_INTERVAL_MINUTES = 120;
     private static final LocalDateTime DATE = LocalDateTime.of(2025, 6, 2, 0, 0);
 
     @Test
-    void due_기준점_이전이라_아무_주기에도_걸리지_않는다() {
+    void due_기준점_이전이라_발송하지_않는다() {
         LocalDateTime now = DATE.withHour(8).withMinute(0);
 
-        assertThat(due(now, true, TelegramOverlap.ALL)).isEmpty();
-        assertThat(due(now, true, TelegramOverlap.LONGEST_ONLY)).isEmpty();
+        assertThat(due(now, true)).isEqualTo(TelegramSendKind.NONE);
     }
 
     @Test
-    void due_기준_시각에는_겹치는_주기_전부가_걸린다() {
+    void due_기준_시각에는_맵을_포함해서_발송한다() {
         LocalDateTime now = DATE.withHour(8).withMinute(10);
 
-        assertThat(due(now, true, TelegramOverlap.ALL)).containsExactly(15, 120);
-        assertThat(due(now, true, TelegramOverlap.LONGEST_ONLY)).containsExactly(120);
+        assertThat(due(now, true)).isEqualTo(TelegramSendKind.WITH_MAP);
     }
 
     @Test
-    void due_어느_주기의_간격에도_맞지_않는_시각은_발송되지_않는다() {
+    void due_발송_격자에_안_맞는_시각은_발송하지_않는다() {
         LocalDateTime now = DATE.withHour(8).withMinute(20);
 
-        // 경과분 10 — 15의 배수도 120의 배수도 아니다. 모듈로 판정이 깨지면 여기서 잡힌다.
-        assertThat(due(now, true, TelegramOverlap.ALL)).isEmpty();
-        assertThat(due(now, true, TelegramOverlap.LONGEST_ONLY)).isEmpty();
+        // 경과분 10 — 15의 배수가 아니다. 모듈로 판정이 깨지면 여기서 잡힌다.
+        assertThat(due(now, true)).isEqualTo(TelegramSendKind.NONE);
     }
 
     @Test
-    void due_08시40분은_짧은_주기만_걸리고_긴_주기는_걸리지_않는다() {
+    void due_08시40분은_섹터만_발송한다() {
         LocalDateTime now = DATE.withHour(8).withMinute(40);
 
         // 08:40 발송 복구 — startHour를 경계로 묶어 스킵하던 옛 버그가 여기서 사라졌는지 확인한다.
-        assertThat(due(now, true, TelegramOverlap.ALL)).containsExactly(15);
-        assertThat(due(now, true, TelegramOverlap.LONGEST_ONLY)).containsExactly(15);
+        assertThat(due(now, true)).isEqualTo(TelegramSendKind.SECTOR_ONLY);
     }
 
     @Test
-    void due_두_시간_뒤에는_겹치는_주기_전부가_다시_걸린다() {
+    void due_두_시간_뒤에는_다시_맵을_포함해서_발송한다() {
         LocalDateTime now = DATE.withHour(10).withMinute(10);
 
-        assertThat(due(now, true, TelegramOverlap.ALL)).containsExactly(15, 120);
-        assertThat(due(now, true, TelegramOverlap.LONGEST_ONLY)).containsExactly(120);
+        assertThat(due(now, true)).isEqualTo(TelegramSendKind.WITH_MAP);
     }
 
     @Test
-    void due_마감_시각에는_shouldCollect가_꺼져도_가장_긴_주기로_한_번_발송된다() {
+    void due_마감_시각에는_shouldCollect가_꺼져도_맵을_포함해서_발송한다() {
         LocalDateTime now = DATE.withHour(20).withMinute(10);
 
-        assertThat(due(now, false, TelegramOverlap.ALL)).containsExactly(120);
-        assertThat(due(now, false, TelegramOverlap.LONGEST_ONLY)).containsExactly(120);
+        assertThat(due(now, false)).isEqualTo(TelegramSendKind.WITH_MAP);
     }
 
     @Test
     void due_마감_이후_추가_사이클은_발송하지_않는다() {
         LocalDateTime now = DATE.withHour(20).withMinute(40);
 
-        assertThat(due(now, false, TelegramOverlap.ALL)).isEmpty();
-        assertThat(due(now, false, TelegramOverlap.LONGEST_ONLY)).isEmpty();
+        assertThat(due(now, false)).isEqualTo(TelegramSendKind.NONE);
+    }
+
+    @Test
+    void due_경과분이_음수인데_배수_조건만으로는_걸리는_조합에서_가드가_실제로_막는다() {
+        // sendMinute 10, send-interval 5인 조합에서 08:00의 경과분은 -10이고 -10 % 5 == 0이라,
+        // "경과분 >= 0" 가드가 없으면 발송으로 잘못 판정된다. 5단계 테스트의 상수 조합(간격 15)에서는
+        // -10 % 15 == -10이라 이 케이스가 우연히 통과해버려서 가드 누락이 드러나지 않았다.
+        LocalDateTime now = DATE.withHour(8).withMinute(0);
+
+        TelegramSendKind result =
+                TelegramSendSchedule.due(now, true, START_HOUR, END_HOUR, SEND_MINUTE, 5, MAP_INTERVAL_MINUTES);
+
+        assertThat(result).isEqualTo(TelegramSendKind.NONE);
     }
 
     @Test
     void validate_sendMinute이_0이하이면_기동을_막는다() {
-        assertThatThrownBy(() -> TelegramSendSchedule.validate(CYCLES, 0, 5)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> TelegramSendSchedule.validate(0, SEND_INTERVAL_MINUTES, MAP_INTERVAL_MINUTES, 15, 5))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void validate_sendIntervalMinutes가_0이하이면_기동을_막는다() {
+        assertThatThrownBy(() -> TelegramSendSchedule.validate(SEND_MINUTE, 0, MAP_INTERVAL_MINUTES, 15, 5))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void validate_mapIntervalMinutes가_0이하이면_기동을_막는다() {
+        assertThatThrownBy(() -> TelegramSendSchedule.validate(SEND_MINUTE, SEND_INTERVAL_MINUTES, 0, 15, 5))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void validate_beforeMinutes가_0이하이면_기동을_막는다() {
+        assertThatThrownBy(() ->
+                        TelegramSendSchedule.validate(SEND_MINUTE, SEND_INTERVAL_MINUTES, MAP_INTERVAL_MINUTES, 0, 5))
+                .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
     void validate_sendMinute이_collect_interval의_배수가_아니면_기동을_막는다() {
-        assertThatThrownBy(() -> TelegramSendSchedule.validate(CYCLES, 7, 5)).isInstanceOf(IllegalStateException.class);
-    }
-
-    @Test
-    void validate_주기가_collect_interval의_배수가_아니면_기동을_막는다() {
-        assertThatThrownBy(() -> TelegramSendSchedule.validate(List.of(15, 17), SEND_MINUTE, 5))
+        assertThatThrownBy(() -> TelegramSendSchedule.validate(7, SEND_INTERVAL_MINUTES, MAP_INTERVAL_MINUTES, 15, 5))
                 .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
-    void validate_주기_목록이_비어_있으면_기동을_막는다() {
-        assertThatThrownBy(() -> TelegramSendSchedule.validate(List.of(), SEND_MINUTE, 5))
+    void validate_sendIntervalMinutes가_collect_interval의_배수가_아니면_기동을_막는다() {
+        assertThatThrownBy(() -> TelegramSendSchedule.validate(SEND_MINUTE, 7, MAP_INTERVAL_MINUTES, 15, 5))
                 .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
-    void validate_주기에_0_이하_값이_있으면_기동을_막는다() {
-        assertThatThrownBy(() -> TelegramSendSchedule.validate(List.of(0, 15), SEND_MINUTE, 5))
+    void validate_beforeMinutes가_collect_interval의_배수가_아니면_기동을_막는다() {
+        assertThatThrownBy(() ->
+                        TelegramSendSchedule.validate(SEND_MINUTE, SEND_INTERVAL_MINUTES, MAP_INTERVAL_MINUTES, 7, 5))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void validate_mapIntervalMinutes가_sendIntervalMinutes의_배수가_아니면_기동을_막는다() {
+        assertThatThrownBy(() -> TelegramSendSchedule.validate(SEND_MINUTE, SEND_INTERVAL_MINUTES, 50, 15, 5))
                 .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
     void validate_조건을_모두_만족하면_통과한다() {
-        assertThatCode(() -> TelegramSendSchedule.validate(CYCLES, SEND_MINUTE, 5))
+        assertThatCode(() ->
+                        TelegramSendSchedule.validate(SEND_MINUTE, SEND_INTERVAL_MINUTES, MAP_INTERVAL_MINUTES, 15, 5))
                 .doesNotThrowAnyException();
     }
 
-    private List<Integer> due(LocalDateTime now, boolean shouldCollect, TelegramOverlap overlap) {
-        return TelegramSendSchedule.due(now, shouldCollect, START_HOUR, END_HOUR, SEND_MINUTE, CYCLES, overlap);
+    private TelegramSendKind due(LocalDateTime now, boolean shouldCollect) {
+        return TelegramSendSchedule.due(
+                now, shouldCollect, START_HOUR, END_HOUR, SEND_MINUTE, SEND_INTERVAL_MINUTES, MAP_INTERVAL_MINUTES);
     }
 }

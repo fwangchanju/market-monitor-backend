@@ -14,12 +14,16 @@
 > | 2 버그 7건 | 완료 (PR #88) |
 > | 3 운영 | 완료 (PR #94) |
 > | 4 정리 | 완료 (PR #97) |
-> | 5 텔레그램 발송 주기 재구성 | 다음 |
-> | 6 예외 로그 정리 | |
+> | 5 텔레그램 발송 주기 재구성 | 완료 (백엔드 PR #98, 프론트 PR #52) |
+> | 6 페이지별 발송 주기 분리 | 다음 |
+> | 7 예외 로그 정리 | |
 > | 마지막 문서 마무리 | |
 >
 > **완료된 단계의 본문은 지웠다.** 다시 할 일이 없는데 읽을 양만 늘리기 때문이다. 필요하면 git
-> 히스토리나 위 표의 PR에서 본다. 아래 남은 규칙과 5·6단계만 읽으면 된다.
+> 히스토리나 위 표의 PR에서 본다. 아래 남은 규칙과 6·7단계만 읽으면 된다.
+>
+> 6단계는 5단계가 배포된 뒤 실제로 받아보고 나온 요구다. 5단계에서 확정했던 것 일부를 되돌린다.
+> 어디를 왜 되돌리는지는 6단계 본문에 적어두었다.
 
 > **⚠️ 라인 번호는 참고용이다.** 위치는 **메서드명·식별자 문자열**로 찾는다. 라인 번호가 어긋나
 > 있어도 그것만으로 "지시서와 코드가 모순"이라고 판단하지 않는다.
@@ -90,7 +94,7 @@
 
 - 따로 되돌릴 이유가 있는 것만 따로 커밋한다. A를 되돌릴 때 B도 반드시 같이 되돌려야 한다면 둘은
   한 커밋이다
-- **이 지시서의 항목 번호를 커밋 단위로 착각하지 않는다.** 5-1~5-6은 설명의 단위이지 커밋의 단위가
+- **이 지시서의 항목 번호를 커밋 단위로 착각하지 않는다.** 6-1~6-5는 설명의 단위이지 커밋의 단위가
   아니다
 - **`spotlessApply`로 인한 포맷 변경은 반드시 별도 커밋으로 분리한다.** 섞이면 실제 작업 diff가
   묻혀서 리뷰가 불가능해진다
@@ -130,516 +134,379 @@ domain/notification/service/TelegramReportCycleManualTest
 
 ---
 
-# 5단계 — 텔레그램 발송 주기 재구성
+# 6단계 — 페이지별 발송 주기 분리
 
-> **아직 확정 전이다. 이 상태로 구현을 시작하지 않는다.**
->
-> `grill-me` 검증(`docs/rules/process.md` 5번)은 돌렸고, 지적 중 설계 역할이 혼자 고칠 수 있는
-> 것은 이 문서에 반영했다. 사실 오류 정정(5-2의 before 서술, 5-3의 지수 등락률·위임 구조),
-> 빠진 호출부·테스트 목록, "둘 중 판단해서" 남겨둔 곳의 확정, 판정식과 기동 검증의 구멍이다.
->
-> 사용자 판단이 필요했던 네 가지도 전부 확정해서 본문에 반영했다. 백엔드 선배포, 6단계 자동 검증
-> 추가, 15분 주기 유지, 5-4 가드를 `sectorAvailable`이 참일 때만 도는 것이다.
->
-> **남은 것은 PR #96 병합뿐이다.** 병합되면 이 블록을 지우고 구현을 시작한다.
+브랜치명 예: `claude/refactor/send-composition`
 
-브랜치명 예: `claude/refactor/telegram-schedule`
-
-**백엔드와 프론트 두 레포를 모두 바꾼다.** PR은 레포별로 하나씩 올리고, **백엔드를 먼저 배포한다.**
-
-백엔드가 먼저 나가도 깨지는 것이 없다. 캡처 URL에 `&beforeMinutes=N`이 붙어도 아직 그 파라미터를
-모르는 프론트는 무시하고 지금처럼 30분 기준으로 그린다. 응답에 `depth`와 `categoryName`이 실려도
-zod가 모르는 키를 버리므로 화면은 아무것도 느끼지 않는다. 지금 상태가 그대로 유지될 뿐이다.
-
-반대 순서는 깨진다. 5-3은 백엔드가 `depth`와 `categoryName`을 내려줘야만 성립하는데, 배포는 병합과
-분리되어 사용자가 임의 시점에 수동 실행하므로(`docs/rules/process.md`) 프론트만 나가 있는 구간이
-며칠일 수 있다. 그 구간에 zod 필수 필드면 parse가 실패해 "데이터를 불러오지 못했습니다"가 뜨고,
-옵셔널이면 `depth`가 undefined라 대분류 필터가 전부 걸러 "데이터가 없습니다"가 뜬다. 그 화면을
-렌더러가 그대로 캡처해 텔레그램으로 보낸다.
+5단계가 배포된 뒤에 시작한다. **백엔드 레포만 바꾼다.** 프론트는 건드리지 않는다.
 
 ## 이 단계가 하는 일
 
-발송 주기를 15분짜리 하나에서 "짧은 주기 + 긴 주기" 둘로 늘린다. 각 주기는 화면에서 그만큼의
-"N분 전 대비"를 선택한 상태로 캡처된다. 주기 값과 겹칠 때의 정책은 프로퍼티로 바꿀 수 있어야 한다.
+5단계는 "주기가 곧 before"였다. 15분 주기면 15분 전 대비, 2시간 주기면 2시간 전 대비로 보냈다.
+실제로 받아보니 원하는 것이 달랐다.
 
-이 과정에서 PR #84, #90, #91이 남긴 것들을 함께 정리한다. 세 PR은 정비 작업 중간에 급하게 들어가
-리뷰를 거치지 않았고, 발송이 안 되는 버그 하나와 같은 조회를 두 번 하는 구조가 남아 있다.
+**맵과 섹터는 갱신 속도가 다르다.** 맵은 판이 크게 바뀔 때만 의미가 있어서 15분마다 볼 이유가 없고,
+섹터는 자주 보고 싶다. 그리고 before는 화면을 읽는 기준이라 발송 주기와 묶일 이유가 없다.
 
-## 5-1. 발송 주기를 둘로 나눈다
-
-### 별도 스케줄로 나누지 않는다
-
-발송은 지금처럼 수집 tick(`collectMarketData`) 안에서 게이팅한다. `@Scheduled`를 하나 더 만들면
-안 된다. 수집이 스냅샷을 쓰고 발송이 그것을 읽는데, 같은 시각에 뜨는 두 트리거의 실행 순서는
-보장되지 않는다. 지금 코드가 한 메서드에 묶어둔 이유가 이것이고 그 판단은 유지한다.
-
-### 지금 판정식은 60분을 넘는 주기를 표현하지 못한다
-
-```java
-int offset = minute - sendMinute;
-boolean onSchedule = offset >= 0 && offset % sendIntervalMinutes == 0;
-```
-
-`minute`은 0~59라 주기가 60을 넘으면 매시 걸리거나 아예 안 걸린다. 기준점을 그날의 한 시각으로
-잡고 거기서부터 경과한 분으로 판정해야 한다.
-
-### 새 규칙
+그래서 셋을 분리한다.
 
 ```
-기준점     그날 startHour:sendMinute (예: 08:10)
-정규 발송   shouldCollect 이고, 경과분 >= 0 이고, 경과분 % 주기 == 0
-마감 리포트  shouldCollect 가 꺼졌고, 지금이 endHour:sendMinute (예: 20:10). 하루 한 번
-그 밖      발송하지 않는다
+발송 주기      15분
+맵 포함 주기    2시간 (그 tick에만 맵 이미지를 함께 보낸다)
+before        15분 고정 (주기와 무관)
 ```
 
-**`경과분 >= 0`을 빠뜨리지 않는다.** cron은 `0 0/5 8-20`이라 08:00과 08:05에도 tick이 뜬다.
-기준점보다 이르면 경과분이 음수이고, 자바의 `%`는 음수에 음수를 돌려주므로 대부분은 우연히
-걸리지 않는다. 그러나 `sendMinute`이 주기의 배수인 조합(예: sendMinute=30, 주기 15)에서는
-`-30 % 15 == 0`이 되어 08:00에 발송된다. 지금 코드의 `offset >= 0`이 하던 역할이 이것이다.
+발송 모양도 둘로 갈린다.
 
-15분 주기는 08:10, 08:25, 08:40, …, 2시간 주기는 08:10, 10:10, 12:10, … 이 된다.
+```
+2시간 격자 (08:10, 10:10, …, 20:10)
+  메시지 1   코스피 맵 + 코스피 섹터 + 캡션(코스피 TOP3)
+  메시지 2   코스닥 맵 + 코스닥 섹터 + 캡션(코스닥 TOP3)
 
-마감 리포트를 시각 하나로 고정하는 이유는 마감 이후엔 `shouldCollect`가 꺼져 `dataTime`이 마감
-정각에 묶이기 때문이다. 그 뒤로는 몇 번을 보내도 내용이 같다. 주기 격자에 맡기면 20:25, 20:40,
-20:55에 같은 메시지가 반복된다. 마감 리포트의 before는 가장 긴 주기를 쓴다. 그날 마지막 메시지에
-15분 델타는 의미가 적다.
+그 밖의 15분 지점 (08:25, 08:40, …)
+  메시지 1   코스피 섹터 + 코스닥 섹터 + 캡션(코스피 TOP3 + 코스닥 TOP3)
+```
 
-### before는 주기에서 파생시킨다
+2시간 격자의 **메시지 구성**은 지금 그대로다. 마켓별 2건, 각각 맵+섹터 2장에 그 마켓 TOP3 캡션.
 
-주기가 15분이면 before=15, 2시간이면 before=120이다. 별도 프로퍼티로 두지 않는다. 둘이 어긋나야
-할 이유가 생기면 그때 나눈다.
+**다만 그 섹터 이미지의 before 기준은 바뀐다.** 지금은 2시간 격자 tick에서 `beforeMinutes=120`이
+캡처 URL로 넘어가 화면이 "120 분 전 대비"로 그려진다. before를 15분으로 고정하면 같은 자리가
+"15 분 전 대비"가 된다. 사용자가 그렇게 정했다 — 맵을 덜 자주 보는 것과 델타 기준을 길게 잡는 것은
+별개다.
 
-### 프로퍼티
+새로 생기는 것은 "섹터만, 두 마켓 한 메시지" 한 가지다.
+
+## 부하가 절반 가까이 준다
+
+5단계 배포 때 감수했던 부하가 상당 부분 해소된다.
+
+```
+              하루 발송   캡처 장수   텔레그램 메시지
+5단계          49회       196장       98건
+6단계          49회       112장       56건
+```
+
+발송 tick 수는 같다(08:10~20:10, 15분 간격 49회). 그중 2시간 격자가 7회, 나머지 42회가 섹터만이다.
+섹터만 발송은 캡처가 4장에서 2장으로, 메시지가 2건에서 1건으로 준다.
+
+## 6-1. 프로퍼티를 다시 잡는다
+
+5단계의 프로퍼티는 "주기 목록 + 겹침 정책"이었다. 주기가 하나가 되고 before가 독립하면서 그 구조가
+통째로 필요 없어진다.
 
 ```properties
 telegram.send-minute=10
-telegram.send-interval-minutes=15,120
-telegram.overlap=longest-only
+telegram.send-interval-minutes=15
+telegram.map-interval-minutes=120
+telegram.before-minutes=15
 ```
 
-- `send-interval-minutes`는 쉼표로 구분된 목록이다. `TelegramProperties`의 필드 타입을
-  `int`에서 `List<Integer>`로 바꾸면 별도 변환 없이 바인딩된다
-- `overlap`은 `all`과 `longest-only` 두 값을 갖는 enum이다. 두 주기가 같은 tick에 걸렸을 때
-  둘 다 보낼지, 주기가 긴 쪽만 보낼지를 정한다. 사용자가 아직 정하지 않았고 운영하면서 판단할
-  것이라 코드 수정 없이 뒤집을 수 있어야 한다
+- `send-interval-minutes`는 **다시 단수 `int`**가 된다. 5단계에서 `List<Integer>`로 바꾼 것을
+  되돌린다
+- `telegram.overlap`과 `TelegramOverlap` enum을 **삭제한다.** 주기가 하나뿐이라 겹칠 일이 없다.
+  "겹치면 긴 쪽만"이라는 개념 자체가 사라진다
+- `before-minutes`는 새 프로퍼티다. 주기에서 파생시키지 않는다
 
-`TelegramProperties`는 record라 필드를 바꾸면 생성자 시그니처가 바뀐다. 아래가 함께 깨지므로
-같은 커밋에서 고친다.
+`TelegramProperties`의 record 시그니처가 또 바뀐다. 5단계와 같은 자리가 깨지므로 같은 커밋에서
+고친다.
 
 | 파일 | 위치 |
 |---|---|
 | `EscalationNotifierTest` | `new TelegramProperties(...)` 2곳 |
-| `MarketMapAndSectorTelegramReportSenderTest` | `new TelegramProperties(...)` 1곳 |
-
-### 판정을 객체로 뺀다
-
-인자 여섯 개짜리 `isSendCycle` static 메서드를 없애고, 발송 시각 판정을 담당하는 객체를 만든다.
-
-```
-due(지금 시각, shouldCollect) → 이번 tick에 발송할 주기 목록
-```
-
-- 겹침 정책은 이 목록을 거르는 마지막 단계다. `longest-only`면 가장 큰 주기 하나만 남긴다
-- `CollectionScheduler`의 `startHour` 필드는 이 객체로 옮겨간다. 스케줄러에는 남기지 않는다
-- **`endHour`는 양쪽이 다 갖는다.** 스케줄러는 `shouldCollect`와 `dataTime` 계산에 계속 쓰고,
-  판정 객체는 마감 리포트 시각 판정에 쓴다. 같은 `${collect.end-hour}`를 각자 주입받는다.
-  한쪽이 다른 쪽에서 꺼내 쓰는 구조로 만들지 않는다 — 판정 객체가 스케줄러를 알게 되면 스프링
-  없이 단위 테스트한다는 조건이 깨진다
-- **위치는 `domain/notification/schedule`이다.** 이 객체가 답하는 질문은 "지금 발송할 때인가"라
-  판단의 주인은 notification이다. `collect.*` 두 값을 읽는 것은 수집 격자에 맞추기 위한
-  제약일 뿐 소속의 근거가 아니다
-- 스프링 없이 단위 테스트할 수 있어야 한다. 08:00 / 08:10 / 08:40 / 10:10 / 20:10 / 20:40이 각각
-  어떤 주기에 걸리는지를 겹침 정책 두 값 모두에 대해 검증한다. 08:00은 기준점 이전이라 아무
-  주기에도 걸리지 않아야 한다
+| `MarketMapAndSectorTelegramReportSenderTest` | `new TelegramProperties(...)` |
+| `TelegramSendScheduleTest` | 상수와 헬퍼 전반 |
 
 ### 기동 시 검증
 
-아래를 만족하지 않으면 애플리케이션이 뜨지 않게 한다. 조건에 안 맞으면 발송이 조용히 사라지는데,
-그것이 지금 고치고 있는 08:40 버그와 같은 종류의 사고다. 로그 경고로는 부족하다.
+5단계에서 넣은 검증을 새 프로퍼티에 맞춰 다시 쓴다. `IllegalStateException`을 던지는 방식은
+그대로 유지한다 — 기동 실패 자체가 신호라 `EscalateException`을 쓰지 않는다.
 
-- 각 주기와 `send-minute`이 `collect.interval-minutes`의 배수일 것
-- **`send-minute > 0`일 것.** 마감 리포트 조건은 "`shouldCollect`가 꺼졌고 `endHour:sendMinute`"인데
-  `shouldCollect`는 `시각 <= endHour:00`이라 20:00 정각에는 아직 `true`다. `send-minute=0`이면 두
-  조건이 동시에 성립할 수 없어 마감 리포트가 영영 안 나간다. 그런데 `0 % 5 == 0`이라 배수 검증만
-  으로는 통과한다. 별도 조건으로 막는다
+- `send-minute > 0` — 유지. `shouldCollect`가 `시각 <= endHour:00`까지 true라서 0이면 마감 리포트
+  조건이 영영 성립하지 않는다
+- `send-interval-minutes > 0`, `before-minutes > 0`, `map-interval-minutes > 0`
+- `send-minute`, `send-interval-minutes`, `before-minutes`가 `collect.interval-minutes`의 배수
+- **`map-interval-minutes`가 `send-interval-minutes`의 배수** — 새로 필요한 검증이다. 배수가
+  아니면 맵 포함 tick이 발송 격자와 어긋나 맵이 영영 안 나가거나 엉뚱한 시각에 나간다
 
-### 08:40 버그는 여기서 사라진다
+**프로퍼티 바인딩 자체를 검증하는 테스트를 산출물에 넣는다.** `TelegramProperties`는 record라
+프로퍼티 이름을 틀리면 `int`가 0으로 바인딩되고, 위 검증이 기동을 막는다. 설계대로 동작하지만
+**드러나는 시점이 배포 직후 컨테이너 기동 실패**다. 이 레포에는 `@Tag("manual")`이 아닌
+`@SpringBootTest`가 하나도 없어서 `./gradlew test`로는 이 배선이 한 번도 돌지 않는다.
 
-```java
-boolean isBoundaryHour = hour == startHour || hour == endHour;
-return !isBoundaryHour || minute == sendMinute;
-```
+`ApplicationContextRunner`에 `@EnableConfigurationProperties(TelegramProperties.class)`와
+`application.properties`의 네 값을 그대로 주고, 바인딩된 record의 필드가 그 값과 같은지 단언한다.
+DB도 외부 API도 필요 없어 CI에서 돈다. 7단계가 같은 이유로 logback 결선 테스트를 산출물에 넣는
+것과 같은 성격이다.
 
-요청받은 것은 20:40 스킵뿐이었는데 `startHour`까지 경계로 묶으면서 08:40도 함께 막혔다.
-javadoc의 근거도 사실이 아니다. "startHour는 아직 장이 열리기 전이라 30분 뒤에도 데이터가
-그대로다"라고 적혀 있는데, `shouldCollect`는 `시각 <= endHour:00`이라 08:40에도 수집기가
-정상으로 돌고 새 스냅샷이 생긴다.
+## 6-2. 판정을 "보낼지 + 맵을 포함할지"로 바꾼다
 
-새 규칙에는 경계 시간이라는 개념 자체가 없다. 진짜 규칙은 "직전 발송과 내용이 같으면 보내지
-않는다"이고 그건 `shouldCollect`와 마감 리포트 규칙이 이미 표현한다.
-
-`CollectionSchedulerTest`의 `isSendCycle_수집_시작_시각의_추가_사이클은_개장_전이라_발송되지_않는다`
-가 지금 버그를 고정하고 있다. 08:40은 발송이 정답이다.
-
-다만 이 단언 하나만 뒤집는 것은 불가능하다. 그 파일의 테스트 7개가 전부 `CollectionScheduler.isSendCycle(...)`
-을 직접 부르는데 그 static 메서드가 사라지기 때문이다. **`CollectionSchedulerTest`는 새 판정 객체를
-대상으로 다시 쓴다.** 지금 7개가 검증하던 시각들(startHour의 sendMinute, endHour의 sendMinute,
-endHour의 추가 사이클, 중간 시각, 간격에 안 맞는 시각, sendMinute보다 이른 시각, 그리고 08:40)은
-새 테스트에서도 전부 다뤄야 한다. 08:40만 결과가 뒤집히고 나머지 여섯은 같아야 한다.
-
-### 발송 실패 알림
-
-지금은 발송 시각마다 수집 실패 여부를 보고 알림 또는 리포트 중 하나를 보낸다. 발송 대상이 여럿이
-되어도 실패 알림은 그 tick에 한 번만 보낸다. 리포트 두 통이 나갈 자리에 실패 알림 두 통이 나가면
-안 된다.
-
-## 5-2. before를 이미지에도 적용한다
-
-### 이미지의 before를 백엔드가 정하지 못한다
-
-렌더러 캡처 URL은 `/category-change-rate?market=KOSPI`뿐이라 before가 넘어가지 않는다. 프론트는
-`usePersistedState('categoryChangeRate.beforeMinutes', 30)`인데 렌더러는 요청마다 Chromium을
-새로 띄우므로 sessionStorage가 항상 비어 있다. **결과적으로 이미지는 언제나 30분 전 기준으로
-그려지고, 백엔드에는 그것을 바꿀 수단이 없다.**
-
-주기별로 before를 달리 주려면 이 통로부터 뚫어야 한다.
-
-**텍스트 쪽은 before를 아예 쓰지 않는다.** `CategoryRankingTextBuilder.buildRankingText`는
-`item.now()`만 읽고 `item.before()`는 한 번도 참조하지 않는다. `BEFORE_MINUTES = 60`은
-`findRankingForMarkets`가 before 스냅샷을 한 번 더 조회하게 만들 뿐 출력에 영향이 없다.
-그러니 "이미지와 텍스트가 서로 다른 before를 쓴다"는 어긋남은 존재하지 않는다. 같은 이유로
-`beforeMinutes`를 텍스트 경로에 흘려도 텍스트 출력은 달라지지 않는다 — 버리는 조회가
-주기에 맞춰질 뿐이다. **이걸 어긋남을 고치는 작업으로 설명하지 않는다.**
-
-### 프론트
-
-`CategoryChangeRatePage`가 `market`을 쿼리 파라미터로 받는 것과 같은 방식으로 `beforeMinutes`도
-받는다. 같은 `useEffect`에서 처리하고, 반영한 뒤 주소에서 지우는 것까지 동일하다.
-
-- 양의 정수가 아니면 무시하고 기존 값을 쓴다
-- 이 변경만 단독으로 배포해도 지금 동작은 달라지지 않는다. 파라미터가 없으면 지금과 같다
-
-### 백엔드
-
-`beforeMinutes`를 발송 경로 전체에 인자로 흘린다.
-
-```
-CollectionScheduler → DailyMarketReportSender → MarketMapAndSectorTelegramReportSender
-                                                   ├─ 섹터 캡처 URL에 &beforeMinutes=N
-                                                   └─ CategoryRankingTextBuilder
-```
-
-`BEFORE_MINUTES` 상수는 없앤다. 마켓맵 캡처 URL은 before 개념이 없으므로 건드리지 않는다.
-
-시그니처가 바뀌면 위 그림에 없는 곳들이 함께 깨진다. 전부 같은 커밋에서 고친다.
-
-| 파일 | 왜 |
-|---|---|
-| `MarketMapTelegramReportSender` | `buildRankingText`를 부른다. `@Scheduled`만 주석 처리돼 있을 뿐 살아 있는 빈이고 `CollectionScheduler`가 필드로 주입받는다 |
-| `TelegramReportSender` | 위의 부모 추상 클래스. `buildText(LocalDateTime, MarketQuery)` 시그니처 |
-| `MarketMapAndSectorTelegramReportSenderTest` | `buildRankingText` 스텁 2곳 |
-| `CategoryRankingTextBuilderTest` | `buildRankingText` 호출 6곳 |
-| `TelegramReportCycleManualTest` | `dailyMarketReportSender.send(dataTime, true)` |
-| `MarketMapTelegramReportSenderManualTest` | 위 sender를 직접 부른다 |
-
-**매뉴얼 테스트도 컴파일 대상이다.** `build.gradle`의 `manualTest` 태스크는
-`sourceSets.test.output.classesDirs`를 그대로 재사용한다. 실행에서만 `@Tag("manual")`로
-빠질 뿐 `compileTestJava`에는 잡히므로, 여기가 깨지면 완료 기준 1번이 깨진다.
-
-## 5-3. 카테고리 랭킹 조회를 한 번으로 모은다
-
-### 구조
-
-전체 카테고리 랭킹을 확정해서 내려주는 데까지가 공통이고, 필터링은 쓰는 쪽이 각자 한다.
-
-```
-공통(domain/view)   마켓별 랭킹 확정 — 지수 등락률, 카테고리 이름, depth,
-                   대분류 필터, 기본 제외 구간 제외, TOP3까지 전부
-프론트              전체 뎁스가 필요하므로 필터 없는 쪽을 그대로 쓴다
-백엔드 텍스트        확정된 결과를 받아 문자열로만 조립한다
-```
-
-표와 아래 「notification은 포매팅만 한다」가 어긋나지 않게 한다. **필터·정렬·TOP3의 주인은
-view다.** 텍스트 쪽에는 남기지 않는다.
-
-### 응답에 depth와 categoryName을 싣는다
-
-지금은 응답에 `categoryId`밖에 없어서 양쪽이 뎁스를 알아내려고 각자 한 번 더 조회한다.
-
-```
-프론트   useMarketMap 트리를 한 번 더 호출해서 최상위 노드를 대분류로 본다
-백엔드   marketMapCategoryRepository.findAll()로 hasNoParent()를 본다
-```
-
-`CategoryChangeRateItem`에 `depth`와 `categoryName`을 추가하면 둘 다 없어진다. `depth`는
-`MarketMapCategory` 엔티티에 이미 있는 컬럼이다.
-
-**프론트의 zod 스키마도 같이 고친다.** `src/types/api.ts`의 `CategoryChangeRateItemSchema`는
-`{ categoryId, now, before }`인데 zod는 모르는 키를 조용히 버린다. 스키마에 두 필드를 넣지
-않으면 새 값이 화면에 도달하지 않는다.
-
-### 지수 등락률을 붙이는 곳을 하나로 만든다
-
-같은 맵을 두 곳에서 각자 만든다.
-
-```
-MarketMapQueryService.getCategoryChangeRates   findOverviewsBySnapshotTime → Market별 changeRate
-CategoryRankingTextBuilder.buildRankingText    findBySnapshotTime → Market별 changeRate
-```
-
-**동작이 다르지는 않다.** `findRankingForMarkets(markets, snapshotTime, before)`는 마지막에
-`new SnapshotResponse<>(snapshotTime, rankings)`로 인자를 그대로 돌려주므로, 텍스트 경로에서
-"랭킹이 확정한 시각" == `dataTime`이다. 두 경로가 쓰는 시각은 같고 `buildRankingText`에도 그
-주석이 이미 붙어 있다. **없는 버그를 찾지 않는다.** 고치는 이유는 같은 맵을 만드는 코드가 두
-벌이라는 것 하나다.
-
-**`MarketMapQueryService.getCategoryChangeRates`에 스냅샷 시각을 인자로 받는 변형을 만든다.**
-지금의 것은 최신 시각을 구한 뒤 그 메서드에 위임하게 바꾸고, 텍스트 쪽은 `dataTime`으로 같은
-메서드를 부른다. 지수 등락률을 붙이는 코드는 한 곳만 남는다.
-
-한 층 아래(`MarketMapCategoryChangeRateSnapshotService`)는 이미 그 모양이다.
-`findLatestRankingForMarkets`가 최신 시각을 찾아 `findRankingForMarkets`에 위임한다. **그쪽은
-건드리지 않는다.** 없는 것은 지수 등락률을 붙이는 위층의 시각 인자 변형뿐이다.
-
-### notification은 포매팅만 한다
-
-`CategoryRankingTextBuilder.buildRankingText`가 한 메서드에서 다음을 전부 한다.
-
-```
-랭킹 조회 → 지수 등락률 조회 → 전체 카테고리 조회(이름 맵 + 루트 ID 집합)
-→ 제외 구간 조회 → 마켓별 필터·정렬·TOP3 → 텍스트 조립
-```
-
-70줄에 스트림이 3중이고, `domain/notification`인데 조회 의존을 네 개 직접 주입받는다
-(`MarketMapCategoryRepository`, `MarketOverviewSnapshotRepository` 두 리포지토리와
-`MarketMapCategoryChangeRateSnapshotService`, `MarketValueTierThresholdService` 두 서비스).
-`docs/architecture.md`는 조회와 집계를 `domain/view`의 역할로, notification을 "데이터를 밖으로
-내보낸다"로 정해두었다.
-
-대분류만 고르는 것, 기본 제외 구간을 빼는 것, 가중평균을 합치는 것, 정렬해서 TOP3를 자르는 것까지
-전부 view에서 끝낸다. `CategoryRankingTextBuilder`에는 헤더 조립과 `formatPercent`만 남고
-리포지토리 주입은 사라진다.
-
-- 새 메서드는 `MarketMapQueryService`에 둔다. 지수 등락률을 붙이는 층이 거기고, 랭킹 확정은
-  그 층의 일이다. 별도 조회 서비스를 새로 만들지 않는다
-- 반환 타입은 새로 만든다. 마켓, 지수 등락률, 그리고 (카테고리 이름, 등락률) TOP3를 담는다.
-  기존 `CategoryChangeRateMarketRanking`은 화면용(전체 뎁스, 필터 없음)이라 재사용하지 않는다
-- 이동한 로직의 동작이 바뀌면 안 된다. 기존 `CategoryRankingTextBuilderTest`가 검증하던 것(TOP3
-  선정, 대분류 필터, 구간 제외, 포맷)은 옮겨간 자리에서 그대로 검증되어야 한다. 포맷 검증만
-  `CategoryRankingTextBuilder`에 남고 나머지는 view 쪽 테스트로 옮겨간다
-
-### 프론트의 트리 조회 제거
-
-섹터 페이지의 `useMarketMap` 호출은 카테고리 이름과 최상위 ID를 얻으려고만 쓴다. 응답에 둘 다
-실리면 이 호출은 필요 없다.
-
-**`depth == 0`과 `hasNoParent()`는 동치다.** `MarketMapCategory.createParent/createChild`가
-depth를 세팅하고, `MarketMapCategoryService.reparent`가 `changeParent`와 함께 하위 전체 depth를
-`depthDifference`만큼 일괄 갱신한다. 둘이 어긋나는 경로가 없다. 지금 판정("트리의 최상위 노드")과
-새 판정("랭킹 응답의 depth 0")의 차이는 "그 시각 스냅샷 row가 없는 최상위 카테고리"뿐인데, 그건
-어차피 화면 병합 대상에 안 들어오므로 결과가 같다. **확인 절차를 따로 두지 않는다.**
-
-`data-capture-ready`가 `!isLoading && !isTreeLoading`인데 `isTreeLoading`이 사라진다. 조건이
-`!isLoading` 하나로 줄어드는 것이 맞다. 기다릴 것이 하나 줄었으니 캡처는 오히려 빨라진다.
-
-`excludedCategoryIds`(사용자 설정) 필터는 그대로 유지한다.
-
-## 5-4. 그 시각 데이터가 없으면 발송하지 않는다
-
-### 왜 필요한가
-
-텔레그램 이미지의 기준 시각은 백엔드가 정하지 못한다. 렌더러가 프론트 화면을 찍는데 프론트는 최신
-스냅샷을 그린다. 반면 텍스트와 캡션은 `dataTime` 기준이다.
-
-수집기가 예외를 던지면 `lastIndexContributionSuccess`가 false가 되어 리포트 대신 실패 알림이 나간다.
-그런데 예외 없이 그 시각 스냅샷이 안 생긴 경우에는 가드가 없다. 그때 이렇게 된다.
-
-```
-텍스트   dataTime(08:25) 기준 → 데이터 없는 마켓은 결과에서 빠져 비거나 반쪽
-이미지   프론트가 그린 최신(08:20) 화면이 찍힘
-캡션     dataTime(08:25)이 적힘
-```
-
-08:20 이미지에 08:25 캡션이 붙는다. 5분 사이에 큰 변화가 없으니 대개는 티가 안 나지만, 티가 나는 그
-한 번을 막는 것이 이 항목의 목적이다.
-
-### 가드는 `sectorAvailable`이 참일 때만 돈다
-
-이 가드를 무조건 돌리면 지금 있는 장애 대응 경로가 죽는다. **"카테고리 등락률 스냅샷이 그 시각에
-없다"가 정확히 지금의 `sectorAvailable == false` 상황이기 때문이다.**
+`TelegramSendSchedule.due()`가 지금은 주기 목록(`List<Integer>`)을 돌려준다. 주기가 하나가 되면
+목록일 이유가 없고, 대신 "이번 tick에 맵을 함께 보내는가"를 답해야 한다.
 
 ```java
-lastChangeRateSuccess = lastIndexContributionSuccess
-        && run("카테고리등락률스냅샷", () -> captureCategoryChangeRateSnapshots(snapshotTime));
+public TelegramSendKind due(LocalDateTime now, boolean shouldCollect)
 ```
 
-이 단계가 실패하면 그 시각 row가 안 써지고, `sectorAvailable = false`가 발송기까지 내려간다. 지금은
-그때 섹터 이미지만 빼고 맵 이미지는 보내면서 캡션에 "섹터 이미지 생성에 실패했습니다"를 덧붙인다.
-가드를 무조건 돌리면 조회가 비어 발송 전체가 스킵되고 **맵 이미지조차 안 나간다.** 장애가 났는데
-받는 정보가 지금보다 줄어드는 방향이라 받아들이지 않는다.
-`MarketMapAndSectorTelegramReportSenderTest.send_섹터가_불가능하면_맵_이미지만_보내고_캡션에_실패_안내를_덧붙인다`
-가 고정하고 있는 동작이고, 그 테스트는 살아 있어야 한다.
+**`TelegramSendKind`는 `domain/notification/enums`에 별도 파일로 만든다.** `docs/architecture.md`가
+`enums/`를 도메인 enum의 자리로 정해두었고, 마침 같은 패키지에서 `TelegramOverlap`이 사라지는
+참이다. `TelegramSendSchedule` 안의 중첩 enum으로 두지 않는다.
 
-두 상황은 원래 다른 상황이다.
+```java
+public enum TelegramSendKind { NONE, SECTOR_ONLY, WITH_MAP }
+```
 
-| 상황 | 판단 | 결과 |
-|---|---|---|
-| 수집기가 예외를 던졌다 (`sectorAvailable == false`) | 이미 아는 실패다 | 지금 그대로. 맵만 보내고 캡션에 안내. **가드를 돌리지 않는다** |
-| 수집기는 성공했는데 조회가 빈다 (`sectorAvailable == true`) | 조용히 생긴 구멍이다 | 그 마켓 발송을 건너뛴다 |
+판정 규칙이다.
 
-5-4를 만든 이유가 "예외 없이 그 시각 스냅샷이 안 생긴 경우에는 가드가 없다"였으므로, 예외가 던져진
-경우까지 가드에 걸리게 두면 범위를 잘못 잡은 것이다.
+```
+shouldCollect 이고
+  경과분 < 0                              → NONE
+  경과분 % send-interval != 0             → NONE
+  경과분 % map-interval == 0              → WITH_MAP
+  그 밖                                   → SECTOR_ONLY
 
-### 조치
+shouldCollect 가 꺼졌고
+  지금이 endHour:sendMinute               → WITH_MAP (마감 리포트)
+  그 밖                                   → NONE
+```
 
-`sectorAvailable`이 참인 경우에 한해, 발송 직전에 `dataTime`에 그 마켓의 스냅샷이 있는지 확인하고
-없으면 그 마켓 발송을 건너뛴다. 두 마켓 다 없으면 아무것도 보내지 않는다.
+- 기준점은 그대로 **그날 `startHour:sendMinute`**다
+- **`경과분 >= 0`을 빠뜨리지 않는다.** cron이 `0 0/5 8-20`이라 08:00과 08:05에도 tick이 뜬다.
+  자바의 `%`는 음수에 음수를 돌려주므로 대부분 우연히 안 걸리지만, `sendMinute`이 주기의 배수인
+  조합에서는 걸린다
+- **마감 리포트는 `WITH_MAP`으로 고정한다.** 지금 설정(08:10 기준, 2시간 격자)에서는 20:10이
+  격자에 저절로 걸리지만 그 계산에 기대지 않는다. 그날 마지막 메시지에 맵이 빠지면 안 된다
+- `TelegramOverlap`과 `applyOverlap`은 사라진다
 
-- **조용히 건너뛴다.** 사용자 채널로 별도 알림을 보내지 않는다. 받지 못한 것 자체가 신호다
-- 서버 로그에는 WARN으로 남긴다. 어느 시각 어느 마켓이 왜 빠졌는지 알 수 있어야 한다
-- **존재 확인용 쿼리를 새로 만들지 않는다.** 5-3에서 만든 조회 메서드를 그 시각으로 부르고, 결과가
-  비어 있으면 없는 것으로 판정한다. 어차피 발송 경로가 그 조회를 하므로 한 번만 조회해서 판정과
-  본문 생성에 함께 쓴다
-- **가드는 `MarketMapAndSectorTelegramReportSender.send` 안, 캡처보다 먼저다.** 지금 이 메서드는
-  캡처를 먼저 돌고 텍스트를 나중에 만든다. 그 순서 그대로 두면 건너뛸 발송에도 캡처가 먼저 도는데,
-  캡처가 이 작업에서 가장 비싼 동작이라 의미가 없다. **조회 → 판정 → 캡처 → 텍스트 조립 순으로
-  뒤집는다.** `sectorAvailable`이 거짓이라 판정을 건너뛰는 경우에도 순서는 같다. 조회 결과는
-  어차피 텍스트 조립에 쓰이므로 앞으로 당겨도 버리는 일이 없다
-- 마켓별 판정이므로 "두 마켓 다 없으면 아무것도 안 보낸다"는 별도 분기가 아니라 결과다.
-  `DailyMarketReportSender`에는 가드를 두지 않는다
-- **세 갈래를 섞지 않는다.** 지금 있는 두 갈래는 그대로 두고 세 번째만 새로 생긴다
+`TelegramSendScheduleTest`를 새 반환 타입에 맞춰 다시 쓴다. 5단계에서 검증하던 시각은 전부 유지하고
+기대값만 바꾼다. 08:00(기준점 이전), 08:10(맵 포함), 08:20(격자 밖), 08:40(섹터만), 10:10(맵 포함),
+20:10(마감), 20:40(발송 없음).
 
-| 무엇이 실패했나 | 무엇이 나가나 |
+**그 목록만으로는 `경과분 >= 0` 가드가 검증되지 않는다.** 지금 상수 조합(sendMinute 10,
+send-interval 15)에서 08:00의 경과분은 -10이고 `-10 % 15 == -10`이라, 가드를 통째로 빼도 08:00
+테스트가 그대로 통과한다. 5단계 테스트가 이미 그 구멍을 갖고 있다. **`sendMinute`이
+`send-interval`의 배수인 조합을 한 케이스 더 넣는다** — 예를 들어 sendMinute 10, send-interval 5,
+08:00이면 경과분 -10에 `-10 % 5 == 0`이라 가드가 없으면 발송으로 판정된다. 그 케이스에서만
+가드 누락이 드러난다.
+
+**`validate` 테스트도 새 검증 네 가지를 각각 덮게 다시 쓴다.** 기존 6개 중 `주기_목록이_비어_있으면`과
+`주기에_0_이하_값이_있으면`은 `List<Integer>`가 사라지면서 의미가 없어진다. 새로 생기는
+`map-interval-minutes`가 `send-interval-minutes`의 배수가 아닌 경우를 덮는 테스트가 없으면 그
+검증은 아무도 검증하지 않는다.
+
+## 6-3. `beforeMinutes` 인자 연쇄를 걷어낸다
+
+5단계에서 `beforeMinutes`를 `CollectionScheduler → DailyMarketReportSender →
+MarketMapAndSectorTelegramReportSender → …`로 흘렸다. 주기마다 값이 달라지기 때문이었다.
+
+**이제 고정값이라 흘릴 이유가 없다.** 인자를 걷어내고 sender가 `TelegramProperties.beforeMinutes()`를
+직접 읽는다.
+
+되돌아가는 자리다.
+
+- `DailyMarketReportSender.send(dataTime, sectorAvailable, beforeMinutes)`에서 인자 제거
+- `MarketMapAndSectorTelegramReportSender.send(...)`에서 인자 제거. 이 클래스는 `TelegramProperties`를
+  이미 자기 필드로 갖고 있다
+- `TelegramReportSender.buildText(dataTime, query, beforeMinutes)`와
+  `TelegramReportSender.send(dataTime, query, beforeMinutes)` 둘 다 인자 제거
+- `MarketMapTelegramReportSender.buildText(...)`에서 인자 제거. **이 클래스는 `TelegramProperties`를
+  생성자로 받아 `super(...)`에 넘기기만 하고 자기 필드로 보관하지 않는다.** 부모의
+  `private final telegramProperties`는 서브클래스에서 못 읽는다. **자기 필드로도 보관하도록
+  고친다.** 부모 필드를 `protected`로 열거나 게터를 만드는 방식은 쓰지 않는다 — 부모는 발송 흐름만
+  담당하고 값 해석은 각 sender가 한다는 지금 구조를 유지한다
+- `CollectionScheduler.collectMarketDataHourly()`의 `send(snapshotTime, MarketQuery.KOSPI, 60)`에서
+  `60`과 그 주석이 사라진다. **메서드 자체는 건드리지 않는다** — 「절대 건드리지 말 것」의 주석 처리된
+  스케줄 메서드다. 인자만 시그니처에 맞춘다
+- `MarketMapAndSectorTelegramReportSenderTest` — `private final int beforeMinutes = 60;` 상수,
+  `getTopCategoryRankings(...)` stub 3곳, `sender.send(...)` 호출 3곳, 그리고
+  `"/category-change-rate?market=KOSPI&beforeMinutes=60"` 하드코딩된 URL. **테스트가 만드는
+  `TelegramProperties`의 `before-minutes` 값과 그 URL 리터럴을 맞춘다.** stub이 어긋나면 Mockito가
+  null을 돌려줘 NPE로 터진다
+- 매뉴얼 테스트 두 개(`TelegramReportCycleManualTest`, `MarketMapTelegramReportSenderManualTest`)도
+  함께 고친다. `manualTest`는 `sourceSets.test.output.classesDirs`를 재사용하므로 `compileTestJava`에
+  잡힌다
+
+**5단계를 되돌리는 것이 아니다.** 5단계는 "화면 before를 백엔드가 정할 수 있게" 통로를 뚫은 것이고,
+그 통로(캡처 URL의 `&beforeMinutes=N`, 프론트의 쿼리 파라미터 처리)는 그대로 쓴다. 값이 tick마다
+달라지지 않으니 인자로 들고 다니지 않을 뿐이다.
+
+## 6-4. 섹터만 보내는 발송기를 만든다
+
+지금 `MarketMapAndSectorTelegramReportSender`는 **마켓 하나**의 맵+섹터를 한 메시지로 보낸다.
+새로 필요한 것은 **두 마켓**의 섹터를 한 메시지로 보내는 것이다.
+
+**기존 클래스에 모드를 추가하지 않는다. 별도 발송기를 만든다.** 메시지의 단위가 다르기 때문이다
+(마켓 하나 vs 전체). 한 클래스가 두 단위를 갖게 하면 "이 메서드가 만드는 메시지는 몇 개인가"를
+호출부마다 다시 확인해야 한다.
+
+- 이름은 `SectorTelegramReportSender`. 위치는 `domain/notification/service`
+- 시그니처는 `send(LocalDateTime dataTime, boolean sectorAvailable)`. `beforeMinutes`는 6-3대로
+  `TelegramProperties`에서 직접 읽는다
+- **`TelegramReportSender`를 상속하지 않는다.** `MarketMapAndSectorTelegramReportSender`와 같은
+  독립 `@Component`로 만든다.
+
+  그 추상 클래스의 javadoc이 "새 발송 양식이 필요하면 이 클래스를 상속해서…"라고 권하고 있지만
+  여기서는 따르지 않는다. 부모의 `send()`가 캡처 URL을 `target.path() + "?market=" + value`로만
+  만들어 **`&beforeMinutes=`를 붙이지 않기 때문이다.** 상속하면 부모 `send()`를 통째로
+  오버라이드해야 하는데, 그러면 상속으로 얻는 것이 없다. 더 나쁜 것은 오버라이드를 빠뜨렸을 때
+  **컴파일도 테스트도 안 깨진 채** 이미지가 프론트 기본값(30분) 기준으로 나간다는 점이다
+- `MarketQuery.ALL_STOCK`으로 `getTopCategoryRankings`를 **한 번** 호출한다
+- 캡션은 그 결과를 `CategoryRankingTextBuilder.buildRankingText`에 그대로 넘긴다. 마켓별 블록을
+  `\n\n`로 이어붙이는 동작이 이미 있어서 **새로 짤 것이 없다**
+
+```
+#코스피 +0.82%
+반도체 +1.35%
+...
+
+#코스닥 -0.31%
+바이오 +0.94%
+...
+```
+
+### 이미지는 마켓별로 두 장을 따로 찍는다
+
+`?market=ALL_STOCK`으로 한 장만 찍으면 안 된다. 섹터 페이지는 `ALL_STOCK`일 때 코스피와 코스닥을
+**하나로 합쳐서** 그리고, 그러면 마켓 지수 바(노란색)도 사라진다(`items.find(item => item.market ===
+market)`이 `ALL_STOCK`과 일치하는 항목을 못 찾는다). 마켓별 비교가 목적이므로 `?market=KOSPI`와
+`?market=KOSDAQ`을 각각 찍어 한 앨범에 넣는다.
+
+캡처 URL에 `&beforeMinutes=N`을 붙이는 것은 지금과 같다.
+
+### 캡처할 마켓은 랭킹 결과에서 뽑는다
+
+`getTopCategoryRankings`가 그 시각 데이터 없는 마켓을 이미 결과에서 뺀다. **결과에 있는 마켓만
+캡처한다.** 목록을 상수로 박아두면 데이터 없는 마켓의 빈 화면이 앨범에 섞인다.
+
+### 마켓이 하나만 남으면 sendPhoto로 보낸다
+
+한 마켓만 수집에 실패해서 랭킹에 한 마켓만 남는 상태가 이 경로에서 새로 생긴다. 지금은 발송기가
+마켓별로 호출되고 맵 이미지가 항상 먼저 들어가서 1장짜리 앨범이 만들어질 일이 없었다.
+
+**텔레그램 `sendMediaGroup`은 media 배열이 2~10개여야 한다.** 1장으로 부르면 그 tick 발송이
+400으로 실패한다.
+
+- 이미지가 2장이면 `sendMediaGroup`, 1장이면 `TelegramClient.sendPhoto`로 보낸다. 캡션은 같다
+- 있는 데이터를 버리지 않는다. 이건 「부분 성공 포기」와 다른 얘기다 — 그쪽은 "발송하다 실패하면
+  둘 다 포기"이고, 이건 "애초에 한 마켓 데이터밖에 없다"는 상황이다. 기존 마켓별 발송 경로도 있는
+  것만 보낸다
+
+### 부분 성공은 사라진다
+
+`DailyMarketReportSender`에 주석으로 고정해 둔 판단이 이 경로에는 적용되지 않는다.
+
+> KOSPI를 더 중요하게 본다. KOSPI가 성공하고 KOSDAQ이 실패하면 KOSPI는 그대로 나간다.
+
+한 메시지로 합치면 **하나가 실패하면 둘 다 안 나간다.** 사용자가 받아들이기로 했다. 15분마다 오는
+발송이라 한 번 빠져도 15분 뒤에 온다.
+
+**2시간 격자 발송은 지금처럼 마켓별로 나뉘므로 그 순서 규칙과 주석은 그대로 유지한다.**
+`DailyMarketReportSender`의 그 주석을 지우지 마라.
+
+### 섹터 스냅샷이 없으면 아무것도 보내지 않는다
+
+`sectorAvailable`이 false면(카테고리 등락률 수집이 예외를 던진 경우) 섹터 이미지를 못 그린다.
+섹터만 보내는 발송에는 대신 내보낼 맵이 없으므로 **보낼 것이 아무것도 없다.**
+
+- **발송하지 않는다.** 서버 로그에 WARN만 남긴다
+- 사용자 채널로 실패 안내를 보내지 않는다. 15분마다 오던 것이 안 오는 것 자체가 신호다
+- 수집기 실패는 `CollectionScheduler.run()`이 이미 개발자 에스컬레이션으로 따로 알린다
+- 2시간 격자 발송은 지금 그대로다. 맵 이미지가 나가고 캡션에 "섹터 이미지 생성에 실패했습니다"가
+  붙는다. 그러니 **최대 2시간 안에는 사용자 채널에서도 상태를 알 수 있다**
+
+### 테스트를 산출물에 포함한다
+
+`SectorTelegramReportSenderTest`를 함께 만든다. 분기가 넷이라 `docs/rules/testing.md`의 기준에
+걸리고, `docs/rules/process.md`는 테스트 없음을 리뷰 차단 사유로 정해두었다.
+
+| 덮을 것 | 기대 |
 |---|---|
-| `lastIndexContributionSuccess == false` | 리포트 대신 데이터수집 실패 알림 (기존) |
-| 카테고리 등락률 스냅샷 (`sectorAvailable == false`) | 맵 이미지 + 캡션에 섹터 실패 안내 (기존) |
-| 실패는 없는데 그 시각 조회가 빔 | 아무것도 안 나감. 서버 로그에만 WARN (이번에 추가) |
+| `sectorAvailable == false` | 캡처도 발송도 하지 않는다. WARN만 |
+| 랭킹 결과가 통째로 빔 | 캡처도 발송도 하지 않는다 |
+| 두 마켓 다 있음 | 섹터 2장을 `sendMediaGroup` 하나로. 캡션에 두 마켓 블록 |
+| 한 마켓만 있음 | 그 마켓만 캡처해서 `sendPhoto`. `sendMediaGroup`을 부르지 않는다 |
 
-### 이렇게 하면 이미지와 텍스트의 시각이 자동으로 맞는다
+`MarketMapAndSectorTelegramReportSenderTest`가 같은 성격의 기존 테스트다(Mockito, DB 없음).
+그 패턴을 따른다. 캡처 URL에 `&beforeMinutes=`가 붙는지도 이 테스트에서 확인한다 — 상속을 쓰지
+않기로 한 이유가 그것이 조용히 빠지는 것을 막기 위해서다.
 
-건너뛰지 않았다는 것은 `dataTime`에 스냅샷이 있다는 뜻이고, 그러면 그 시각이 최신이므로 프론트가
-그리는 화면과 텍스트의 기준이 같아진다. 캡처 URL에 시각을 넘기는 방식(프론트에 시각 지정 조회를
-새로 만드는 것)은 채택하지 않는다. 화면은 항상 최신을 보여준다는 원칙과 어긋난다.
+`MarketMapAndSectorTelegramReportSender`에 있는 가드(수집은 성공했는데 그 시각 조회가 비는 경우)는
+이 발송기에도 같은 규칙으로 적용한다.
+조회 결과가 통째로 비면 발송하지 않는다.
 
-## 5-5. 마켓 순서 의존성을 주석으로 고정한다
+## 6-5. 스케줄러가 두 발송기를 가른다
 
-`DailyMarketReportSender.send`가 KOSPI를 먼저, KOSDAQ을 나중에 부른다. 그 사이에 예외를 잡는 곳이
-없어서 KOSPI에서 실패하면 KOSDAQ은 시도조차 되지 않고, KOSDAQ에서 실패하면 KOSPI는 이미 나간 뒤다.
+`CollectionScheduler.collectMarketData`의 발송 게이팅이 이렇게 바뀐다.
 
-이건 사고가 아니라 의도다. KOSPI를 더 중요하게 보기 때문에 그렇게 두었다. 그런데 그 의도가 코드
-어디에도 없고, 두 줄의 호출 순서에만 담겨 있다. 5-1에서 이 메서드에 `beforeMinutes`가 인자로 들어가고
-호출부가 바뀌므로, 모르고 손대면 조용히 뒤집힌다.
+```
+TelegramSendKind kind = telegramSendSchedule.due(snapshotTime, shouldCollect);
 
-- 주석으로 고정한다. 내용은 "KOSPI를 더 중요하게 본다. KOSPI가 성공하고 KOSDAQ이 실패하면 KOSPI는
-  그대로 나가고, KOSPI가 실패하면 예외가 올라가 KOSDAQ은 시도하지 않는다. 이 두 줄의 순서가 그
-  규칙이다"
-- **`Market.values()` 순회로 바꾸지 않는다.** 순서가 enum 선언에 묻혀 더 안 보이게 된다
-- 부분 성공을 허용하도록 바꾸지 않는다. 이번 범위가 아니다
+kind == NONE          → 아무것도 하지 않는다. 실패 알림도 보내지 않는다
+그 밖:
+  수집 실패            → 데이터수집실패알림 한 번. WITH_MAP/SECTOR_ONLY 구분과 무관하다
+  kind == WITH_MAP    → dailyMarketReportSender.send(...)   (마켓별 2메시지)
+  kind == SECTOR_ONLY → sectorTelegramReportSender.send(dataTime, sectorAvailable) (1메시지)
+```
 
-## 5-6. TelegramClient가 EscalateException을 던지지 않게 한다
+**실패 알림은 발송 tick 안에서만 나간다.** 지금 코드도 `if (!dueCycles.isEmpty())` 안쪽에 있다.
+`kind == NONE`일 때도 보내도록 만들면 cron이 도는 5분마다, 하루 150번 넘게 실패 알림이 나간다.
+`CollectionScheduler` 테스트가 없어서 이 회귀는 배포 전에 아무것도 못 잡는다.
 
-### 문제
-
-`EscalateException`은 javadoc에 "발생 즉시 개발자에게 텔레그램 알림을 발송하는 예외"라고 선언된
-타입이다. 그것을 텔레그램 전송기 안에서 던지면, 소스를 읽는 사람에게 "텔레그램 실패를 텔레그램으로
-알리려 한다"로 읽힌다. 실제 의도는 "전송이 실패했다"뿐이고, 알릴지 말지는 `CollectionScheduler.run()`이
-정한다.
-
-동작은 지금도 문제없다. `run()`이 전부 잡아 삼키고, 알림 발송이 또 실패해도 `EscalationNotifier`가
-`catch`로 막아서 순환도 생기지 않는다. 고치는 이유는 **코드에 적힌 의도가 실제와 다르기 때문**이다.
-
-부수적으로, `EscalateException.wrap`은 이미 `EscalateException`이면 그대로 반환한다. 그래서 지금은
-`run()`이 넘기는 `collectorName`이 context에 붙지 않는다.
-
-### 조치
-
-`TelegramClient` 전용 예외를 만들어 그것을 던진다. `RuntimeException`을 직접 상속한 평범한 예외다.
-
-- `BusinessException`을 상속하지 않는다. `sealed`이고 그 목록은 HTTP 상태 코드 매핑표다. 컨트롤러까지
-  도달하지 않는 예외를 거기 넣으면 안 된다. `permits`도 늘리지 않는다
-- ErrorCode를 갖지 않는다. 마스킹된 메시지와 원본 타입명만 갖는다. 알림 제목은
-  `COLLECTOR_EXECUTION_FAILED | context : 일일마켓리포트발송`이 되고, 원인은 메시지로 붙는다
-- **키움 신호 예외들과는 다른 모양이다.** `KiwoomRateLimitException`/`KiwoomTransientFailureException`은
-  javadoc에 "상태도 메시지도 갖지 않는다"고 못박은 빈 클래스다. `@Retryable(retryFor = ...)`의 타입
-  신호로만 쓰이기 때문이다. 이건 값을 실어 나르므로 그 둘을 본떠 만들지 않는다
-- **정보가 하나 줄어드는 것을 감수한다.** 지금은 `TELEGRAM_MESSAGE_SEND_FAILED`와
-  `TELEGRAM_IMAGE_SEND_FAILED`가 알림 제목에 구분돼 뜨는데, 새 예외는 ErrorCode가 없으므로 둘 다
-  `COLLECTOR_EXECUTION_FAILED`로 통일된다. 대신 지금 안 붙는 `collectorName`이 붙는다. 메시지냐
-  이미지냐는 본문의 원본 타입명과 마스킹된 메시지로 구분한다
-- **원본 예외를 cause로 달지 않는다.** RestClient 예외 메시지에는 요청 URI가 들어 있고 거기에 봇
-  토큰이 박혀 있다. cause로 달면 예외 로그 파일의 스택트레이스와 알림 본문에 토큰이 샌다. 새 예외는
-  `SecretMasker`로 마스킹한 메시지와 원본 타입명만 갖는다
-- 4단계에서 넣은 `maskedFailure` 헬퍼는 이 과정에서 사라진다. `Object[]`를 반환하는 형태였는데 타입
-  정보가 없어 좋은 모양이 아니었다. 새 예외를 만들어 돌려주는 메서드로 대체한다
-
-### ScreenshotClient와 KrxCrawler는 건드리지 않는다
-
-둘도 `EscalateException`을 직접 던진다. 그래서 이번 변경으로 클라이언트 셋 중 하나만 다른 패턴이 된다.
-그래도 `TelegramClient`만 바꾼다.
-
-`TelegramClient`가 가진 문제는 자기 참조다. 자기가 죽었는데 자기로 알리라고 한다. 렌더러나 KRX가
-죽어도 텔레그램은 살아 있으므로 나머지 둘에는 그 문제가 없다. 다른 문제를 가진 하나를 다르게 다루는
-것이지 일관성을 깨는 것이 아니다. 셋을 통일하는 작업은 `docs/backlog.md`의 「클라이언트마다 던지는
-예외의 성격이 다르다」에 이미 적혀 있다. **구현 세션이 문서를 고칠 일은 없다.**
-
-`EscalationNotifierTest`가 `EscalateException`을 스텁으로 던지는데, 이 변경 뒤에는 컴파일은 되지만
-현실에 없는 상황을 검증하게 된다. 새 예외로 바꾼다.
+- 5단계의 `for (int beforeMinutes : dueCycles)` 반복은 사라진다. 한 tick에 한 종류만 나간다
+- `run(...)`으로 감싸는 것도 그대로다. 발송기 이름만 갈린다
+- `for` 루프 위의 "겹침 정책이 all이면 …" 주석도 루프와 함께 사라진다
 
 ## 이 단계에서 하지 않는 것
 
-- **대/중/소 토글 UI.** 이번에는 응답에 `depth`를 싣고 프론트가 그것으로 거르는 데까지만 한다.
-  토글은 별도 작업으로 뺀다
-- **랭킹 규칙의 이중 구현.** 화면과 텍스트가 각자 대분류 필터, 기본 제외 구간, TOP3를 구현하고
-  있다. 백엔드가 순위를 확정해 내려주고 프론트는 그리기만 하는 구조로 가야 하는데, 화면은
-  전체를 보여주고 텍스트만 TOP3라서 단순히 합칠 수 없다. `docs/backlog.md` 참고
-- **렌더러 Chromium 재사용.** backlog에 있다. 아래 부하 항목과 관련되지만 이번 범위가 아니다
-- **`ScreenshotClient`와 `KrxCrawler`의 예외 구조.** 5-6 참고. `TelegramClient`만 바꾼다
-- **알림 채널 이중화.** 텔레그램이 통째로 죽으면 알림이 전달되지 않고 `exception.log`만 남는다.
-  5-6으로도 이건 안 풀린다. `docs/backlog.md` 참고
-- **KOSPI 실패 시 KOSDAQ 부분 발송.** 5-5 참고. 지금 동작을 유지한다
+- **프론트 변경.** 캡처 URL 규약과 쿼리 파라미터 처리는 5단계에서 이미 들어갔다. `beforeMinutes`
+  프리셋에 120을 추가하는 것도 하지 않는다 — 이제 120으로 찍을 일이 없다
+- **맵 페이지의 before.** 마켓맵 캡처 URL에는 before 개념이 없다. 그대로 둔다
+- **`MarketMapAndSectorTelegramReportSender`의 구조 변경.** 2시간 격자 경로는 지금 동작을 유지한다.
+  인자에서 `beforeMinutes`가 빠지는 것 말고는 손대지 않는다
+- **`DailyMarketReportSender`의 마켓 순서 규칙.** 2시간 격자 경로에 그대로 살아 있다
+- **알림 채널 이중화.** `docs/backlog.md` 참고
 
-## 알아둘 것 — 발송 부하
+## 함께 고칠 주석
 
-발송 한 번에 캡처가 4번 일어난다(마켓 2개 × 맵/섹터). 15분 주기면 시간당 16번으로 지금(30분
-주기)의 두 배다. 겹침 정책이 `all`이면 겹치는 tick에서 캡처 8번이 한 tick 안에서 순차로 돈다.
-렌더러 read 타임아웃이 90초라 최악의 경우 5분 tick을 넘겨 다음 수집이 밀린다.
+지시서에 없다고 두면 코드와 주석이 어긋난 채 남는다. 아래는 이 단계에서 거짓이 되는 주석이다.
 
-**부하를 알고도 15분으로 낸다. 사용자가 정했다.** 근거는 캡처 실패의 원인을 고친 뒤로 실패
-사례가 없다는 것이다. 위험을 감수하는 것이지 없다고 보는 것이 아니므로 아래를 알고 시작한다.
+- `TelegramSendSchedule`의 클래스 javadoc과 `due()` javadoc — "발송해야 할 주기(분) 목록",
+  "가장 긴 주기 하나로 마감 리포트"가 전부 사실이 아니게 된다
+- `DailyMarketReportSender`의 클래스 javadoc "5분 주기 발송용" — 5단계에서 이미 낡았고 이제는
+  "2시간 격자 전용"이다
+- `CollectionScheduler`의 겹침 정책 주석 — 위 6-5 참고
+- `TelegramReportSender` 클래스 javadoc의 `ALL_STOCKS` 표기 — enum은 `ALL_STOCK`이다
 
-- tick이 밀리면 스프링 cron이 다음 발화 시각을 새로 잡아 그 사이 tick이 통째로 스킵된다. 그러면
-  그 시각 스냅샷이 아예 없고, `findRankingForMarkets`는 정확히 일치하는 시각만 조회하므로 5-4
-  가드가 다음 발송까지 건너뛴다. 캡처가 느려지면 발송이 줄어드는 방향으로 연결된다
-- 15분 주기면 08:10 / 08:25 / 08:40 / 08:55 네 번이 개장(09:00) 전에 나간다. 개장 전에도 수집기는
-  정상으로 돌고 새 스냅샷이 생기므로 내용이 같지는 않다
+## 알아둘 것 — 15분 발송이 하루 42건이다
 
-**되돌리는 방법은 프로퍼티 하나다.** 실패가 늘거나 tick이 밀리기 시작하면
-`telegram.send-interval-minutes`의 앞 숫자를 30으로 올린다. 코드는 건드리지 않는다. 주기를
-프로퍼티로 뺀 이유가 이것이다.
+합쳐도 하루 56건이다. 알림이 많다고 느껴지면 `telegram.send-interval-minutes`를 30으로 올리면
+된다. 그러면 하루 25회 발송(WITH_MAP 7회, SECTOR_ONLY 18회), 메시지 32건이 된다.
+`map-interval-minutes=120`은 30의 배수라 검증에 걸리지 않는다.
+
+반대로 맵을 더 자주 보고 싶으면 `map-interval-minutes`를 60으로 내린다. 코드 수정 없이 둘 다
+프로퍼티로 조절된다.
 
 ## PR 설명에 적을 것
 
-### 프론트
+- 프로퍼티 네 개의 값과, `overlap`이 왜 사라졌는지
+- 하루 발송 횟수·캡처 장수·메시지 건수가 5단계 대비 어떻게 달라지는지
+- `beforeMinutes` 인자 연쇄를 걷어낸 범위. 5단계를 되돌리는 것이 아니라는 설명
+- 섹터만 보내는 경로에서 부분 성공이 사라진다는 것과, 2시간 격자 경로에는 마켓 순서 규칙이 그대로 살아 있다는 것
+- `sectorAvailable`이 false일 때 섹터만 발송이 조용히 빠진다는 것. 배포 후 확인 지점이다
+- **2시간 격자로 오는 섹터 이미지의 before 기준이 120분에서 15분으로 바뀐다는 것.** 사진에 찍히는
+  "N 분 전 대비" 글자가 눈에 띄게 달라진다. 메시지 구성은 그대로이므로 이것만 따로 적는다
 
-- `beforeMinutes` 파라미터가 없으면 동작이 지금과 같다는 것
-- 트리 조회를 제거했는지, 제거했다면 카테고리 목록이 같은지 어떻게 확인했는지
+### 배포 후 확인 지점
 
-### 백엔드
+- **기동 로그부터 본다.** 프로퍼티 이름이 하나라도 틀리면 `IllegalStateException`으로 컨테이너가
+  안 뜬다. 6-1의 바인딩 테스트가 CI에서 이걸 잡아주지만, 실제 배포 환경의 값은 다를 수 있다
+- 다음 영업일 08:10에 맵+섹터가 마켓별 2건, 08:25에 섹터만 1건이 오는지
+- 08:10 사진과 08:25 사진의 "N 분 전 대비"가 둘 다 15인지
 
-- 이미지의 before를 백엔드가 정하지 못하고 있었다는 것(sessionStorage가 항상 비어 30분 고정).
-  텍스트는 before를 안 쓰므로 "어긋나 있었다"고 적지 않는다
-- 08:40 발송이 복구된다는 것. 배포 후 다음 영업일 08:40 텔레그램이 오는지가 확인 지점이다
-- 프로퍼티로 설정한 주기와 겹침 정책의 초기값
-- `CategoryRankingTextBuilder`에서 옮긴 로직의 목록과 옮긴 자리
-- 그 시각 스냅샷이 없어 발송을 건너뛰는 경로를 어떻게 검증했는지(5-4)
-- `TelegramClient`가 던지는 예외가 바뀌면서 알림 문구가 어떻게 달라지는지(5-6). 배포 후 실패 알림이
-  실제로 그 형태로 오는지가 확인 지점이다
-
-# 6단계 — 예외 로그를 한곳에 모은다
+# 7단계 — 예외 로그를 한곳에 모은다
 
 브랜치명 예: `claude/refactor/exception-log`
 
-5단계가 병합된 뒤에 시작한다. 백엔드 레포만 바꾼다.
+6단계가 병합된 뒤에 시작한다. 백엔드 레포만 바꾼다.
 
 ## 이 단계가 하는 일
 
@@ -656,16 +523,16 @@ lastChangeRateSuccess = lastIndexContributionSuccess
   대표적이다. 알림이 실패한 사실이 정작 예외 파일에 안 남는다
 
 **이 변경으로도 안 들어오는 것이 있다.** 필터는 로그 이벤트에 throwable이 붙어 있는지만 본다.
-throwable 없이 메시지만 찍는 로그는 6-1을 넣어도 그대로 빠진다.
+throwable 없이 메시지만 찍는 로그는 7-1을 넣어도 그대로 빠진다.
 
 - `MethodArgumentNotValidException`(400) — `GlobalExceptionHandler.handleMethodArgumentNotValid`가
-  `log.warn(detail)`로 예외 없이 찍는다. **6-4와 같은 조치를 여기에도 한다.** 예외를 인자로 붙인다
+  `log.warn(detail)`로 예외 없이 찍는다. **7-4와 같은 조치를 여기에도 한다.** 예외를 인자로 붙인다
 - `MethodArgumentTypeMismatchException` 계열 — `isSpringHandledException`에 걸려 다시 던져지고
   스프링 기본 처리로 간다. 스프링의 `AbstractHandlerExceptionResolver.logException`이 throwable
   없이 찍으므로 필터를 통과하지 못한다. **이번에는 손대지 않는다.** 스프링이 잡아 처리하는 경로를
   가져오는 것은 별개의 판단이다
 
-## 6-1. throwable이 붙은 로그를 전부 예외 파일로 보낸다
+## 7-1. throwable이 붙은 로그를 전부 예외 파일로 보낸다
 
 로깅 호출부를 하나씩 고치지 않는다. logback appender에 필터를 걸고 그 appender를 root에 붙인다.
 
@@ -705,9 +572,9 @@ public class ThrowableFilter extends Filter<ILoggingEvent> {
   붙는다는 지금 구조를 바꾸지 않는다
 - root level이 INFO라 그 아래(DEBUG)로 찍는 throwable은 필터가 보지 못한다. 지금 그런 호출은 없다
 
-## 6-2. ESCALATION 전용 로거를 없앤다
+## 7-2. ESCALATION 전용 로거를 없앤다
 
-6-1이 들어가면 전용 로거가 필요 없어진다.
+7-1이 들어가면 전용 로거가 필요 없어진다.
 
 - logback의 `<logger name="ESCALATION">` 블록을 제거한다
 - `EscalationPublisher`의 `ESCALATION_LOG`를 평범한 클래스 로거로 바꾼다. root를 타고 같은 파일에
@@ -716,11 +583,11 @@ public class ThrowableFilter extends Filter<ILoggingEvent> {
   나누는 것은 파일 기록 쪽이다
 
 **중복은 오히려 줄어든다.** 지금 `<logger name="ESCALATION">`에 `additivity="false"`가 없어서
-에스컬레이션 로그는 이미 `exception.log`와 `application.log` 양쪽에 남고 있다. 6-2가 그 블록을
+에스컬레이션 로그는 이미 `exception.log`와 `application.log` 양쪽에 남고 있다. 7-2가 그 블록을
 지우면 경로가 root 하나로 줄어든다.
 
-6-1만 넣고 6-2를 안 넣은 중간 상태에서는 같은 이벤트가 `exception.log`에 두 줄 찍힌다(로거의 직접
-`appender-ref` + root를 타고 한 번 더). 한 PR 안이라 배포에는 나가지 않지만, **6-1과 6-2를 서로
+7-1만 넣고 7-2를 안 넣은 중간 상태에서는 같은 이벤트가 `exception.log`에 두 줄 찍힌다(로거의 직접
+`appender-ref` + root를 타고 한 번 더). 한 PR 안이라 배포에는 나가지 않지만, **7-1과 7-2를 서로
 다른 PR로 쪼개지 않는다.**
 
 logback의 `name="ESCALATION"`과 코드의 `LoggerFactory.getLogger("ESCALATION")`은 문자열로만 짝지어져
@@ -730,7 +597,7 @@ logback의 `name="ESCALATION"`과 코드의 `LoggerFactory.getLogger("ESCALATION
 `EscalationPublisher`, `EscalationNotifier`, `EscalateException` 같은 클래스 이름은 바꾸지 않는다.
 "즉시 알린다"는 개념의 이름이고 파일명과는 층위가 다르다.
 
-## 6-3. 두 로그 파일에 용량 상한을 건다
+## 7-3. 두 로그 파일에 용량 상한을 건다
 
 `application.log`에 지금 상한이 없다. `maxHistory 7`만 있어서 하루에 로그가 폭주하면 그 하루가 디스크를
 채운다. 새로 생기는 위험이 아니라 지금 있는 위험이다. 예외 파일에 400/404가 들어오기 시작하면 같은
@@ -750,7 +617,7 @@ logback의 `name="ESCALATION"`과 코드의 `LoggerFactory.getLogger("ESCALATION
 `${LOG_DIR}:/app/logs` 바인드 마운트라 컨테이너가 아니라 호스트 디스크를 쓴다. `/dev/sda1`이 49G에
 32G 여유이므로 최악의 경우 1.5GB는 여유 안에 들어온다.
 
-## 6-4. 억제된 예외에도 스택을 남긴다
+## 7-4. 억제된 예외에도 스택을 남긴다
 
 `GlobalExceptionHandler`의 catch-all이 5분 억제 창에 걸린 예외를 이렇게 찍는다.
 
@@ -758,14 +625,14 @@ logback의 `name="ESCALATION"`과 코드의 `LoggerFactory.getLogger("ESCALATION
 log.warn("[예상 못한 예외 알림 억제] | key : {} | 억제 누적 : {}건", key, suppressedCount.incrementAndGet());
 ```
 
-throwable이 안 붙어서 6-1의 필터에 걸리지 않는다. **알림은 억제하되 기록은 남긴다**가 맞으므로 예외를
+throwable이 안 붙어서 7-1의 필터에 걸리지 않는다. **알림은 억제하되 기록은 남긴다**가 맞으므로 예외를
 인자로 붙인다. 한 줄이다.
 
 ## 이 단계에서 하지 않는 것
 
 - **로그 수집 플랫폼 도입.** 파일로 남기는 것까지만 한다
 - **파일 이름 변경.** `application.log`와 `exception.log`를 그대로 쓴다
-- **클래스 이름 변경.** 6-2 참고
+- **클래스 이름 변경.** 7-2 참고
 - **알림 채널 이중화.** `docs/backlog.md` 참고. 이번 변경으로 풀리지 않는다
 
 ## 검증

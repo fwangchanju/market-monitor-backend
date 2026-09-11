@@ -33,8 +33,11 @@ public class SectorTelegramReportSender {
     private final MarketMapQueryService marketMapQueryService;
 
     public void send(LocalDateTime dataTime, boolean sectorAvailable) {
+        // 아래 "조회가 비어 있어"와 결과는 비슷해 보여도 성격이 다르다 — 이쪽은 수집기가 예외를 던져
+        // CollectionScheduler.run()이 이미 개발자 에스컬레이션을 보낸 뒤다. 아래쪽은 아무 알림도 안 나간
+        // 조용한 구멍이라 그 WARN이 유일한 흔적이다. 로그를 뒤질 때 둘을 구분할 수 있어야 한다.
         if (!sectorAvailable) {
-            log.warn("{} 시각 카테고리 등락률 스냅샷이 없어 섹터 발송을 건너뜀", dataTime);
+            log.warn("{} 시각 카테고리 등락률 수집이 실패해서 섹터 발송을 건너뜀", dataTime);
             return;
         }
 

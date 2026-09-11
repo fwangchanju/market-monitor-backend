@@ -14,6 +14,10 @@ import org.springframework.stereotype.Component;
 @Component
 public class MarketMapTelegramReportSender extends TelegramReportSender {
 
+    // 부모의 telegramProperties는 private라 서브클래스에서 못 읽는다. 부모는 발송 흐름만 담당하고
+    // 값 해석은 각 sender가 한다는 구조를 유지하기 위해, 게터를 만들거나 부모 필드를 protected로
+    // 열지 않고 자기 필드로 따로 보관한다.
+    private final TelegramProperties telegramProperties;
     private final CategoryRankingTextBuilder categoryRankingTextBuilder;
     private final MarketMapQueryService marketMapQueryService;
 
@@ -24,6 +28,7 @@ public class MarketMapTelegramReportSender extends TelegramReportSender {
             CategoryRankingTextBuilder categoryRankingTextBuilder,
             MarketMapQueryService marketMapQueryService) {
         super(screenshotClient, telegramClient, telegramProperties);
+        this.telegramProperties = telegramProperties;
         this.categoryRankingTextBuilder = categoryRankingTextBuilder;
         this.marketMapQueryService = marketMapQueryService;
     }
@@ -41,9 +46,9 @@ public class MarketMapTelegramReportSender extends TelegramReportSender {
 
     // 섹터 이미지 발송은 비활성화돼 있지만 랭킹 텍스트 자체는 유용하므로, 맵 캡션에 그대로 이어붙인다.
     @Override
-    protected String buildText(LocalDateTime dataTime, MarketQuery query, int beforeMinutes) {
+    protected String buildText(LocalDateTime dataTime, MarketQuery query) {
         return "Custom Map\n"
-                + categoryRankingTextBuilder.buildRankingText(
-                        marketMapQueryService.getTopCategoryRankings(query, dataTime, beforeMinutes));
+                + categoryRankingTextBuilder.buildRankingText(marketMapQueryService.getTopCategoryRankings(
+                        query, dataTime, telegramProperties.beforeMinutes()));
     }
 }

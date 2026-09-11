@@ -25,6 +25,6 @@ class MarketMapTelegramReportSenderManualTest {
 
     @Test
     void sendsMarketMapImageToTelegram() {
-        sender.send(LocalDateTime.now(), MarketQuery.KOSPI, 60);
+        sender.send(LocalDateTime.now(), MarketQuery.KOSPI);
     }
 }

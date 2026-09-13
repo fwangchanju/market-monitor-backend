@@ -527,3 +527,73 @@ public record CategoryChangeRateItem(
 6단계가 섹터만 발송을 `?market=ALL_STOCK` 한 장이 아니라 KOSPI/KOSDAQ 두 장으로 찍기로 했기
 때문에, 이 작업이 들어가면 그 두 장의 "변화율" 그래프에도 노란 바가 생긴다. `ALL_STOCK`으로
 찍었다면 텔레그램 이미지에는 아무 효과가 없었을 작업이다.
+
+---
+
+## 텔레그램 경로가 before를 조회하고 버린다
+
+`CategoryRankingTextBuilder`가 만드는 캡션은 `item.now()`만 쓴다. 그런데 그 값을 만들어주는
+`MarketMapQueryService.getTopCategoryRankings`는 `findRankingForMarkets`를 타고, 거기서 before
+시각 조회가 무조건 한 번 더 돈다.
+
+```java
+// MarketMapCategoryChangeRateSnapshotService.findRankingForMarkets
+Map<Market, Map<Long, List<CategoryTierBreakdown>>> nowByMarket =
+        findTierBreakdownsByCategoryId(markets, snapshotTime);
+Map<Market, Map<Long, List<CategoryTierBreakdown>>> beforeByMarket =
+        findTierBreakdownsByCategoryId(markets, beforeTime);   // 텍스트는 이걸 안 쓴다
+```
+
+`findTierBreakdownsByCategoryId` 한 번이 리포지토리 호출 두 건이다 —
+`marketValueTierThresholdRepository.findAll()`과
+`findByMarketTypeInAndSnapshotTime(markets, snapshotTime)`. 뒤쪽은 카테고리 × 구간 × 마켓 수만큼
+행이 나온다.
+
+「섹터 "변화율" 그래프에 마켓 지수 바를 넣는다」가 들어가면 여기에 `market_overview_snapshot`
+before 조회가 한 건 더 붙는다. 그쪽은 스냅샷 시각당 두 행짜리라 작지만, 버리는 조회가 늘어나는
+방향인 것은 같다.
+
+### 규모
+
+발송 한 번에 `getTopCategoryRankings`를 한 번 부르는데, 맵 포함 tick은 마켓별로 나뉘어 두 번이다.
+
+```
+WITH_MAP     7회 × 2 = 14
+SECTOR_ONLY  42회 × 1 = 42
+             하루 56회
+```
+
+하루 56번 조회하고 버린다. 장애로 이어질 규모는 아니다.
+
+### 구조 — 시각 하나짜리 조립을 만들고 화면이 그걸 두 번 쓴다
+
+시각 하나로 조회하는 부분(`findTierBreakdownsByCategoryId`)은 이미 갈라져 있다. 갈라야 하는 것은
+그 위에서 now/before를 짝짓는 **조립 층**이다.
+
+```
+findTierBreakdownsByCategoryId(markets, 시각)      ← 공통. 지금도 public이다
+  ├─ 텍스트  시각 한 번 → CategoryChangeRateItem.withoutBefore
+  └─ 화면    시각 두 번(now, before) → 짝지어 CategoryChangeRateItem
+```
+
+`CategoryChangeRateItem.withoutBefore` 팩터리가 이미 있어서 텍스트 쪽 조립에 그대로 쓴다. 지수
+등락률도 같은 모양으로 갈린다 — 텍스트는 now 하나, 화면은 `MarketIndexChangeRate(now, before)`.
+
+**갈라야 하는 것은 "시각을 몇 개 조회하느냐"뿐이다.** 카테고리 이름·depth를 붙이는 것, 대분류만
+고르는 것, 기본 제외 구간을 빼는 것, TOP3를 자르는 것은 **한 곳에 그대로 둔다.** 5단계 5-3이
+그걸 한 곳으로 모으느라 한 작업이라, 여기서 되쪼개면 같은 규칙이 다시 두 벌이 된다. 그때
+접었던 선택지로 돌아가는 것이다.
+
+### 선행 조건 — 지수 before 작업 이후
+
+지수 before가 `getCategoryChangeRates`의 조회 구성을 한 번 더 바꾼다. 그게 끝난 뒤에 해야 무엇을
+몇 갈래로 가를지가 확정된다. 같은 파일을 동시에 건드리지 않는 이유도 있다.
+
+### 왜 지금 안 하나
+
+얻는 것이 하루 56번의 작은 조회다. 반면 5-3이 통합한 경로를 손대는 작업이라, 잘못하면 랭킹 규칙이
+다시 두 벌이 된다. 지금은 그 위험이 이득보다 크다.
+
+성능보다 **의미가 드러난다**는 쪽이 실은 더 큰 이유가 된다. 지금은 `toCategoryRankingSummary`를
+읽어도 before가 필요한지 아닌지 알 수 없다. 타입이 "이 경로는 now만 쓴다"를 말해주면 그 확인이
+필요 없어진다. 그래서 성능 때문이 아니라 구조를 정리할 때 함께 하면 된다.

@@ -501,26 +501,69 @@ public record CategoryChangeRateItem(
 
 ### 프론트 변경 범위
 
-- `src/types/api.ts` — `indexChangeRate: z.number().nullable()`을 `index`로 교체. 안쪽은
-  `{ now: z.number(), before: z.number().nullable() }`. zod는 모르는 키를 버리므로 여기를 안 고치면
-  값이 화면에 도달하지 않는다
-- `CategoryChangeRatePage`의 `currentEntriesWithIndex` — `indexRanking?.index != null`을 보고
-  값은 `index.now`
+- `src/types/api.ts` — `MarketIndexChangeRateSchema`(`{ now: z.number(), before: z.number().nullable() }`)를
+  추가하고, `index`와 옛 `indexChangeRate`를 **둘 다 `.nullable().optional()`로** 받는다. 왜 둘 다인지는
+  아래 「배포 순서」 참고. zod는 모르는 키를 버리므로 여기를 안 고치면 새 값이 화면에 도달하지 않는다
+- `CategoryChangeRatePage`에서 둘을 하나로 정규화한다. `index`를 우선하고, 없으면 옛 필드를
+  `{ now, before: null }`로 감싼다. 아래 두 항목은 그 정규화된 값을 쓴다
+- `currentEntriesWithIndex` — 정규화된 값이 있으면 `now`를 쓴다
 - 같은 곳의 `deltaEntries` — **지수 엔트리를 새로 추가한다.** `index?.before != null`일 때만,
   값은 `index.now - index.before`. `categoryId`는 `MARKET_INDEX_CATEGORY_ID`, `isReference: true`로
   "현재" 쪽과 같은 노란 바가 되게 한다
 - "지수 등락률은 '현재' 그래프에만 의미가 있다 … 지금은 그 값을 안 갖고 있어서 뺀다"는 주석을
   고친다
 - `src/mocks/data.ts`의 `categoryChangeRateRankings` 두 줄 — `indexChangeRate`를 `index` 객체로.
-  `marketOverviews`의 값을 `now`로 쓰고 `before`는 적당한 값을 넣는다
+  `marketOverviews`의 값을 `now`로 쓰고 `before`는 적당한 값을 넣는다. 목업은 폴백이 아니라 **새
+  모양만** 내려준다 — 폴백은 옛 백엔드를 위한 임시 경로지 목업이 재현할 상태가 아니다
 
 `market`이 `ALL_STOCK`이면 `items.find(item => item.market === market)`이 못 찾아 지수 바가 두
 그래프 모두에서 사라진다. 지금과 같은 동작이고 의도다.
 
-### 배포 순서 — 백엔드 먼저
+### 배포 순서 — 프론트가 두 모양을 다 받는 릴리즈를 먼저 낸다
 
-프론트가 먼저 나가면 `index`가 없는 응답을 필수 필드로 파싱하려다 실패한다. 백엔드가 먼저 나가면
-프론트가 모르는 키를 zod가 버려서 지금 화면 그대로다.
+**그냥 두면 어느 쪽을 먼저 배포해도 깨진다.** 이 작업은 필드를 더하는 것이 아니라 `indexChangeRate`를
+`index`로 **바꾸는** 것이기 때문이다.
+
+```ts
+// market-monitor-frontend/src/types/api.ts
+indexChangeRate: z.number().nullable(),
+```
+
+zod에서 `.nullable()`은 값이 `null`인 것을 허용할 뿐 **키가 없는 것(`undefined`)은 허용하지 않는다.**
+그건 `.optional()`이다. 그래서
+
+- **백엔드를 먼저 배포하면** 응답에서 `indexChangeRate`가 사라져 `parse`가 실패한다. 섹터 페이지가
+  "데이터를 불러오지 못했습니다"가 되고, **그 화면을 렌더러가 15분마다 캡처해 텔레그램으로 보낸다**
+- **프론트를 먼저 배포하면서 `index`를 필수로 받으면** 아직 안 내려오는 키라 똑같이 실패한다
+
+그래서 프론트가 **두 모양을 다 받는 릴리즈를 먼저** 낸다.
+
+```ts
+indexChangeRate: z.number().nullable().optional(),
+index: MarketIndexChangeRateSchema.nullable().optional(),
+```
+
+읽을 때 `index`를 우선하고 없으면 옛 필드로 넘어간다.
+
+```ts
+const index = ranking.index ?? (ranking.indexChangeRate != null
+  ? { now: ranking.indexChangeRate, before: null }
+  : null)
+```
+
+- 프론트 배포 후, 백엔드 배포 전 — 폴백이 걸린다. `before`가 null이라 "변화율" 지수 바는 안 나오고
+  "현재"는 지금 그대로다. **지금 화면과 동일하다**
+- 백엔드 배포 후 — `index`를 그대로 쓴다. "변화율"에도 노란 바가 붙는다
+
+```
+1. 프론트 PR (호환 스키마 + 폴백 + 변화율 지수 엔트리) → 병합 → 프론트 배포
+2. 백엔드 PR → 병합 → 백엔드 배포
+3. 프론트 폴백 제거 (별도 PR, 서두를 것 없음)
+```
+
+**이 순서는 5단계와 반대다.** 5단계는 필드를 더하기만 해서 백엔드가 먼저여도 프론트가 모르는 키를
+버리고 끝이었다. 이번은 필드를 바꾸는 것이라 다르다. "zod가 모르는 키를 버린다"는 사실만 보고
+같은 결론을 내리면 틀린다.
 
 ### 선행 조건 — 6단계 병합 (충족)
 

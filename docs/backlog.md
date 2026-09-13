@@ -419,3 +419,111 @@ QueryDSL이 만드는 쿼리가 결정하는데 이 프로젝트에 DB 테스트
 판단할 문제다. 지금 나눠서 보면 매번 같은 논의를 반복하게 된다.
 
 `domain/renderer`와 `domain/krx`를 만질 일이 생길 때 함께 본다.
+
+---
+
+## 섹터 "변화율" 그래프에 마켓 지수 바를 넣는다
+
+섹터 페이지는 그래프 두 개("현재", "변화율")를 그리는데 **마켓 지수 바(노란색)가 "현재"에만
+붙는다.** "변화율"은 N분 전 대비 %p 차이인데 지수 쪽 과거값을 백엔드가 안 내려주기 때문이다.
+`CategoryChangeRatePage`의 주석에 그 이유가 그대로 적혀 있다.
+
+6단계로 섹터 이미지가 15분마다 나가는 주력 산출물이 됐다. 그 이미지의 "변화율" 그래프에 비교
+기준이 없으면 반쪽이다.
+
+### 지금 구조
+
+```java
+public record CategoryChangeRateMarketRanking(
+        Market market, List<CategoryChangeRateItem> items, BigDecimal indexChangeRate)
+```
+
+`indexChangeRate`는 `items` 안에 섞이지 않고 랭킹의 형제 필드로 붙는다. 스냅샷 서비스는 지수
+개념을 모르고, `MarketMapQueryService.getCategoryChangeRates`가 `decorateRanking`에서 마지막에
+붙인다. 노란 바는 프론트가 `categoryId: -1`짜리 가짜 엔트리를 지어내 그린다.
+
+### `CategoryTierBreakdown`에 담지 않는다
+
+지수를 breakdown 리스트에 끼워넣는 방법이 먼저 떠오르는데 그러면 안 된다. `CategoryTierBreakdown`은
+**시가총액 구간별 원시 합계**이고 프론트가 `tierId`로 제외 구간을 걸러낸 뒤 합산한다
+(`combineTierBreakdowns`). 지수에는 시가총액 구간이라는 개념이 없다. 끼워넣으면 "이 리스트의
+원소는 전부 구간별 합계"라는 약속이 깨지고, 구간 필터가 지수를 어떻게 다룰지가 매번 예외 처리가
+된다. 카테고리 id가 없다는 것보다 이쪽이 더 근본적인 이유다.
+
+### 조치 — `indexChangeRate`를 now/before 짝으로 바꾼다
+
+```java
+public record MarketIndexChangeRate(BigDecimal now, BigDecimal before) {}
+
+public record CategoryChangeRateMarketRanking(
+        Market market, List<CategoryChangeRateItem> items, MarketIndexChangeRate index)
+```
+
+`beforeIndexChangeRate`를 옆에 하나 더 다는 것보다 낫다. **같은 모양이 이미 응답 안에 있기
+때문이다.**
+
+```java
+public record CategoryChangeRateItem(
+        Long categoryId, String categoryName, int depth,
+        List<CategoryTierBreakdown> now, List<CategoryTierBreakdown> before)
+```
+
+카테고리도 "두 시점의 값, before는 없을 수 있음"이다. 지수도 성격이 같다. 한 응답 안에서 같은
+개념을 두 가지 방식으로 표현하지 않는다. 필드를 평평하게 둘로 늘리면 두 값이 항상 같이 움직여야
+한다는 사실이 타입 어디에도 안 적힌다.
+
+**null 규칙을 두 층으로 나눈다.**
+
+- 그 시각에 지수 스냅샷이 아예 없으면 `index` 자체가 `null`. 지금 `indexChangeRate`가 null이 되는
+  것과 같은 조건이고 프론트의 판정도 그대로 산다
+- `index`가 있으면 `now`는 항상 값이 있고, **`before`만 `null`일 수 있다.** before 시각에 정확히
+  일치하는 지수 스냅샷이 없는 경우다(장 시작 직후, 수집 gap)
+- 가장 가까운 다른 시점 값으로 조용히 대체하지 않는다. 카테고리 before가 이미 그 규칙이다
+
+### 백엔드 변경 범위
+
+`MarketMapQueryService.getCategoryChangeRates(marketQuery, snapshotTime, beforeMinutes)`가 지금
+`findOverviewsBySnapshotTime(snapshotTime)`을 한 번 부른다. **`snapshotTime.minusMinutes(beforeMinutes)`로
+한 번 더 부르고** 두 맵을 `decorateRanking`에 함께 넘긴다. `beforeMinutes`는 이미 파라미터로 있다.
+
+- `MarketIndexChangeRate` 새 record (`domain/view/dto`)
+- `CategoryChangeRateMarketRanking`의 세 번째 컴포넌트 타입 변경. 2인자 생성자는 그대로 두고
+  `withIndexChangeRate`는 없앤다 — `decorateRanking`이 새 값을 직접 만들어 넣는 유일한 호출부다
+- `toCategoryRankingSummary`의 `marketRanking.indexChangeRate()`가 `index()`를 거치게 된다.
+  `CategoryRankingSummary`는 `BigDecimal indexChangeRate` 그대로 둔다 — **텍스트 캡션은 before를
+  쓰지 않는다.** 헤더에 현재 등락률만 붙는다. `index`가 null이면 null을 넘긴다
+- `MarketMapQueryServiceTest`의 지수 단언 세 곳
+
+**조회가 한 번 늘어난다.** `market_overview_snapshot`은 스냅샷 시각당 두 행짜리 작은 테이블이라
+비용이 없다시피 하다. 다만 텔레그램 경로(`getTopCategoryRankings`)도 이 메서드를 타므로, 캡션에
+쓰지 않는 before 조회를 한 번 하게 된다. 그걸 피하려고 메서드를 갈라 놓으면 5단계에서 한 곳으로
+모은 것을 다시 쪼개는 셈이라 하지 않는다.
+
+### 프론트 변경 범위
+
+- `src/types/api.ts` — `indexChangeRate: z.number().nullable()`을 `index`로 교체. 안쪽은
+  `{ now: z.number(), before: z.number().nullable() }`. zod는 모르는 키를 버리므로 여기를 안 고치면
+  값이 화면에 도달하지 않는다
+- `CategoryChangeRatePage`의 `currentEntriesWithIndex` — `indexRanking?.index != null`을 보고
+  값은 `index.now`
+- 같은 곳의 `deltaEntries` — **지수 엔트리를 새로 추가한다.** `index?.before != null`일 때만,
+  값은 `index.now - index.before`. `categoryId`는 `MARKET_INDEX_CATEGORY_ID`, `isReference: true`로
+  "현재" 쪽과 같은 노란 바가 되게 한다
+- "지수 등락률은 '현재' 그래프에만 의미가 있다 … 지금은 그 값을 안 갖고 있어서 뺀다"는 주석을
+  고친다
+- `src/mocks/data.ts`의 `categoryChangeRateRankings` 두 줄 — `indexChangeRate`를 `index` 객체로.
+  `marketOverviews`의 값을 `now`로 쓰고 `before`는 적당한 값을 넣는다
+
+`market`이 `ALL_STOCK`이면 `items.find(item => item.market === market)`이 못 찾아 지수 바가 두
+그래프 모두에서 사라진다. 지금과 같은 동작이고 의도다.
+
+### 배포 순서 — 백엔드 먼저
+
+프론트가 먼저 나가면 `index`가 없는 응답을 필수 필드로 파싱하려다 실패한다. 백엔드가 먼저 나가면
+프론트가 모르는 키를 zod가 버려서 지금 화면 그대로다.
+
+### 선행 조건 — 6단계 병합 (충족)
+
+6단계가 섹터만 발송을 `?market=ALL_STOCK` 한 장이 아니라 KOSPI/KOSDAQ 두 장으로 찍기로 했기
+때문에, 이 작업이 들어가면 그 두 장의 "변화율" 그래프에도 노란 바가 생긴다. `ALL_STOCK`으로
+찍었다면 텔레그램 이미지에는 아무 효과가 없었을 작업이다.

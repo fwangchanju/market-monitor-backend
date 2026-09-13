@@ -386,6 +386,12 @@ class MarketMapQueryServiceTest {
                 .thenReturn(List.of(
                         marketOverviewSnapshot(Market.KOSPI, snapshotTime, BigDecimal.valueOf(1.23)),
                         marketOverviewSnapshot(Market.KOSDAQ, snapshotTime, BigDecimal.valueOf(-0.45))));
+        // beforeMinutes=60이므로 09:00 시각도 별도로 조회한다 — now/before 둘 다 값이 있는 일반적인 경우.
+        when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime.minusMinutes(60)))
+                .thenReturn(List.of(
+                        marketOverviewSnapshot(Market.KOSPI, snapshotTime.minusMinutes(60), BigDecimal.valueOf(0.98)),
+                        marketOverviewSnapshot(
+                                Market.KOSDAQ, snapshotTime.minusMinutes(60), BigDecimal.valueOf(-0.20))));
 
         SnapshotResponse<CategoryChangeRateMarketRanking> response =
                 service.getCategoryChangeRates(MarketQuery.ALL_STOCK, 60);
@@ -394,17 +400,19 @@ class MarketMapQueryServiceTest {
                 .filter(ranking -> ranking.market() == Market.KOSPI)
                 .findFirst()
                 .orElseThrow();
-        assertThat(kospi.indexChangeRate()).isEqualByComparingTo(BigDecimal.valueOf(1.23));
+        assertThat(kospi.index().now()).isEqualByComparingTo(BigDecimal.valueOf(1.23));
+        assertThat(kospi.index().before()).isEqualByComparingTo(BigDecimal.valueOf(0.98));
 
         CategoryChangeRateMarketRanking kosdaq = response.items().stream()
                 .filter(ranking -> ranking.market() == Market.KOSDAQ)
                 .findFirst()
                 .orElseThrow();
-        assertThat(kosdaq.indexChangeRate()).isEqualByComparingTo(BigDecimal.valueOf(-0.45));
+        assertThat(kosdaq.index().now()).isEqualByComparingTo(BigDecimal.valueOf(-0.45));
+        assertThat(kosdaq.index().before()).isEqualByComparingTo(BigDecimal.valueOf(-0.20));
     }
 
     @Test
-    void getCategoryChangeRates_그_시각에_지수_스냅샷이_없으면_indexChangeRate가_null이다() {
+    void getCategoryChangeRates_그_시각에_지수_스냅샷이_없으면_index가_null이다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
         CategoryChangeRateMarketRanking kospiRanking = new CategoryChangeRateMarketRanking(
                 Market.KOSPI, List.of(CategoryChangeRateItem.withoutBefore(1L, List.of())));
@@ -414,14 +422,39 @@ class MarketMapQueryServiceTest {
                 .thenReturn(new SnapshotResponse<>(snapshotTime, List.of(kospiRanking)));
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(category(1L, null, "반도체")));
         // 이번 수집 주기에 지수기여도랭킹 수집만 실패해서, 카테고리 랭킹은 있는데 지수 스냅샷은 그 시각에
-        // 없는 경우 — 다른 시각 값으로 조용히 대체하지 않고 null로 내려간다.
+        // 없는 경우 — 다른 시각 값으로 조용히 대체하지 않고 index 전체가 null로 내려간다.
         when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
 
         SnapshotResponse<CategoryChangeRateMarketRanking> response =
                 service.getCategoryChangeRates(MarketQuery.KOSPI, 60);
 
         assertThat(response.items()).hasSize(1);
-        assertThat(response.items().get(0).indexChangeRate()).isNull();
+        assertThat(response.items().get(0).index()).isNull();
+    }
+
+    @Test
+    void getCategoryChangeRates_before_시각에_지수_스냅샷이_없으면_index_before가_null이다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        CategoryChangeRateMarketRanking kospiRanking = new CategoryChangeRateMarketRanking(
+                Market.KOSPI, List.of(CategoryChangeRateItem.withoutBefore(1L, List.of())));
+        when(marketMapCategoryChangeRateSnapshotService.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
+                .thenReturn(Optional.of(snapshotTime));
+        when(marketMapCategoryChangeRateSnapshotService.findRankingForMarkets(List.of(Market.KOSPI), snapshotTime, 60))
+                .thenReturn(new SnapshotResponse<>(snapshotTime, List.of(kospiRanking)));
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(category(1L, null, "반도체")));
+        // now 시각(10:00)에는 지수 스냅샷이 있지만, before 시각(09:00, beforeMinutes=60)에는 없는
+        // 경우 — 장 시작 직후나 수집 gap. 가까운 다른 시점 값으로 대체하지 않고 before만 null이다.
+        when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime))
+                .thenReturn(List.of(marketOverviewSnapshot(Market.KOSPI, snapshotTime, BigDecimal.valueOf(1.23))));
+        when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime.minusMinutes(60)))
+                .thenReturn(List.of());
+
+        SnapshotResponse<CategoryChangeRateMarketRanking> response =
+                service.getCategoryChangeRates(MarketQuery.KOSPI, 60);
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().get(0).index().now()).isEqualByComparingTo(BigDecimal.valueOf(1.23));
+        assertThat(response.items().get(0).index().before()).isNull();
     }
 
     @Test

@@ -21,6 +21,7 @@ import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateMarketRanking;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryRankingSummary;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryTierBreakdown;
 import dev.eolmae.marketmonitor.domain.view.dto.ExcludedStockItem;
+import dev.eolmae.marketmonitor.domain.view.dto.MarketIndexChangeRate;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapItem;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapResponse;
@@ -151,22 +152,31 @@ public class MarketMapQueryService {
         SnapshotResponse<CategoryChangeRateMarketRanking> ranking =
                 marketMapCategoryChangeRateSnapshotService.findRankingForMarkets(markets, snapshotTime, beforeMinutes);
 
-        Map<Market, BigDecimal> indexChangeRateByMarket = findOverviewsBySnapshotTime(snapshotTime).entrySet().stream()
-                .collect(Collectors.toMap(
-                        Map.Entry::getKey, entry -> entry.getValue().getChangeRate()));
+        Map<Market, BigDecimal> nowIndexChangeRateByMarket =
+                toChangeRateByMarket(findOverviewsBySnapshotTime(snapshotTime));
+        Map<Market, BigDecimal> beforeIndexChangeRateByMarket =
+                toChangeRateByMarket(findOverviewsBySnapshotTime(snapshotTime.minusMinutes(beforeMinutes)));
         Map<Long, MarketMapCategory> categoryById = marketMapCategoryRepository.findAll().stream()
                 .collect(Collectors.toMap(MarketMapCategory::getId, Function.identity()));
 
         return new SnapshotResponse<>(
                 snapshotTime,
                 ranking.items().stream()
-                        .map(marketRanking -> decorateRanking(marketRanking, indexChangeRateByMarket, categoryById))
+                        .map(marketRanking -> decorateRanking(
+                                marketRanking, nowIndexChangeRateByMarket, beforeIndexChangeRateByMarket, categoryById))
                         .toList());
+    }
+
+    private Map<Market, BigDecimal> toChangeRateByMarket(Map<Market, MarketOverviewSnapshot> overviewsByMarket) {
+        return overviewsByMarket.entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey, entry -> entry.getValue().getChangeRate()));
     }
 
     private CategoryChangeRateMarketRanking decorateRanking(
             CategoryChangeRateMarketRanking marketRanking,
-            Map<Market, BigDecimal> indexChangeRateByMarket,
+            Map<Market, BigDecimal> nowIndexChangeRateByMarket,
+            Map<Market, BigDecimal> beforeIndexChangeRateByMarket,
             Map<Long, MarketMapCategory> categoryById) {
         // 카테고리 버전 복원(MarketMapCategoryTreeService.restore) 직후에는 스냅샷 row가 이미 없어진
         // categoryId를 가리킬 수 있다 — 다음 수집 tick까지 그 항목만 결과에서 뺀다. 잘못된 depth를
@@ -175,8 +185,22 @@ public class MarketMapQueryService {
                 .filter(item -> categoryById.containsKey(item.categoryId()))
                 .map(item -> decorateWithCategory(item, categoryById))
                 .toList();
-        return new CategoryChangeRateMarketRanking(
-                marketRanking.market(), items, indexChangeRateByMarket.get(marketRanking.market()));
+        MarketIndexChangeRate index = toMarketIndexChangeRate(
+                marketRanking.market(), nowIndexChangeRateByMarket, beforeIndexChangeRateByMarket);
+        return new CategoryChangeRateMarketRanking(marketRanking.market(), items, index);
+    }
+
+    // now가 없으면(그 시각 지수 스냅샷 자체가 없음) index 전체가 null. now가 있으면 before만 null일 수
+    // 있다(before 시각에 정확히 일치하는 스냅샷이 없는 경우) — 가까운 다른 시점 값으로 대체하지 않는다.
+    private MarketIndexChangeRate toMarketIndexChangeRate(
+            Market market,
+            Map<Market, BigDecimal> nowIndexChangeRateByMarket,
+            Map<Market, BigDecimal> beforeIndexChangeRateByMarket) {
+        BigDecimal now = nowIndexChangeRateByMarket.get(market);
+        if (now == null) {
+            return null;
+        }
+        return new MarketIndexChangeRate(now, beforeIndexChangeRateByMarket.get(market));
     }
 
     private CategoryChangeRateItem decorateWithCategory(
@@ -214,7 +238,10 @@ public class MarketMapQueryService {
                 .sorted(Comparator.comparing(TopCategoryItem::changeRate).reversed())
                 .limit(TOP_N)
                 .toList();
-        return new CategoryRankingSummary(marketRanking.market(), marketRanking.indexChangeRate(), topCategories);
+        // 텍스트 캡션은 before를 쓰지 않는다. 헤더에는 현재 등락률만 붙는다.
+        BigDecimal indexChangeRate =
+                marketRanking.index() != null ? marketRanking.index().now() : null;
+        return new CategoryRankingSummary(marketRanking.market(), indexChangeRate, topCategories);
     }
 
     private TopCategoryItem toTopCategoryItem(CategoryChangeRateItem item, Set<Long> excludedTierIds) {

@@ -11,6 +11,7 @@ import ch.qos.logback.core.status.Status;
 import ch.qos.logback.core.util.FileSize;
 import dev.eolmae.marketmonitor.common.logging.ThrowableFilter;
 import java.net.URL;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -42,6 +43,13 @@ class LogbackSpringConfigurationTest {
 
         URL resource = getClass().getClassLoader().getResource("logback-spring.xml");
         configurator.doConfigure(resource);
+    }
+
+    // 설정을 로드하면 두 RollingFileAppender가 start()되면서 logs/ 아래 파일을 실제로 연다. 테스트마다
+    // 새 LoggerContext를 만들므로 닫지 않으면 열린 파일이 테스트 수만큼 쌓인다.
+    @AfterEach
+    void stopContext() {
+        context.stop();
     }
 
     // 7-3의 %i 누락처럼, logback은 설정에 문제가 있어도 예외를 던지지 않고 StatusManager에 ERROR로만

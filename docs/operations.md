@@ -181,11 +181,28 @@ GHCR 정리는 태그가 붙어 있어도 오래된 것부터 지운다. 병합�
 
 1. `/actuator/health`: 앱이 떠 있는가
 2. GitHub Actions의 마지막 배포 로그: 헬스체크가 실패했다면 `docker logs`가 찍혀 있다
-3. ESCALATION 로그: `EscalateException`으로 분류된 장애가 여기 쌓인다
+3. `logs/exception.log`: **throwable이 붙은 로그가 전부 여기 쌓인다.** `EscalateException`으로 분류된
+   장애뿐 아니라 400/404/409, 알림이 억제된 반복 예외, 알림 발송 실패 자체까지 들어온다. 예외를
+   안 붙이고 메시지만 찍는 로그는 안 들어오므로, 여기 없다고 문제가 없었다는 뜻은 아니다.
+   전체 흐름은 `logs/application.log`를 본다
 4. 텔레그램 개발자 채널(`DEVELOPER_CHAT_ID`): 에스컬레이션 알림이 갔는지
 5. 수집 실패라면 `CollectionScheduler` 로그: 수집기별 시작/종료와 소요 시간이 찍힌다
 
 알림이 안 왔다고 장애가 없는 건 아니다. 텔레그램 자체가 죽으면 알림 경로도 같이 죽는다.
+
+### 로그 파일
+
+`prod` 프로파일에서만 파일로 남는다. 호스트의 `${LOG_DIR}`가 컨테이너의 `/app/logs`에 마운트된다.
+
+| 파일 | 내용 | maxFileSize | maxHistory | totalSizeCap |
+|---|---|---|---|---|
+| `application.log` | 전부 (INFO 이상) | 100MB | 7 | 1GB |
+| `exception.log` | throwable이 붙은 것만 | 50MB | 30 | 500MB |
+
+상한은 평소 사용량이 아니라 **폭주했을 때 잃어도 되는 양**으로 잡았다. 정상 운영에서는 닿지 않는다.
+
+굴러간 파일은 `application.2026-09-14.0.log` 꼴이다. 청소는 이 패턴에 맞는 파일만 대상으로 하므로,
+패턴을 바꾸면 그 이전 파일은 영구히 남는다. 패턴을 손볼 일이 생기면 옛 파일을 직접 지운다.
 
 ---
 

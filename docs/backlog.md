@@ -313,20 +313,44 @@ CI에 `docker build` 한 단계를 넣으면 이 부류가 걸린다. 이미지�
 
 `market-monitor.retention.dry-run`이 아직 `true`다. 배치는 매일 돌지만 아무것도 지우지 않는다.
 
-**지금 막혀 있는 이유는 드라이런 로그가 아무것도 증명하지 못했기 때문이다.** 판정 기준은 "삭제
-대상 건수가 cutoff 이전 전체 건수의 대부분일 것"인데, 두 값이 똑같이 나왔다. 확인해보니 cutoff
-(30일 전) 이전에는 15:30 스냅샷이 한 건도 없었다. 5분 간격 수집을 시작한 지 30일이 안 됐기
-때문이다. 남길 것이 애초에 없으니 "전부 삭제 대상"이 나온 것이고, 술어가 뒤집혀 있어도 같은
-숫자가 나온다.
+**막혀 있던 이유는 드라이런 로그가 아무것도 증명하지 못했기 때문이다.** 판정 기준은 "삭제 대상
+건수가 cutoff 이전 전체 건수의 대부분일 것"인데, 두 값이 똑같이 나왔다. 확인해보니 cutoff
+(30일 전) 이전에는 15:30 스냅샷이 한 건도 없었다. 5분 간격 수집을 시작한 것이 `ca2cde9`
+(2026-08-26)라 아직 30일이 안 됐기 때문이다. 남길 것이 애초에 없으니 "전부 삭제 대상"이 나온
+것이고, 술어가 뒤집혀 있어도 같은 숫자가 나온다.
 
-**선행 조건**: 15:30 스냅샷의 `min(snapshot_time)`이 30일을 넘길 것. 그때 다시 드라이런 로그를
-읽으면 대상 건수 < cutoff 이전 전체 건수가 되고, 그게 술어가 옳다는 증거다.
+### 보존 기간을 30일에서 10일로 줄인다
 
-그 뒤 순서는 이렇다.
+기다리는 대신 기간을 줄이기로 했다. 한 달을 못 채우고도 데이터가 기가 단위를 바라보는데 월 단위로
+들고 있을 이유가 없다는 판단이다.
+
+10일이면 cutoff가 9/4쯤이 되고 그 이전 구간(8/26~9/3)에 15:30 스냅샷이 존재한다. 그래서 **대상
+건수 < cutoff 이전 전체 건수**가 성립하고, 기다리지 않고 바로 술어를 판정할 수 있다.
+
+```java
+// SnapshotRetentionScheduler.java
+private static final int RETENTION_DAYS = 30;   // → 10
+```
+
+**이건 프로퍼티가 아니라 자바 상수라 환경변수로 못 바꾼다.** `dry-run`만 프로퍼티다. 한 줄
+바꾸고 배포해야 한다. 같이 손대야 하는 곳이 있다.
+
+- 클래스 javadoc과 `calculateCutoff`의 주석 — 둘 다 "30일"을 문자로 적어두었다
+- `SnapshotRetentionSchedulerTest` — 테스트 두 개가 **메서드 이름에 "30일"이 들어가고 기대 날짜를
+  상수로 박아두었다.** 이름과 기대값을 함께 고친다. 여기를 빼먹으면 빌드가 깨지므로 조용히
+  누락되지는 않는다
+
+**배치는 KST 04:00에 돈다.** 다음날 아침 드라이런 로그를 보려면 그 전날 안에 배포가 끝나 있어야
+한다.
+
+기간을 줄이면 첫 실삭제에서 지울 양은 오히려 **늘어난다.** 아래 초기 정리 SQL은 그대로 필요하다.
+
+### 그 뒤 순서
 
 1. 드라이런 로그로 판정 (대상 건수 < cutoff 이전 전체, 시각 표본에 `15:30`이 없을 것)
-2. **초기 정리 SQL 수동 실행.** 배치는 정상 운영(하루치씩)만 가정하므로 쌓여 있는 30일치를
-   감당하지 못한다. 단일 DELETE는 락과 테이블 팽창을 부른다
+2. **초기 정리 SQL 수동 실행.** 배치는 `cutoff`보다 오래된 것을 **한 문장으로 전부** 지운다.
+   정상 운영에서는 그게 하루치라 문제가 없지만, 지금은 쌓여 있는 전체가 한 번에 걸린다. 단일
+   DELETE는 락과 테이블 팽창을 부른다
    - `sector_price_snapshot`은 청크 삭제. `snapshot_time` 인덱스가 있어 청크 반복이 싸다.
      한 번에 5만 행씩, 0행이 나올 때까지 반복. 멱등이어야 한다
    - `market_map_category_change_rate_snapshot`은 `snapshot_time` 인덱스가 **없어서** 청크마다
@@ -422,155 +446,21 @@ QueryDSL이 만드는 쿼리가 결정하는데 이 프로젝트에 DB 테스트
 
 ---
 
-## 섹터 "변화율" 그래프에 마켓 지수 바를 넣는다
+## 프론트에서 지수 필드 폴백을 걷어낸다
 
-섹터 페이지는 그래프 두 개("현재", "변화율")를 그리는데 **마켓 지수 바(노란색)가 "현재"에만
-붙는다.** "변화율"은 N분 전 대비 %p 차이인데 지수 쪽 과거값을 백엔드가 안 내려주기 때문이다.
-`CategoryChangeRatePage`의 주석에 그 이유가 그대로 적혀 있다.
+섹터 "변화율" 그래프에 마켓 지수 바를 넣는 작업(백엔드 #102, 프론트 #53)은 끝났고 양쪽 다
+배포됐다. 남은 것은 그때 임시로 넣은 폴백뿐이다.
 
-6단계로 섹터 이미지가 15분마다 나가는 주력 산출물이 됐다. 그 이미지의 "변화율" 그래프에 비교
-기준이 없으면 반쪽이다.
+배포 순서 때문에 프론트가 먼저 나가야 했고, 그 구간의 백엔드는 아직 옛 모양(`indexChangeRate`)을
+내려주고 있었다. 그래서 프론트가 두 모양을 다 받도록 해뒀다. 백엔드가 배포된 지금은 옛 키가 더
+이상 내려오지 않으므로 죽은 경로다.
 
-### 지금 구조
+- `src/types/api.ts` — `CategoryChangeRateMarketRankingSchema`에서 `indexChangeRate` 줄을 지우고
+  `index`에서 `.optional()`을 뺀다(`.nullable()`만 남긴다)
+- `src/pages/CategoryChangeRatePage.tsx` — `indexBar` IIFE의 `??` 폴백 가지를 지운다
 
-```java
-public record CategoryChangeRateMarketRanking(
-        Market market, List<CategoryChangeRateItem> items, BigDecimal indexChangeRate)
-```
-
-`indexChangeRate`는 `items` 안에 섞이지 않고 랭킹의 형제 필드로 붙는다. 스냅샷 서비스는 지수
-개념을 모르고, `MarketMapQueryService.getCategoryChangeRates`가 `decorateRanking`에서 마지막에
-붙인다. 노란 바는 프론트가 `categoryId: -1`짜리 가짜 엔트리를 지어내 그린다.
-
-### `CategoryTierBreakdown`에 담지 않는다
-
-지수를 breakdown 리스트에 끼워넣는 방법이 먼저 떠오르는데 그러면 안 된다. `CategoryTierBreakdown`은
-**시가총액 구간별 원시 합계**이고 프론트가 `tierId`로 제외 구간을 걸러낸 뒤 합산한다
-(`combineTierBreakdowns`). 지수에는 시가총액 구간이라는 개념이 없다. 끼워넣으면 "이 리스트의
-원소는 전부 구간별 합계"라는 약속이 깨지고, 구간 필터가 지수를 어떻게 다룰지가 매번 예외 처리가
-된다. 카테고리 id가 없다는 것보다 이쪽이 더 근본적인 이유다.
-
-### 조치 — `indexChangeRate`를 now/before 짝으로 바꾼다
-
-```java
-public record MarketIndexChangeRate(BigDecimal now, BigDecimal before) {}
-
-public record CategoryChangeRateMarketRanking(
-        Market market, List<CategoryChangeRateItem> items, MarketIndexChangeRate index)
-```
-
-`beforeIndexChangeRate`를 옆에 하나 더 다는 것보다 낫다. **같은 모양이 이미 응답 안에 있기
-때문이다.**
-
-```java
-public record CategoryChangeRateItem(
-        Long categoryId, String categoryName, int depth,
-        List<CategoryTierBreakdown> now, List<CategoryTierBreakdown> before)
-```
-
-카테고리도 "두 시점의 값, before는 없을 수 있음"이다. 지수도 성격이 같다. 한 응답 안에서 같은
-개념을 두 가지 방식으로 표현하지 않는다. 필드를 평평하게 둘로 늘리면 두 값이 항상 같이 움직여야
-한다는 사실이 타입 어디에도 안 적힌다.
-
-**null 규칙을 두 층으로 나눈다.**
-
-- 그 시각에 지수 스냅샷이 아예 없으면 `index` 자체가 `null`. 지금 `indexChangeRate`가 null이 되는
-  것과 같은 조건이고 프론트의 판정도 그대로 산다
-- `index`가 있으면 `now`는 항상 값이 있고, **`before`만 `null`일 수 있다.** before 시각에 정확히
-  일치하는 지수 스냅샷이 없는 경우다(장 시작 직후, 수집 gap)
-- 가장 가까운 다른 시점 값으로 조용히 대체하지 않는다. 카테고리 before가 이미 그 규칙이다
-
-### 백엔드 변경 범위
-
-`MarketMapQueryService.getCategoryChangeRates(marketQuery, snapshotTime, beforeMinutes)`가 지금
-`findOverviewsBySnapshotTime(snapshotTime)`을 한 번 부른다. **`snapshotTime.minusMinutes(beforeMinutes)`로
-한 번 더 부르고** 두 맵을 `decorateRanking`에 함께 넘긴다. `beforeMinutes`는 이미 파라미터로 있다.
-
-- `MarketIndexChangeRate` 새 record (`domain/view/dto`)
-- `CategoryChangeRateMarketRanking`의 세 번째 컴포넌트 타입 변경. 2인자 생성자는 그대로 두고
-  `withIndexChangeRate`는 없앤다 — `decorateRanking`이 새 값을 직접 만들어 넣는 유일한 호출부다
-- `toCategoryRankingSummary`의 `marketRanking.indexChangeRate()`가 `index()`를 거치게 된다.
-  `CategoryRankingSummary`는 `BigDecimal indexChangeRate` 그대로 둔다 — **텍스트 캡션은 before를
-  쓰지 않는다.** 헤더에 현재 등락률만 붙는다. `index`가 null이면 null을 넘긴다
-- `MarketMapQueryServiceTest`의 지수 단언 세 곳
-
-**조회가 한 번 늘어난다.** `market_overview_snapshot`은 스냅샷 시각당 두 행짜리 작은 테이블이라
-비용이 없다시피 하다. 다만 텔레그램 경로(`getTopCategoryRankings`)도 이 메서드를 타므로, 캡션에
-쓰지 않는 before 조회를 한 번 하게 된다. 그걸 피하려고 메서드를 갈라 놓으면 5단계에서 한 곳으로
-모은 것을 다시 쪼개는 셈이라 하지 않는다.
-
-### 프론트 변경 범위
-
-- `src/types/api.ts` — `MarketIndexChangeRateSchema`(`{ now: z.number(), before: z.number().nullable() }`)를
-  추가하고, `index`와 옛 `indexChangeRate`를 **둘 다 `.nullable().optional()`로** 받는다. 왜 둘 다인지는
-  아래 「배포 순서」 참고. zod는 모르는 키를 버리므로 여기를 안 고치면 새 값이 화면에 도달하지 않는다
-- `CategoryChangeRatePage`에서 둘을 하나로 정규화한다. `index`를 우선하고, 없으면 옛 필드를
-  `{ now, before: null }`로 감싼다. 아래 두 항목은 그 정규화된 값을 쓴다
-- `currentEntriesWithIndex` — 정규화된 값이 있으면 `now`를 쓴다
-- 같은 곳의 `deltaEntries` — **지수 엔트리를 새로 추가한다.** `index?.before != null`일 때만,
-  값은 `index.now - index.before`. `categoryId`는 `MARKET_INDEX_CATEGORY_ID`, `isReference: true`로
-  "현재" 쪽과 같은 노란 바가 되게 한다
-- "지수 등락률은 '현재' 그래프에만 의미가 있다 … 지금은 그 값을 안 갖고 있어서 뺀다"는 주석을
-  고친다
-- `src/mocks/data.ts`의 `categoryChangeRateRankings` 두 줄 — `indexChangeRate`를 `index` 객체로.
-  `marketOverviews`의 값을 `now`로 쓰고 `before`는 적당한 값을 넣는다. 목업은 폴백이 아니라 **새
-  모양만** 내려준다 — 폴백은 옛 백엔드를 위한 임시 경로지 목업이 재현할 상태가 아니다
-
-`market`이 `ALL_STOCK`이면 `items.find(item => item.market === market)`이 못 찾아 지수 바가 두
-그래프 모두에서 사라진다. 지금과 같은 동작이고 의도다.
-
-### 배포 순서 — 프론트가 두 모양을 다 받는 릴리즈를 먼저 낸다
-
-**그냥 두면 어느 쪽을 먼저 배포해도 깨진다.** 이 작업은 필드를 더하는 것이 아니라 `indexChangeRate`를
-`index`로 **바꾸는** 것이기 때문이다.
-
-```ts
-// market-monitor-frontend/src/types/api.ts
-indexChangeRate: z.number().nullable(),
-```
-
-zod에서 `.nullable()`은 값이 `null`인 것을 허용할 뿐 **키가 없는 것(`undefined`)은 허용하지 않는다.**
-그건 `.optional()`이다. 그래서
-
-- **백엔드를 먼저 배포하면** 응답에서 `indexChangeRate`가 사라져 `parse`가 실패한다. 섹터 페이지가
-  "데이터를 불러오지 못했습니다"가 되고, **그 화면을 렌더러가 15분마다 캡처해 텔레그램으로 보낸다**
-- **프론트를 먼저 배포하면서 `index`를 필수로 받으면** 아직 안 내려오는 키라 똑같이 실패한다
-
-그래서 프론트가 **두 모양을 다 받는 릴리즈를 먼저** 낸다.
-
-```ts
-indexChangeRate: z.number().nullable().optional(),
-index: MarketIndexChangeRateSchema.nullable().optional(),
-```
-
-읽을 때 `index`를 우선하고 없으면 옛 필드로 넘어간다.
-
-```ts
-const index = ranking.index ?? (ranking.indexChangeRate != null
-  ? { now: ranking.indexChangeRate, before: null }
-  : null)
-```
-
-- 프론트 배포 후, 백엔드 배포 전 — 폴백이 걸린다. `before`가 null이라 "변화율" 지수 바는 안 나오고
-  "현재"는 지금 그대로다. **지금 화면과 동일하다**
-- 백엔드 배포 후 — `index`를 그대로 쓴다. "변화율"에도 노란 바가 붙는다
-
-```
-1. 프론트 PR (호환 스키마 + 폴백 + 변화율 지수 엔트리) → 병합 → 프론트 배포
-2. 백엔드 PR → 병합 → 백엔드 배포
-3. 프론트 폴백 제거 (별도 PR, 서두를 것 없음)
-```
-
-**이 순서는 5단계와 반대다.** 5단계는 필드를 더하기만 해서 백엔드가 먼저여도 프론트가 모르는 키를
-버리고 끝이었다. 이번은 필드를 바꾸는 것이라 다르다. "zod가 모르는 키를 버린다"는 사실만 보고
-같은 결론을 내리면 틀린다.
-
-### 선행 조건 — 6단계 병합 (충족)
-
-6단계가 섹터만 발송을 `?market=ALL_STOCK` 한 장이 아니라 KOSPI/KOSDAQ 두 장으로 찍기로 했기
-때문에, 이 작업이 들어가면 그 두 장의 "변화율" 그래프에도 노란 바가 생긴다. `ALL_STOCK`으로
-찍었다면 텔레그램 이미지에는 아무 효과가 없었을 작업이다.
-
+`market-monitor-frontend` 레포만 바꾼다. 지금 동작에는 영향이 없어 서두를 이유가 없지만, 두는
+만큼 "이 키는 왜 있나"를 매번 다시 읽게 된다.
 ---
 
 ## 텔레그램 경로가 before를 조회하고 버린다

@@ -25,7 +25,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class SnapshotRetentionScheduler {
 
-    private static final int RETENTION_DAYS = 30;
+    private static final int RETENTION_DAYS = 10;
     private static final String KST_ZONE_ID = "Asia/Seoul";
 
     private final SectorPriceSnapshotService sectorPriceSnapshotService;
@@ -46,7 +46,7 @@ public class SnapshotRetentionScheduler {
         log.info("스냅샷 정리 배치 종료");
     }
 
-    /** cutoff 경계 — today 기준 RETENTION_DAYS일 전 자정. 그 경계일(30일째) 데이터는 남기고 그 이전만 삭제 대상. */
+    /** cutoff 경계 — today 기준 RETENTION_DAYS일 전 자정. 그 경계일(10일째) 데이터는 남기고 그 이전만 삭제 대상. */
     static LocalDateTime calculateCutoff(LocalDate today) {
         return today.minusDays(RETENTION_DAYS).atStartOfDay();
     }

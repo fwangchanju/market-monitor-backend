@@ -70,7 +70,7 @@ public class GlobalExceptionHandler {
         String detail = e.getBindingResult().getFieldErrors().stream()
                 .map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
                 .collect(Collectors.joining(", "));
-        log.warn(detail);
+        log.warn(detail, e);
 
         return toProblemDetail(HttpStatus.BAD_REQUEST, ErrorCode.INVALID_INPUT, detail);
     }
@@ -115,7 +115,8 @@ public class GlobalExceptionHandler {
         if (firstOccurrence.get()) {
             escalationPublisher.report(EscalateException.wrap(ErrorCode.INTERNAL_ERROR, e));
         } else {
-            log.warn("[예상 못한 예외 알림 억제] | key : {} | 억제 누적 : {}건", key, suppressedCount.incrementAndGet());
+            // 알림은 억제하되 기록은 남긴다 — throwable을 붙여야 ThrowableFilter를 통과해 exception.log에도 남는다.
+            log.warn("[예상 못한 예외 알림 억제] | key : {} | 억제 누적 : {}건", key, suppressedCount.incrementAndGet(), e);
         }
     }
 

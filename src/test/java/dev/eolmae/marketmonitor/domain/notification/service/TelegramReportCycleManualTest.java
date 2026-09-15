@@ -10,18 +10,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 /**
- * CollectionScheduler가 실제로 부르는 것과 똑같이 DailyMarketReportSender/SectorTelegramReportSender의
- * send()를 그대로 호출하는 수동 검증용 테스트 — 스케줄러의 "몇 분에만 보낸다" 시각 게이팅은 여기선
- * 제외하고(테스트를 아무 때나 돌려도 이미지를 바로 받아봐야 하므로) 발송 로직 자체만 그대로 재현한다.
- * 두 tick 종류(2시간 격자의 맵+섹터, 15분 격자의 섹터 단독)를 각각의 @Test로 나눠서, 클래스 단위로
- * 돌리면(아래 실행 명령) 둘 다 한 번에 발송된다. 각 마켓의 실제 마지막 수집 시각을 그대로 쓴다(현재
- * 시각을 쓰면 장 마감/주말처럼 그 시각에 실제 스냅샷이 없는 경우 랭킹 조회가 빈 결과로 나와 발송 자체가
- * 조용히 스킵됨 — MarketMapAndSectorTelegramReportSender/SectorTelegramReportSender의 rankings.isEmpty()
- * 가드 참고). 배포된 컨테이너 안에서 그 환경의 실제 DB/renderer/텔레그램 설정을 그대로 쓰므로, 배포 후
- * 확인할 때만 실행한다.
+ * CollectionScheduler가 실제로 부르는 것과 똑같이 SectorTelegramReportSender의 send()를 그대로
+ * 호출하는 수동 검증용 테스트 — 스케줄러의 "몇 분에만 보낸다" 시각 게이팅은 여기선 제외하고(테스트를
+ * 아무 때나 돌려도 이미지를 바로 받아봐야 하므로) 발송 로직 자체만 그대로 재현한다. 각 마켓의 실제
+ * 마지막 수집 시각을 그대로 쓴다(현재 시각을 쓰면 장 마감/주말처럼 그 시각에 실제 스냅샷이 없는 경우
+ * 랭킹 조회가 빈 결과로 나와 발송 자체가 조용히 스킵됨 — SectorTelegramReportSender의
+ * rankings.isEmpty() 가드 참고). 배포된 컨테이너 안에서 그 환경의 실제 DB/renderer/텔레그램 설정을
+ * 그대로 쓰므로, 배포 후 확인할 때만 실행한다.
  *
  * 실행 조건: 배포된 컨테이너 환경(실제 DB/renderer/텔레그램 설정)에서 실행해야 한다.
- * 실행 명령(둘 다 한 번에): ./gradlew manualTest --tests "*.TelegramReportCycleManualTest" -i
+ * 실행 명령: ./gradlew manualTest --tests "*.TelegramReportCycleManualTest" -i
  */
 @Tag("manual")
 @SpringBootTest
@@ -31,15 +29,7 @@ class TelegramReportCycleManualTest {
     private SectorPriceSnapshotService sectorPriceSnapshotService;
 
     @Autowired
-    private DailyMarketReportSender dailyMarketReportSender;
-
-    @Autowired
     private SectorTelegramReportSender sectorTelegramReportSender;
-
-    @Test
-    void sendsAsSchedulerDoes() {
-        dailyMarketReportSender.send(findDataTime(), true);
-    }
 
     @Test
     void sendsSectorOnlyAsSchedulerDoes() {

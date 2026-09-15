@@ -6,10 +6,8 @@ import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.common.util.KstClock;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryChangeRateSnapshotService;
-import dev.eolmae.marketmonitor.domain.notification.enums.TelegramSendKind;
 import dev.eolmae.marketmonitor.domain.notification.listener.EscalationPublisher;
 import dev.eolmae.marketmonitor.domain.notification.schedule.TelegramSendSchedule;
-import dev.eolmae.marketmonitor.domain.notification.service.DailyMarketReportSender;
 import dev.eolmae.marketmonitor.domain.notification.service.MarketMapTelegramReportSender;
 import dev.eolmae.marketmonitor.domain.notification.service.SectorTelegramReportSender;
 import dev.eolmae.marketmonitor.domain.notification.service.TelegramCollectionFailureNotifier;
@@ -54,7 +52,6 @@ public class CollectionScheduler {
     private final MarketMapQueryService marketMapQueryService;
     private final MarketMapCategoryChangeRateSnapshotService marketMapCategoryChangeRateSnapshotService;
     private final MarketMapTelegramReportSender marketMapTelegramReportSender;
-    private final DailyMarketReportSender dailyMarketReportSender;
     private final SectorTelegramReportSender sectorTelegramReportSender;
     private final TelegramCollectionFailureNotifier telegramCollectionFailureNotifier;
     private final TelegramSendSchedule telegramSendSchedule;
@@ -108,19 +105,13 @@ public class CollectionScheduler {
         LocalDateTime dataTime =
                 shouldCollect ? snapshotTime : LocalDateTime.of(snapshotTime.toLocalDate(), LocalTime.of(endHour, 0));
 
-        TelegramSendKind sendKind = telegramSendSchedule.due(snapshotTime, shouldCollect);
-        if (sendKind != TelegramSendKind.NONE) {
+        if (telegramSendSchedule.due(snapshotTime, shouldCollect)) {
             if (!lastIndexContributionSuccess) {
                 run("데이터수집실패알림", () -> telegramCollectionFailureNotifier.notify(dataTime));
             } else {
                 boolean sectorImageAvailable = lastChangeRateSuccess;
-                if (sendKind == TelegramSendKind.WITH_MAP) {
-                    // 마켓맵 KOSPI/KOSDAQ + 섹터를 마켓별로 각각 한 메시지씩, 총 2건으로 발송.
-                    run("일일마켓리포트발송", () -> dailyMarketReportSender.send(dataTime, sectorImageAvailable));
-                } else {
-                    // 두 마켓 섹터만 한 메시지로 발송.
-                    run("섹터텔레그램발송", () -> sectorTelegramReportSender.send(dataTime, sectorImageAvailable));
-                }
+                // 마켓별로 섹터 이미지 1장 + 캡션 1개씩 각각 발송.
+                run("섹터텔레그램발송", () -> sectorTelegramReportSender.send(dataTime, sectorImageAvailable));
             }
         }
     }

@@ -71,4 +71,28 @@ class CategoryRankingTextBuilderTest {
 
         assertThat(text).isEqualTo("#코스피\n반도체 +5.00%\n\n#코스닥\n제약 +3.00%");
     }
+
+    @Test
+    void buildSectorCaption_헤더에_대괄호와_N분_전_대비_라벨을_붙인다() {
+        CategoryRankingSummary summary = new CategoryRankingSummary(
+                Market.KOSPI,
+                BigDecimal.valueOf(-1.23),
+                List.of(
+                        new TopCategoryItem("제약", BigDecimal.valueOf(2.1)),
+                        new TopCategoryItem("운송", BigDecimal.valueOf(1.75))));
+
+        String text = builder.buildSectorCaption(summary, 15);
+
+        assertThat(text).isEqualTo("[#코스피 15분 전 대비]\n제약 +2.10%\n운송 +1.75%");
+    }
+
+    @Test
+    void buildSectorCaption_지수_등락률이_있어도_헤더에는_안_붙인다() {
+        CategoryRankingSummary summary = new CategoryRankingSummary(
+                Market.KOSDAQ, BigDecimal.valueOf(3.0), List.of(new TopCategoryItem("반도체", BigDecimal.valueOf(1))));
+
+        String text = builder.buildSectorCaption(summary, 30);
+
+        assertThat(text).isEqualTo("[#코스닥 30분 전 대비]\n반도체 +1.00%");
+    }
 }

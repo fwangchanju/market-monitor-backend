@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 
-// 카테고리 등락률 TOP3 랭킹 텍스트 조립 — 랭킹 확정(필터·정렬·TOP3)은 전부 MarketMapQueryService가
+// 카테고리 등락률 TOP2 랭킹 텍스트 조립 — 랭킹 확정(필터·정렬·TOP2)은 전부 MarketMapQueryService가
 // 끝낸 뒤 넘겨주므로, 여기는 헤더 조립과 퍼센트 포맷만 한다. 조회 의존성은 없다.
 @Component
 public class CategoryRankingTextBuilder {
@@ -26,6 +26,16 @@ public class CategoryRankingTextBuilder {
                                 .map(this::formatTopCategory)
                                 .collect(Collectors.joining("\n")))
                 .collect(Collectors.joining("\n\n"));
+    }
+
+    /** summary 하나(마켓 하나)를 "[#코스피 15분 전 대비]\n카테고리 +x.xx%\n.." 형태로 만든다. 마켓별로
+     * 개별 메시지를 보내는 섹터 전용 발송(SectorTelegramReportSender)에서만 쓴다 — 지수 등락률 대신
+     * beforeMinutes로 "N분 전 대비" 라벨을 헤더에 붙인다. */
+    public String buildSectorCaption(CategoryRankingSummary summary, int beforeMinutes) {
+        String header = "[#" + MarketLabels.toKorean(summary.market()) + " " + beforeMinutes + "분 전 대비]";
+        String body =
+                summary.topCategories().stream().map(this::formatTopCategory).collect(Collectors.joining("\n"));
+        return header + "\n" + body;
     }
 
     private String formatTopCategory(TopCategoryItem top) {

@@ -54,7 +54,7 @@ public class MarketMapQueryService {
     /** 기본 마켓맵은 어드민이 구성한 카테고리 트리를 안 쓰므로 exclude 판정 대상 자체가 아님 — id는 관례상 0 고정 */
     private static final Long NO_CATEGORY_ID = 0L;
 
-    private static final int TOP_N = 3;
+    private static final int TOP_N = 2;
 
     private final StockInfoCacheService stockInfoCacheService;
     private final SectorPriceSnapshotService sectorPriceSnapshotService;
@@ -210,8 +210,8 @@ public class MarketMapQueryService {
     }
 
     /**
-     * 텔레그램 캡션용 카테고리 TOP3 랭킹 — 대분류(depth 0)만, 기본 제외 구간(market_value_tier_threshold
-     * .is_excluded_by_default)을 뺀 가중평균 기준 내림차순 TOP3. 필터·정렬·TOP3 확정까지 전부 여기서
+     * 텔레그램 캡션용 카테고리 TOP2 랭킹 — 대분류(depth 0)만, 기본 제외 구간(market_value_tier_threshold
+     * .is_excluded_by_default)을 뺀 가중평균 기준 내림차순 TOP2. 필터·정렬·TOP2 확정까지 전부 여기서
      * 끝내고, notification 쪽(CategoryRankingTextBuilder)은 텍스트 포매팅만 한다. 데이터 없는 마켓은
      * getCategoryChangeRates가 이미 결과에서 뺀 상태라 자동으로 여기서도 빠진다.
      */

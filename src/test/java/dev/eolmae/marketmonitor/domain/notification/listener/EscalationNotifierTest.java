@@ -14,7 +14,7 @@ import org.mockito.Mockito;
 class EscalationNotifierTest {
 
     private final TelegramClient telegramClient = Mockito.mock(TelegramClient.class);
-    private final TelegramProperties properties = new TelegramProperties("token", "chat", "dev-chat", 10, 15, 120, 15);
+    private final TelegramProperties properties = new TelegramProperties("token", "chat", "dev-chat", 10, 15, 15);
     private final EscalationNotifier notifier = new EscalationNotifier(telegramClient, properties);
 
     @Test
@@ -29,7 +29,7 @@ class EscalationNotifierTest {
 
     @Test
     void onEscalation_개발자_채팅방_아이디가_없으면_발송하지_않는다() {
-        TelegramProperties noDevChat = new TelegramProperties("token", "chat", "", 10, 15, 120, 15);
+        TelegramProperties noDevChat = new TelegramProperties("token", "chat", "", 10, 15, 15);
         EscalationNotifier withoutDevChat = new EscalationNotifier(telegramClient, noDevChat);
 
         withoutDevChat.onEscalation(new EscalationEvent("장애 발생"));

@@ -1,6 +1,8 @@
 package dev.eolmae.marketmonitor.domain.notification.service;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
+import dev.eolmae.marketmonitor.common.exception.ErrorCode;
+import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.domain.notification.client.TelegramClient;
 import dev.eolmae.marketmonitor.domain.notification.enums.RenderTarget;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
@@ -15,11 +17,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 두 마켓(KOSPI/KOSDAQ)의 섹터(카테고리 등락률) 이미지만 한 메시지로 묶어 보낸다 — 맵을 포함하지 않는
- * tick 전용. {@link TelegramReportSender}를 상속하지 않는 독립 컴포넌트다. 그 부모의 send()는 캡처
- * URL을 "?market=" 값만 붙여 만들고 "&beforeMinutes="를 붙이지 않으므로, 상속하면 부모 send()를
- * 통째로 오버라이드해야 해서 상속으로 얻는 것이 없다. 더 나쁜 것은 오버라이드를 빠뜨렸을 때 컴파일도
- * 테스트도 안 깨진 채 이미지가 프론트 기본값(30분) 기준으로 나간다는 점이다.
+ * 두 마켓(KOSPI/KOSDAQ)의 섹터(카테고리 등락률) 이미지를 마켓별로 각각 별도 메시지로 보낸다 — 맵을
+ * 포함하지 않는 유일한 발송 경로다. {@link TelegramReportSender}를 상속하지 않는 독립 컴포넌트다.
+ * 그 부모의 send()는 캡처 URL을 "?market=" 값만 붙여 만들고 "&beforeMinutes="를 붙이지 않으므로,
+ * 상속하면 부모 send()를 통째로 오버라이드해야 해서 상속으로 얻는 것이 없다. 더 나쁜 것은 오버라이드를
+ * 빠뜨렸을 때 컴파일도 테스트도 안 깨진 채 이미지가 프론트 기본값(30분) 기준으로 나간다는 점이다.
  */
 @Slf4j
 @Component
@@ -49,25 +51,41 @@ public class SectorTelegramReportSender {
             return;
         }
 
-        // 결과에 있는 마켓만 캡처한다 — getTopCategoryRankings가 그 시각 데이터 없는 마켓을 이미 결과에서
-        // 뺀다. 목록을 상수로 박아두면 데이터 없는 마켓의 빈 화면이 앨범에 섞인다.
-        List<byte[]> images = rankings.stream()
-                .flatMap(summary -> screenshotClient
-                        .capture(
-                                sectorPath(summary.market(), beforeMinutes),
-                                RenderTarget.CATEGORY_CHANGE_RATE.selector())
-                        .stream())
-                .toList();
-        String text = categoryRankingTextBuilder.buildRankingText(rankings);
-
-        // 텔레그램 sendMediaGroup은 media가 2~10개여야 한다. 한 마켓만 수집에 성공해서 랭킹에 한 마켓만
-        // 남으면(이 경로에서 새로 생기는 상황) 1장짜리 앨범이 되어 400으로 실패하므로 sendPhoto로 보낸다.
-        if (images.size() == 1) {
-            telegramClient.sendPhoto(telegramProperties.chatId(), images.get(0), text);
-        } else {
-            telegramClient.sendMediaGroup(telegramProperties.chatId(), images, text);
+        // 결과에 있는 마켓만 보낸다 — getTopCategoryRankings가 그 시각 데이터 없는 마켓을 이미 결과에서
+        // 뺀다. 목록을 상수로 박아두면 데이터 없는 마켓의 빈 화면을 보내려다 실패한다.
+        int sentCount = 0;
+        for (CategoryRankingSummary summary : rankings) {
+            sentCount += sendOneMarket(summary, beforeMinutes);
         }
-        log.info("섹터 리포트 발송 완료: 이미지={}장", images.size());
+
+        // 한 장도 못 보냈으면 캡처가 통째로 빈 것이다. 마켓별로 나눠 보내기 전에는 빈 목록이
+        // sendMediaGroup으로 넘어가 텔레그램 400으로 터지고 에스컬레이션까지 갔는데, 지금 구조에서는
+        // 루프가 0회 돌 뿐이라 아무 흔적이 남지 않는다. 그 자리를 이 예외가 메운다.
+        if (sentCount == 0) {
+            throw new EscalateException(ErrorCode.SCREENSHOT_CAPTURE_FAILED);
+        }
+        // rankings.size()가 아니라 실제로 보낸 건수를 찍는다 — 한쪽 마켓 캡처만 비면 둘이 달라진다.
+        log.info("섹터 리포트 발송 완료: 메시지={}건", sentCount);
+    }
+
+    /** 보낸 메시지 건수를 돌려준다 — 호출부가 "하나도 못 보냈는가"를 판정하는 근거다. */
+    private int sendOneMarket(CategoryRankingSummary summary, int beforeMinutes) {
+        List<byte[]> images = screenshotClient.capture(
+                sectorPath(summary.market(), beforeMinutes), RenderTarget.CATEGORY_CHANGE_RATE.selector());
+
+        // ScreenshotClient.capture는 응답의 images가 null일 때만 던지고 빈 배열은 그대로 돌려준다.
+        // 셀렉터가 아무것도 못 찾는 경우(예: 프론트가 에러 화면을 그려 capture 대상 요소가 없음)가
+        // 여기 걸린다. 다른 마켓은 성공했을 수 있으므로 여기서 던지지 않고 호출부가 합계로 판정한다.
+        if (images.isEmpty()) {
+            log.warn("{} 섹터 캡처 결과가 비어 있어 발송을 건너뜀", summary.market());
+            return 0;
+        }
+
+        String caption = categoryRankingTextBuilder.buildSectorCaption(summary, beforeMinutes);
+        for (byte[] image : images) {
+            telegramClient.sendPhoto(telegramProperties.chatId(), image, caption);
+        }
+        return images.size();
     }
 
     private String sectorPath(Market market, int beforeMinutes) {

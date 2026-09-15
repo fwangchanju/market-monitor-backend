@@ -502,26 +502,24 @@ class MarketMapQueryServiceTest {
     }
 
     @Test
-    void getTopCategoryRankings_TOP3까지만_등락률_내림차순으로_노출된다() {
+    void getTopCategoryRankings_TOP2까지만_등락률_내림차순으로_노출된다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
         MarketMapCategory a = category(1L, null, "반도체");
         MarketMapCategory b = category(2L, null, "화학");
         MarketMapCategory c = category(3L, null, "자동차");
-        MarketMapCategory d = category(4L, null, "철강");
         stubRankingForTopCategories(
                 snapshotTime,
-                List.of(a, b, c, d),
+                List.of(a, b, c),
                 List.of(),
                 changeRateItem(a.getId(), tier(10L, "대형", 100_000, 10000)), // +10%
                 changeRateItem(b.getId(), tier(10L, "대형", 50_000, 10000)), // +5%
-                changeRateItem(c.getId(), tier(10L, "대형", 20_000, 10000)), // +2%
-                changeRateItem(d.getId(), tier(10L, "대형", 10_000, 10000))); // +1%, 4위라 빠져야 함
+                changeRateItem(c.getId(), tier(10L, "대형", 20_000, 10000))); // +2%, 3위라 빠져야 함
 
         List<CategoryRankingSummary> summaries = service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60);
 
         assertThat(summaries.get(0).topCategories())
                 .extracting(TopCategoryItem::categoryName)
-                .containsExactly("반도체", "화학", "자동차");
+                .containsExactly("반도체", "화학");
     }
 
     @Test

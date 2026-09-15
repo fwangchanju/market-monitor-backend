@@ -9,5 +9,4 @@ public record TelegramProperties(
         String developerChatId,
         int sendMinute,
         int sendIntervalMinutes,
-        int mapIntervalMinutes,
         int beforeMinutes) {}

@@ -27,7 +27,7 @@ class SectorTelegramReportSenderTest {
     private final ScreenshotClient screenshotClient = Mockito.mock(ScreenshotClient.class);
     private final TelegramClient telegramClient = Mockito.mock(TelegramClient.class);
     private final TelegramProperties telegramProperties =
-            new TelegramProperties("token", "chat-id", "dev-chat", 10, BEFORE_MINUTES, 120, BEFORE_MINUTES);
+            new TelegramProperties("token", "chat-id", "dev-chat", 10, BEFORE_MINUTES, BEFORE_MINUTES);
     private final CategoryRankingTextBuilder categoryRankingTextBuilder =
             Mockito.mock(CategoryRankingTextBuilder.class);
     private final MarketMapQueryService marketMapQueryService = Mockito.mock(MarketMapQueryService.class);
@@ -37,6 +37,7 @@ class SectorTelegramReportSenderTest {
     private final LocalDateTime dataTime = LocalDateTime.of(2025, 6, 2, 8, 25);
     private final byte[] kospiImage = {1};
     private final byte[] kosdaqImage = {2};
+    private final BigDecimal indexChangeRate = BigDecimal.valueOf(1.23);
 
     @Test
     void send_섹터_스냅샷이_없으면_캡처도_발송도_하지_않는다() {
@@ -59,10 +60,10 @@ class SectorTelegramReportSenderTest {
     }
 
     @Test
-    void send_두_마켓_다_있으면_섹터_2장을_sendMediaGroup_하나로_보낸다() {
-        List<CategoryRankingSummary> rankings = List.of(
-                new CategoryRankingSummary(Market.KOSPI, BigDecimal.valueOf(1.23), List.of()),
-                new CategoryRankingSummary(Market.KOSDAQ, BigDecimal.valueOf(-0.5), List.of()));
+    void send_두_마켓_다_있으면_마켓별로_각각_sendPhoto_한다() {
+        CategoryRankingSummary kospiSummary = new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of());
+        CategoryRankingSummary kosdaqSummary = new CategoryRankingSummary(Market.KOSDAQ, indexChangeRate, List.of());
+        List<CategoryRankingSummary> rankings = List.of(kospiSummary, kosdaqSummary);
         when(marketMapQueryService.getTopCategoryRankings(MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES))
                 .thenReturn(rankings);
         when(screenshotClient.capture(
@@ -73,36 +74,40 @@ class SectorTelegramReportSenderTest {
                         "/category-change-rate?market=KOSDAQ&beforeMinutes=15",
                         "[data-captureid='category-change-rate-capture']"))
                 .thenReturn(List.of(kosdaqImage));
-        when(categoryRankingTextBuilder.buildRankingText(rankings)).thenReturn("#코스피 +1.23%\n...\n\n#코스닥 -0.50%\n...");
+        when(categoryRankingTextBuilder.buildSectorCaption(kospiSummary, BEFORE_MINUTES))
+                .thenReturn("[#코스피 15분 전 대비]\n...");
+        when(categoryRankingTextBuilder.buildSectorCaption(kosdaqSummary, BEFORE_MINUTES))
+                .thenReturn("[#코스닥 15분 전 대비]\n...");
 
         sender.send(dataTime, true);
 
-        verify(telegramClient, never()).sendPhoto(Mockito.any(), Mockito.any(), Mockito.any());
-        ArgumentCaptor<List<byte[]>> imagesCaptor = ArgumentCaptor.forClass(List.class);
-        verify(telegramClient)
-                .sendMediaGroup(
-                        Mockito.eq("chat-id"),
-                        imagesCaptor.capture(),
-                        Mockito.eq("#코스피 +1.23%\n...\n\n#코스닥 -0.50%\n..."));
-        assertThat(imagesCaptor.getValue()).containsExactly(kospiImage, kosdaqImage);
+        verify(telegramClient, never()).sendMediaGroup(Mockito.any(), Mockito.any(), Mockito.any());
+        ArgumentCaptor<byte[]> imageCaptor = ArgumentCaptor.forClass(byte[].class);
+        ArgumentCaptor<String> captionCaptor = ArgumentCaptor.forClass(String.class);
+        verify(telegramClient, Mockito.times(2))
+                .sendPhoto(Mockito.eq("chat-id"), imageCaptor.capture(), captionCaptor.capture());
+        assertThat(imageCaptor.getAllValues()).containsExactly(kospiImage, kosdaqImage);
+        assertThat(captionCaptor.getAllValues()).containsExactly("[#코스피 15분 전 대비]\n...", "[#코스닥 15분 전 대비]\n...");
     }
 
     @Test
-    void send_한_마켓만_있으면_그_마켓만_캡처해서_sendPhoto로_보낸다() {
-        List<CategoryRankingSummary> rankings =
-                List.of(new CategoryRankingSummary(Market.KOSPI, BigDecimal.valueOf(1.23), List.of()));
+    void send_한_마켓만_있으면_그_마켓만_캡처해서_보낸다() {
+        CategoryRankingSummary kospiSummary = new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of());
+        List<CategoryRankingSummary> rankings = List.of(kospiSummary);
         when(marketMapQueryService.getTopCategoryRankings(MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES))
                 .thenReturn(rankings);
         when(screenshotClient.capture(
                         "/category-change-rate?market=KOSPI&beforeMinutes=15",
                         "[data-captureid='category-change-rate-capture']"))
                 .thenReturn(List.of(kospiImage));
-        when(categoryRankingTextBuilder.buildRankingText(rankings)).thenReturn("#코스피 +1.23%\n...");
+        when(categoryRankingTextBuilder.buildSectorCaption(kospiSummary, BEFORE_MINUTES))
+                .thenReturn("[#코스피 15분 전 대비]\n...");
 
         sender.send(dataTime, true);
 
         verify(screenshotClient, never()).capture(Mockito.contains("KOSDAQ"), Mockito.any());
-        verify(telegramClient, never()).sendMediaGroup(Mockito.any(), Mockito.any(), Mockito.any());
-        verify(telegramClient).sendPhoto(Mockito.eq("chat-id"), Mockito.eq(kospiImage), Mockito.eq("#코스피 +1.23%\n..."));
+        verify(telegramClient)
+                .sendPhoto(Mockito.eq("chat-id"), Mockito.eq(kospiImage), Mockito.eq("[#코스피 15분 전 대비]\n..."));
+        verify(telegramClient, Mockito.times(1)).sendPhoto(Mockito.any(), Mockito.any(), Mockito.any());
     }
 }

@@ -38,7 +38,6 @@ class TelegramPropertiesBindingTest {
             // 의도적인 변경일 때만 고치게 되는 것이 이 단언의 목적이다.
             assertThat(properties.sendMinute()).isEqualTo(10);
             assertThat(properties.sendIntervalMinutes()).isEqualTo(15);
-            assertThat(properties.mapIntervalMinutes()).isEqualTo(120);
             assertThat(properties.beforeMinutes()).isEqualTo(15);
         });
     }

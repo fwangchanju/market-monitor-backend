@@ -1,12 +1,14 @@
 package dev.eolmae.marketmonitor.domain.notification.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
+import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.domain.notification.client.TelegramClient;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
 import dev.eolmae.marketmonitor.domain.renderer.client.ScreenshotClient;
@@ -108,6 +110,47 @@ class SectorTelegramReportSenderTest {
         verify(screenshotClient, never()).capture(Mockito.contains("KOSDAQ"), Mockito.any());
         verify(telegramClient)
                 .sendPhoto(Mockito.eq("chat-id"), Mockito.eq(kospiImage), Mockito.eq("[#코스피 15분 전 대비]\n..."));
+        verify(telegramClient, Mockito.times(1)).sendPhoto(Mockito.any(), Mockito.any(), Mockito.any());
+    }
+
+    // 캡처가 통째로 비는 것은 마켓별 분리 이전에는 텔레그램 400으로 드러나던 상황이다. 지금은 발송
+    // 루프가 0회 돌 뿐이라, 이 예외가 없으면 아무 흔적 없이 그 tick이 사라진다.
+    @Test
+    void send_캡처가_통째로_비면_에스컬레이션한다() {
+        CategoryRankingSummary kospiSummary = new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of());
+        when(marketMapQueryService.getTopCategoryRankings(MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES))
+                .thenReturn(List.of(kospiSummary));
+        when(screenshotClient.capture(
+                        "/category-change-rate?market=KOSPI&beforeMinutes=15",
+                        "[data-captureid='category-change-rate-capture']"))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> sender.send(dataTime, true)).isInstanceOf(EscalateException.class);
+
+        verifyNoInteractions(telegramClient);
+    }
+
+    @Test
+    void send_한_마켓_캡처만_비면_나머지_마켓은_그대로_보낸다() {
+        CategoryRankingSummary kospiSummary = new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of());
+        CategoryRankingSummary kosdaqSummary = new CategoryRankingSummary(Market.KOSDAQ, indexChangeRate, List.of());
+        when(marketMapQueryService.getTopCategoryRankings(MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES))
+                .thenReturn(List.of(kospiSummary, kosdaqSummary));
+        when(screenshotClient.capture(
+                        "/category-change-rate?market=KOSPI&beforeMinutes=15",
+                        "[data-captureid='category-change-rate-capture']"))
+                .thenReturn(List.of());
+        when(screenshotClient.capture(
+                        "/category-change-rate?market=KOSDAQ&beforeMinutes=15",
+                        "[data-captureid='category-change-rate-capture']"))
+                .thenReturn(List.of(kosdaqImage));
+        when(categoryRankingTextBuilder.buildSectorCaption(kosdaqSummary, BEFORE_MINUTES))
+                .thenReturn("[#코스닥 15분 전 대비]\n...");
+
+        sender.send(dataTime, true);
+
+        verify(telegramClient)
+                .sendPhoto(Mockito.eq("chat-id"), Mockito.eq(kosdaqImage), Mockito.eq("[#코스닥 15분 전 대비]\n..."));
         verify(telegramClient, Mockito.times(1)).sendPhoto(Mockito.any(), Mockito.any(), Mockito.any());
     }
 }

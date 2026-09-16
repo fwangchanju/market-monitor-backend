@@ -10,10 +10,12 @@ import java.util.List;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 
-// 카테고리 등락률 TOP3 랭킹 텍스트 조립 — 랭킹 확정(필터·정렬·TOP3)은 전부 MarketMapQueryService가
+// 카테고리 등락률 TOP2 랭킹 텍스트 조립 — 랭킹 확정(필터·정렬·TOP2)은 전부 MarketMapQueryService가
 // 끝낸 뒤 넘겨주므로, 여기는 헤더 조립과 퍼센트 포맷만 한다. 조회 의존성은 없다.
 @Component
 public class CategoryRankingTextBuilder {
+
+    private static final String MAP_CAPTION_HEADER = "[#코스피 / #코스닥 섹터 등락률]";
 
     /** summaries가 담고 있는 마켓 각각을 "#코스피 +x.xx%\n카테고리 +x.xx%\n\n#코스닥 +x.xx%\n.." 형태로
      * 이어붙인다(헤더 옆 퍼센트는 그 마켓 지수의 등락률). 데이터 없는 마켓은 summaries에 이미 없는 상태라
@@ -23,12 +25,53 @@ public class CategoryRankingTextBuilder {
         return summaries.stream()
                 .map(summary -> buildHeader(summary.market(), summary.indexChangeRate()) + "\n"
                         + summary.topCategories().stream()
-                                .map(this::formatTopCategory)
+                                .map(this::formatTopCategoryDelta)
                                 .collect(Collectors.joining("\n")))
                 .collect(Collectors.joining("\n\n"));
     }
 
-    private String formatTopCategory(TopCategoryItem top) {
+    /** summary 하나(마켓 하나)를 "[#코스피 15분 전 대비]\n카테고리 +x.xx%p\n.." 형태로 만든다. 마켓별로
+     * 개별 메시지를 보내는 섹터 전용 발송(SectorTelegramReportSender)의 평상시 tick에서만 쓴다 — 지수
+     * 등락률 대신 beforeMinutes로 "N분 전 대비" 라벨을 헤더에 붙이고, 본문 값도 그 라벨에 맞는 %p
+     * 차이다(buildRankingText의 현재 등락률 %와 단위가 다르다). before가 없어 topCategories가 비는
+     * 경우(매일 첫 발송)는 호출부가 이 메서드 대신 buildSectorFallbackCaption을 쓰므로, 여기서는 항상
+     * 채워져 있다고 가정한다. */
+    public String buildSectorCaption(CategoryRankingSummary summary, int beforeMinutes) {
+        String header = "[#" + MarketLabels.toKorean(summary.market()) + " " + beforeMinutes + "분 전 대비]";
+        String body = summary.topCategories().stream()
+                .map(this::formatTopCategoryDelta)
+                .collect(Collectors.joining("\n"));
+        return header + "\n" + body;
+    }
+
+    /** 매일 첫 발송(08:10)처럼 beforeMinutes분 전 데이터가 없어 변화율(%p)을 못 구할 때의 폴백 캡션 —
+     * 등락률(now) 기준 TOP2를 "[#코스피 섹터 등락률]" 헤더로 보여준다. 단위는 %다(%p 아님). 헤더를
+     * buildSectorCaption과 다르게 가는 이유는, "15분 전 대비"라고 적어놓고 내용이 등락률이면 방금 고친
+     * 것과 같은 라벨-단위 어긋남이 다시 생기기 때문이다. */
+    public String buildSectorFallbackCaption(CategoryRankingSummary summary) {
+        String header = "[#" + MarketLabels.toKorean(summary.market()) + " 섹터 등락률]";
+        String body = summary.topCategories().stream()
+                .map(this::formatTopCategoryChangeRate)
+                .collect(Collectors.joining("\n"));
+        return header + "\n" + body;
+    }
+
+    /** 맵 발송(코스피+코스닥 앨범) 캡션 — 두 마켓을 합친 전체 기준 TOP2를 "[#코스피 / #코스닥 섹터
+     * 등락률]" 헤더 아래 두 줄로 보여준다. 마켓 구분 줄은 안 붙인다(헤더에 이미 명시돼 있다). 단위는
+     * 등락률(now) 그대로라 %다(%p 아님) — buildSectorCaption의 변화율과 다르다. */
+    public String buildMapCaption(List<TopCategoryItem> topCategories) {
+        String body =
+                topCategories.stream().map(this::formatTopCategoryChangeRate).collect(Collectors.joining("\n"));
+        return MAP_CAPTION_HEADER + "\n" + body;
+    }
+
+    // TopCategoryItem.changeRate는 "N분 전 대비 변화"라 단위가 %가 아니라 %p다.
+    private String formatTopCategoryDelta(TopCategoryItem top) {
+        return top.categoryName() + " " + formatPercent(top.changeRate()) + "p";
+    }
+
+    // 등락률(now) 기준일 때는 단위가 %다 — formatTopCategoryDelta와 값의 의미 자체가 다르다.
+    private String formatTopCategoryChangeRate(TopCategoryItem top) {
         return top.categoryName() + " " + formatPercent(top.changeRate());
     }
 

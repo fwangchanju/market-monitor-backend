@@ -33,6 +33,7 @@ import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -490,8 +491,8 @@ class MarketMapQueryServiceTest {
                 snapshotTime,
                 List.of(root, child),
                 List.of(),
-                changeRateItem(root.getId(), tier(10L, "대형", 50_000, 10000)), // +5%
-                changeRateItem(child.getId(), tier(10L, "대형", 900_000, 10000))); // +90%
+                changeRateItemWithFlatBefore(root.getId(), tier(10L, "대형", 50_000, 10000)), // +5%p
+                changeRateItemWithFlatBefore(child.getId(), tier(10L, "대형", 900_000, 10000))); // +90%p
 
         List<CategoryRankingSummary> summaries = service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60);
 
@@ -502,26 +503,59 @@ class MarketMapQueryServiceTest {
     }
 
     @Test
-    void getTopCategoryRankings_TOP3까지만_등락률_내림차순으로_노출된다() {
+    void getTopCategoryRankings_TOP2까지만_등락률_내림차순으로_노출된다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
         MarketMapCategory a = category(1L, null, "반도체");
         MarketMapCategory b = category(2L, null, "화학");
         MarketMapCategory c = category(3L, null, "자동차");
-        MarketMapCategory d = category(4L, null, "철강");
         stubRankingForTopCategories(
                 snapshotTime,
-                List.of(a, b, c, d),
+                List.of(a, b, c),
                 List.of(),
-                changeRateItem(a.getId(), tier(10L, "대형", 100_000, 10000)), // +10%
-                changeRateItem(b.getId(), tier(10L, "대형", 50_000, 10000)), // +5%
-                changeRateItem(c.getId(), tier(10L, "대형", 20_000, 10000)), // +2%
-                changeRateItem(d.getId(), tier(10L, "대형", 10_000, 10000))); // +1%, 4위라 빠져야 함
+                changeRateItemWithFlatBefore(a.getId(), tier(10L, "대형", 100_000, 10000)), // +10%p
+                changeRateItemWithFlatBefore(b.getId(), tier(10L, "대형", 50_000, 10000)), // +5%p
+                changeRateItemWithFlatBefore(c.getId(), tier(10L, "대형", 20_000, 10000))); // +2%p, 3위라 빠져야 함
 
         List<CategoryRankingSummary> summaries = service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60);
 
         assertThat(summaries.get(0).topCategories())
                 .extracting(TopCategoryItem::categoryName)
-                .containsExactly("반도체", "화학", "자동차");
+                .containsExactly("반도체", "화학");
+    }
+
+    // before가 없는 것을 0으로 치면 now가 그대로 델타가 되어, 실제로는 계산할 수 없는 카테고리가
+    // 1위로 올라온다. 순위에서 빼는 것이 맞다.
+    @Test
+    void getTopCategoryRankings_before가_없는_카테고리는_랭킹에서_빠진다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        MarketMapCategory a = category(1L, null, "반도체");
+        MarketMapCategory b = category(2L, null, "화학");
+        stubRankingForTopCategories(
+                snapshotTime,
+                List.of(a, b),
+                List.of(),
+                changeRateItem(a.getId(), tier(10L, "대형", 900_000, 10000)), // +90%, before 없음
+                changeRateItemWithFlatBefore(b.getId(), tier(10L, "대형", 50_000, 10000))); // +5%p
+
+        List<CategoryRankingSummary> summaries = service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60);
+
+        assertThat(summaries.get(0).topCategories())
+                .extracting(TopCategoryItem::categoryName)
+                .containsExactly("화학");
+    }
+
+    // 그 시각 스냅샷이 통째로 없는 경우 — 매일 첫 발송(08:10의 before는 07:55인데 수집은 08:00부터)이
+    // 여기 걸린다. 캡션 쪽에서 안내 문구로 바꿔 내보낸다.
+    @Test
+    void getTopCategoryRankings_before가_전부_없으면_빈_목록이_된다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        MarketMapCategory a = category(1L, null, "반도체");
+        stubRankingForTopCategories(
+                snapshotTime, List.of(a), List.of(), changeRateItem(a.getId(), tier(10L, "대형", 100_000, 10000)));
+
+        List<CategoryRankingSummary> summaries = service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60);
+
+        assertThat(summaries.get(0).topCategories()).isEmpty();
     }
 
     @Test
@@ -533,14 +567,114 @@ class MarketMapQueryServiceTest {
                 snapshotTime,
                 List.of(root),
                 List.of(20L),
-                changeRateItem(
+                changeRateItemWithFlatBefore(
                         root.getId(),
-                        tier(10L, "대형", 100_000, 10000), // +10%, 포함
-                        tier(20L, "소형", -500_000, 10000))); // -50%, 제외 대상
+                        tier(10L, "대형", 100_000, 10000), // +10%p, 포함
+                        tier(20L, "소형", -500_000, 10000))); // -50%p, 제외 대상
 
         List<CategoryRankingSummary> summaries = service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60);
 
         assertThat(summaries.get(0).topCategories().get(0).changeRate()).isEqualByComparingTo(BigDecimal.TEN);
+    }
+
+    // 델타(now-before) 기준과 등락률(now) 기준이 서로 다른 카테고리를 뽑을 수 있음을 보인다 — 08:10
+    // 폴백이 델타 대신 이 랭킹을 쓰는 이유다.
+    @Test
+    void getTopCategoryRankingsByChangeRate_등락률_기준으로_델타_기준과_다른_카테고리를_뽑는다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        MarketMapCategory a = category(1L, null, "반도체");
+        MarketMapCategory b = category(2L, null, "화학");
+        MarketMapCategory c = category(3L, null, "자동차");
+        // a: now +20%, before +19% → 델타 +1%p. b: now +5%, before -10% → 델타 +15%p.
+        // c: now +10%, before +8% → 델타 +2%p.
+        CategoryChangeRateItem itemA = CategoryChangeRateItem.withBefore(
+                a.getId(), List.of(tier(10L, "대형", 200_000, 10_000)), List.of(tier(10L, "대형", 190_000, 10_000)));
+        CategoryChangeRateItem itemB = CategoryChangeRateItem.withBefore(
+                b.getId(), List.of(tier(10L, "대형", 50_000, 10_000)), List.of(tier(10L, "대형", -100_000, 10_000)));
+        CategoryChangeRateItem itemC = CategoryChangeRateItem.withBefore(
+                c.getId(), List.of(tier(10L, "대형", 100_000, 10_000)), List.of(tier(10L, "대형", 80_000, 10_000)));
+        stubRankingForTopCategories(snapshotTime, List.of(a, b, c), List.of(), itemA, itemB, itemC);
+
+        List<CategoryRankingSummary> deltaRankings =
+                service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60);
+        List<CategoryRankingSummary> changeRateRankings =
+                service.getTopCategoryRankingsByChangeRate(MarketQuery.KOSPI, snapshotTime, 60);
+
+        assertThat(deltaRankings.get(0).topCategories())
+                .extracting(TopCategoryItem::categoryName)
+                .containsExactly("화학", "자동차");
+        assertThat(changeRateRankings.get(0).topCategories())
+                .extracting(TopCategoryItem::categoryName)
+                .containsExactly("반도체", "자동차");
+    }
+
+    @Test
+    void getMergedTopCategoryRanking_두_마켓의_원시값을_합친_기준으로_TOP2를_뽑는다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        MarketMapCategory a = category(1L, null, "반도체");
+        MarketMapCategory b = category(2L, null, "화학");
+        MarketMapCategory c = category(3L, null, "자동차");
+        stubMergedRanking(List.of(a, b, c));
+
+        // a는 KOSPI 단독으로 보면 압도적 1위(+100%)지만 KOSDAQ에서 -90%라 합치면 +5%로 밀린다.
+        Map<Long, List<CategoryTierBreakdown>> kospiBreakdowns = Map.of(
+                a.getId(), List.of(tier(10L, "대형", 1_000_000, 10_000)),
+                b.getId(), List.of(tier(10L, "대형", 80_000, 10_000)),
+                c.getId(), List.of(tier(10L, "대형", 60_000, 10_000)));
+        Map<Long, List<CategoryTierBreakdown>> kosdaqBreakdowns = Map.of(
+                a.getId(), List.of(tier(10L, "대형", -900_000, 10_000)),
+                b.getId(), List.of(tier(10L, "대형", 80_000, 10_000)));
+        when(marketMapCategoryChangeRateSnapshotService.findTierBreakdownsByCategoryId(
+                        List.of(Market.KOSPI, Market.KOSDAQ), snapshotTime))
+                .thenReturn(Map.of(Market.KOSPI, kospiBreakdowns, Market.KOSDAQ, kosdaqBreakdowns));
+
+        List<TopCategoryItem> merged = service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime);
+
+        // 병합 평균: a=(1,000,000-900,000)/20,000=+5%, b=(80,000+80,000)/20,000=+8%, c=60,000/10,000=+6%
+        assertThat(merged).extracting(TopCategoryItem::categoryName).containsExactly("화학", "자동차");
+    }
+
+    @Test
+    void getMergedTopCategoryRanking_원시값을_합산한_뒤_한_번만_나눈다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        MarketMapCategory a = category(1L, null, "반도체");
+        stubMergedRanking(List.of(a));
+
+        // KOSPI 시총 10,000에 +10%p, KOSDAQ 시총 40,000에 -2%p — 단순 평균이면 (10-2)/2=+4가 되지만,
+        // KOSDAQ 쪽 시총 비중이 훨씬 커서 원시값을 합산한 뒤 나누면 +0.4가 맞다.
+        Map<Long, List<CategoryTierBreakdown>> kospiBreakdowns =
+                Map.of(a.getId(), List.of(tier(10L, "대형", 100_000, 10_000)));
+        Map<Long, List<CategoryTierBreakdown>> kosdaqBreakdowns =
+                Map.of(a.getId(), List.of(tier(10L, "대형", -80_000, 40_000)));
+        when(marketMapCategoryChangeRateSnapshotService.findTierBreakdownsByCategoryId(
+                        List.of(Market.KOSPI, Market.KOSDAQ), snapshotTime))
+                .thenReturn(Map.of(Market.KOSPI, kospiBreakdowns, Market.KOSDAQ, kosdaqBreakdowns));
+
+        List<TopCategoryItem> merged = service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime);
+
+        assertThat(merged.get(0).changeRate()).isEqualByComparingTo(BigDecimal.valueOf(0.4));
+    }
+
+    // 등락률 수집만 실패한 tick이 이 모양이다 — 맵 페이지는 sector_price_snapshot으로 그려져서 멀쩡히
+    // 나오는데 여기는 빈 목록이 된다. 호출부(MarketMapAlbumReportSender)가 이걸 "캡처할 마켓이 없다"로
+    // 읽으면 한 장도 안 찍고 에스컬레이션하므로, 빈 목록이 정상 반환이라는 것을 못박아둔다.
+    @Test
+    void getMergedTopCategoryRanking_그_시각_스냅샷이_없으면_빈_목록이다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        stubMergedRanking(List.of(category(1L, null, "반도체")));
+        when(marketMapCategoryChangeRateSnapshotService.findTierBreakdownsByCategoryId(
+                        List.of(Market.KOSPI, Market.KOSDAQ), snapshotTime))
+                .thenReturn(Map.of());
+
+        assertThat(service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime))
+                .isEmpty();
+    }
+
+    private void stubMergedRanking(List<MarketMapCategory> categories) {
+        when(marketMapCategoryRepository.findAll()).thenReturn(categories);
+        when(marketValueTierThresholdService.getValueTiers()).thenReturn(List.of());
+        when(marketMapCategoryChangeRateSnapshotService.combine(Mockito.anyList()))
+                .thenAnswer(invocation -> combine(invocation.getArgument(0)));
     }
 
     private void stubRankingForTopCategories(
@@ -576,6 +710,16 @@ class MarketMapQueryServiceTest {
 
     private CategoryChangeRateItem changeRateItem(Long categoryId, CategoryTierBreakdown... breakdowns) {
         return CategoryChangeRateItem.withoutBefore(categoryId, List.of(breakdowns));
+    }
+
+    /** 랭킹 값은 now - before이므로, before를 0%로 두면 델타가 곧 now가 되어 기대값을 읽기 쉽다.
+     * 같은 tierId를 써야 기본 제외 구간 필터가 now/before 양쪽에 똑같이 걸린다. */
+    private CategoryChangeRateItem changeRateItemWithFlatBefore(
+            Long categoryId, CategoryTierBreakdown... nowBreakdowns) {
+        List<CategoryTierBreakdown> before = Arrays.stream(nowBreakdowns)
+                .map(b -> tier(b.tierId(), b.tierLabel(), 0L, b.totalValue().longValue()))
+                .toList();
+        return CategoryChangeRateItem.withBefore(categoryId, List.of(nowBreakdowns), before);
     }
 
     private CategoryTierBreakdown tier(Long tierId, String label, long weightedSum, long totalValue) {

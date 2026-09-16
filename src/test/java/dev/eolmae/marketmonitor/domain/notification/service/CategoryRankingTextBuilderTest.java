@@ -27,7 +27,7 @@ class CategoryRankingTextBuilderTest {
 
         String text = builder.buildRankingText(List.of(summary));
 
-        assertThat(text).isEqualTo("#코스피\n반도체 +10.00%\n화학 +5.00%\n자동차 +2.00%");
+        assertThat(text).isEqualTo("#코스피\n반도체 +10.00%p\n화학 +5.00%p\n자동차 +2.00%p");
     }
 
     @Test
@@ -37,7 +37,7 @@ class CategoryRankingTextBuilderTest {
 
         String text = builder.buildRankingText(List.of(summary));
 
-        assertThat(text).isEqualTo("#코스피 -1.23%\n반도체 +5.00%");
+        assertThat(text).isEqualTo("#코스피 -1.23%\n반도체 +5.00%p");
     }
 
     @Test
@@ -47,7 +47,7 @@ class CategoryRankingTextBuilderTest {
 
         String text = builder.buildRankingText(List.of(summary));
 
-        assertThat(text).isEqualTo("#코스피\n반도체 +5.00%");
+        assertThat(text).isEqualTo("#코스피\n반도체 +5.00%p");
     }
 
     @Test
@@ -57,7 +57,7 @@ class CategoryRankingTextBuilderTest {
 
         String text = builder.buildRankingText(List.of(summary));
 
-        assertThat(text).isEqualTo("#코스피\n반도체 -12.34%");
+        assertThat(text).isEqualTo("#코스피\n반도체 -12.34%p");
     }
 
     @Test
@@ -69,6 +69,55 @@ class CategoryRankingTextBuilderTest {
 
         String text = builder.buildRankingText(List.of(kospi, kosdaq));
 
-        assertThat(text).isEqualTo("#코스피\n반도체 +5.00%\n\n#코스닥\n제약 +3.00%");
+        assertThat(text).isEqualTo("#코스피\n반도체 +5.00%p\n\n#코스닥\n제약 +3.00%p");
+    }
+
+    @Test
+    void buildSectorCaption_헤더에_대괄호와_N분_전_대비_라벨을_붙인다() {
+        CategoryRankingSummary summary = new CategoryRankingSummary(
+                Market.KOSPI,
+                BigDecimal.valueOf(-1.23),
+                List.of(
+                        new TopCategoryItem("제약", BigDecimal.valueOf(2.1)),
+                        new TopCategoryItem("운송", BigDecimal.valueOf(1.75))));
+
+        String text = builder.buildSectorCaption(summary, 15);
+
+        assertThat(text).isEqualTo("[#코스피 15분 전 대비]\n제약 +2.10%p\n운송 +1.75%p");
+    }
+
+    @Test
+    void buildSectorCaption_지수_등락률이_있어도_헤더에는_안_붙인다() {
+        CategoryRankingSummary summary = new CategoryRankingSummary(
+                Market.KOSDAQ, BigDecimal.valueOf(3.0), List.of(new TopCategoryItem("반도체", BigDecimal.valueOf(1))));
+
+        String text = builder.buildSectorCaption(summary, 30);
+
+        assertThat(text).isEqualTo("[#코스닥 30분 전 대비]\n반도체 +1.00%p");
+    }
+
+    @Test
+    void buildSectorFallbackCaption_헤더가_등락률_라벨이고_단위는_퍼센트다() {
+        CategoryRankingSummary summary = new CategoryRankingSummary(
+                Market.KOSPI,
+                null,
+                List.of(
+                        new TopCategoryItem("반도체", BigDecimal.valueOf(2.1)),
+                        new TopCategoryItem("화학", BigDecimal.valueOf(-1.5))));
+
+        String text = builder.buildSectorFallbackCaption(summary);
+
+        assertThat(text).isEqualTo("[#코스피 섹터 등락률]\n반도체 +2.10%\n화학 -1.50%");
+    }
+
+    @Test
+    void buildMapCaption_마켓_구분_없이_두_줄로_이어붙인다() {
+        List<TopCategoryItem> topCategories = List.of(
+                new TopCategoryItem("반도체", BigDecimal.valueOf(1.35)),
+                new TopCategoryItem("제약", BigDecimal.valueOf(1.20)));
+
+        String text = builder.buildMapCaption(topCategories);
+
+        assertThat(text).isEqualTo("[#코스피 / #코스닥 섹터 등락률]\n반도체 +1.35%\n제약 +1.20%");
     }
 }

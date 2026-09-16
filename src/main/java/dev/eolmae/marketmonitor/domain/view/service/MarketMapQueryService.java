@@ -37,6 +37,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -54,7 +55,7 @@ public class MarketMapQueryService {
     /** 기본 마켓맵은 어드민이 구성한 카테고리 트리를 안 쓰므로 exclude 판정 대상 자체가 아님 — id는 관례상 0 고정 */
     private static final Long NO_CATEGORY_ID = 0L;
 
-    private static final int TOP_N = 3;
+    private static final int TOP_N = 2;
 
     private final StockInfoCacheService stockInfoCacheService;
     private final SectorPriceSnapshotService sectorPriceSnapshotService;
@@ -210,24 +211,88 @@ public class MarketMapQueryService {
     }
 
     /**
-     * 텔레그램 캡션용 카테고리 TOP3 랭킹 — 대분류(depth 0)만, 기본 제외 구간(market_value_tier_threshold
-     * .is_excluded_by_default)을 뺀 가중평균 기준 내림차순 TOP3. 필터·정렬·TOP3 확정까지 전부 여기서
-     * 끝내고, notification 쪽(CategoryRankingTextBuilder)은 텍스트 포매팅만 한다. 데이터 없는 마켓은
-     * getCategoryChangeRates가 이미 결과에서 뺀 상태라 자동으로 여기서도 빠진다.
+     * 텔레그램 캡션용 카테고리 TOP2 랭킹 — 대분류(depth 0)만, 기본 제외 구간(market_value_tier_threshold
+     * .is_excluded_by_default)을 뺀 **beforeMinutes분 전 대비 변화(%p)** 기준 내림차순 TOP2.
+     * 필터·정렬·TOP2 확정까지 전부 여기서 끝내고, notification 쪽(CategoryRankingTextBuilder)은 텍스트
+     * 포매팅만 한다. 데이터 없는 마켓은 getCategoryChangeRates가 이미 결과에서 뺀 상태라 자동으로
+     * 여기서도 빠진다.
+     *
+     * <p>before가 없는 카테고리는 순위에서 빠지므로, beforeMinutes 시각에 스냅샷이 통째로 없으면(장
+     * 시작 직후 첫 발송이 매일 여기 걸린다 — 08:10 발송의 before는 07:55인데 수집은 08:00부터다)
+     * topCategories가 빈 목록이 된다. 그 처리는 호출부(CategoryRankingTextBuilder)가 한다.
      */
     public List<CategoryRankingSummary> getTopCategoryRankings(
             MarketQuery marketQuery, LocalDateTime snapshotTime, int beforeMinutes) {
         SnapshotResponse<CategoryChangeRateMarketRanking> ranking =
                 getCategoryChangeRates(marketQuery, snapshotTime, beforeMinutes);
-
-        Set<Long> excludedTierIds = marketValueTierThresholdService.getValueTiers().stream()
-                .filter(MarketValueTierItem::isExcludedByDefault)
-                .map(MarketValueTierItem::id)
-                .collect(Collectors.toSet());
-
+        Set<Long> excludedTierIds = excludedTierIds();
         return ranking.items().stream()
                 .map(marketRanking -> toCategoryRankingSummary(marketRanking, excludedTierIds))
                 .toList();
+    }
+
+    /**
+     * 텔레그램 캡션용 카테고리 TOP2 랭킹 — 위와 같은 필터·TOP2 규칙이되 **등락률(now, %) 기준**, 마켓별.
+     * 매일 첫 발송(전날 대비 before가 없는 tick)의 변화율 폴백 전용이다. getCategoryChangeRates가
+     * before도 항상 같이 조회하지만 여기서는 now만 쓰고 버린다 — docs/backlog.md의 「텔레그램 경로가
+     * before를 조회하고 버린다」 항목, 이번에 고치지 않는다.
+     */
+    public List<CategoryRankingSummary> getTopCategoryRankingsByChangeRate(
+            MarketQuery marketQuery, LocalDateTime snapshotTime, int beforeMinutes) {
+        SnapshotResponse<CategoryChangeRateMarketRanking> ranking =
+                getCategoryChangeRates(marketQuery, snapshotTime, beforeMinutes);
+        Set<Long> excludedTierIds = excludedTierIds();
+        return ranking.items().stream()
+                .map(marketRanking -> toCategoryRankingSummaryByChangeRate(marketRanking, excludedTierIds))
+                .toList();
+    }
+
+    /**
+     * 맵 발송(코스피+코스닥 앨범) 캡션용 — 두 마켓의 카테고리별 breakdown을 먼저 합친 뒤 가중평균을 낸
+     * **등락률(now, %) 기준** TOP2. 마켓 구분이 없어 반환 타입도 마켓별 랭킹(CategoryRankingSummary)이
+     * 아니라 List&lt;TopCategoryItem&gt; 하나다. buildCustomMarketMap의 All Stocks 병합과 같은 패턴
+     * (카테고리별 breakdown을 합친 뒤 한 번만 나눈다 — 이미 나뉜 평균끼리 다시 평균내면 틀린다)이지만,
+     * 화면 트리 없이 랭킹만 필요해서 별도로 조립한다.
+     *
+     * <p>캡션 전용이다. 이 결과로 "어느 마켓을 캡처할지"를 정하면 안 된다 — 맵 페이지는
+     * sector_price_snapshot으로 그려지는데 여기는 카테고리 등락률 스냅샷을 보므로, 등락률 수집만
+     * 실패한 tick에서는 맵이 멀쩡히 그려지는데도 빈 목록이 나온다. 그 시각 스냅샷이 통째로 없으면
+     * 빈 목록을 돌려주므로, 호출부가 캡션을 붙일지 말지 판단한다.
+     */
+    public List<TopCategoryItem> getMergedTopCategoryRanking(MarketQuery marketQuery, LocalDateTime snapshotTime) {
+        List<Market> markets = marketQuery.toMarkets();
+        Map<Long, List<CategoryTierBreakdown>> mergedByCategoryId =
+                marketMapCategoryChangeRateSnapshotService
+                        .findTierBreakdownsByCategoryId(markets, snapshotTime)
+                        .values()
+                        .stream()
+                        .flatMap(byCategoryId -> byCategoryId.entrySet().stream())
+                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (a, b) -> {
+                            List<CategoryTierBreakdown> merged = new ArrayList<>(a);
+                            merged.addAll(b);
+                            return merged;
+                        }));
+
+        Map<Long, MarketMapCategory> categoryById = marketMapCategoryRepository.findAll().stream()
+                .collect(Collectors.toMap(MarketMapCategory::getId, Function.identity()));
+        Set<Long> excludedTierIds = excludedTierIds();
+
+        return mergedByCategoryId.entrySet().stream()
+                .filter(entry -> categoryById.containsKey(entry.getKey()))
+                .filter(entry -> categoryById.get(entry.getKey()).getDepth() == 0)
+                .map(entry -> toTopCategoryItemByChangeRate(
+                        categoryById.get(entry.getKey()).getName(), entry.getValue(), excludedTierIds))
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(TopCategoryItem::changeRate).reversed())
+                .limit(TOP_N)
+                .toList();
+    }
+
+    private Set<Long> excludedTierIds() {
+        return marketValueTierThresholdService.getValueTiers().stream()
+                .filter(MarketValueTierItem::isExcludedByDefault)
+                .map(MarketValueTierItem::id)
+                .collect(Collectors.toSet());
     }
 
     private CategoryRankingSummary toCategoryRankingSummary(
@@ -235,21 +300,67 @@ public class MarketMapQueryService {
         List<TopCategoryItem> topCategories = marketRanking.items().stream()
                 .filter(item -> item.depth() == 0)
                 .map(item -> toTopCategoryItem(item, excludedTierIds))
+                .filter(Objects::nonNull)
                 .sorted(Comparator.comparing(TopCategoryItem::changeRate).reversed())
                 .limit(TOP_N)
                 .toList();
-        // 텍스트 캡션은 before를 쓰지 않는다. 헤더에는 현재 등락률만 붙는다.
+        // 지수는 캡션 본문과 달리 현재 등락률 그대로다 — 이 값을 쓰는 buildRankingText 쪽 서식이
+        // "#코스피 +x.xx%"라 델타가 아니라 현재값을 기대한다.
         BigDecimal indexChangeRate =
                 marketRanking.index() != null ? marketRanking.index().now() : null;
         return new CategoryRankingSummary(marketRanking.market(), indexChangeRate, topCategories);
     }
 
+    private CategoryRankingSummary toCategoryRankingSummaryByChangeRate(
+            CategoryChangeRateMarketRanking marketRanking, Set<Long> excludedTierIds) {
+        List<TopCategoryItem> topCategories = marketRanking.items().stream()
+                .filter(item -> item.depth() == 0)
+                .map(item -> toTopCategoryItemByChangeRate(item.categoryName(), item.now(), excludedTierIds))
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(TopCategoryItem::changeRate).reversed())
+                .limit(TOP_N)
+                .toList();
+        BigDecimal indexChangeRate =
+                marketRanking.index() != null ? marketRanking.index().now() : null;
+        return new CategoryRankingSummary(marketRanking.market(), indexChangeRate, topCategories);
+    }
+
+    /**
+     * 캡션이 "N분 전 대비"라 now와 before의 가중평균 차이(%p)를 담는다. before가 없으면 null을 돌려
+     * 순위에서 빠진다 — 없는 것을 0으로 치면 now가 그대로 델타가 되어 조용히 틀린 값이 1위로 올라온다.
+     * combine()이 빈 목록에 0을 돌려주므로 빈 목록도 같이 걸러야 한다.
+     */
     private TopCategoryItem toTopCategoryItem(CategoryChangeRateItem item, Set<Long> excludedTierIds) {
-        List<CategoryTierBreakdown> included = item.now().stream()
+        if (item.before() == null) {
+            return null;
+        }
+        BigDecimal now = weightedAvgOf(item.now(), excludedTierIds);
+        BigDecimal before = weightedAvgOf(item.before(), excludedTierIds);
+        if (now == null || before == null) {
+            return null;
+        }
+        return new TopCategoryItem(item.categoryName(), now.subtract(before));
+    }
+
+    /** 등락률(now) 기준 TOP2용 — before 없이 now의 가중평균 하나만 담는다. */
+    private TopCategoryItem toTopCategoryItemByChangeRate(
+            String categoryName, List<CategoryTierBreakdown> now, Set<Long> excludedTierIds) {
+        BigDecimal weightedAvg = weightedAvgOf(now, excludedTierIds);
+        if (weightedAvg == null) {
+            return null;
+        }
+        return new TopCategoryItem(categoryName, weightedAvg);
+    }
+
+    private BigDecimal weightedAvgOf(List<CategoryTierBreakdown> breakdowns, Set<Long> excludedTierIds) {
+        List<CategoryTierBreakdown> included = breakdowns.stream()
                 .filter(breakdown -> !excludedTierIds.contains(breakdown.tierId()))
                 .toList();
+        if (included.isEmpty()) {
+            return null;
+        }
         SnapshotAverages averages = marketMapCategoryChangeRateSnapshotService.combine(included);
-        return new TopCategoryItem(item.categoryName(), averages.weightedAvgChangeRate());
+        return averages.weightedAvgChangeRate();
     }
 
     /** markets가 정확히 하나일 때만 의미 있는 단일 지수 개요 — ALL_STOCK처럼 여럿이면 단일 값이 없어 null. */

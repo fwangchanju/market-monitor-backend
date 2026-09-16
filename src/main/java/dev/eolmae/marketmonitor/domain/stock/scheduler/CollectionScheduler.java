@@ -6,10 +6,9 @@ import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.common.util.KstClock;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryChangeRateSnapshotService;
-import dev.eolmae.marketmonitor.domain.notification.enums.TelegramSendKind;
 import dev.eolmae.marketmonitor.domain.notification.listener.EscalationPublisher;
 import dev.eolmae.marketmonitor.domain.notification.schedule.TelegramSendSchedule;
-import dev.eolmae.marketmonitor.domain.notification.service.DailyMarketReportSender;
+import dev.eolmae.marketmonitor.domain.notification.service.MarketMapAlbumReportSender;
 import dev.eolmae.marketmonitor.domain.notification.service.MarketMapTelegramReportSender;
 import dev.eolmae.marketmonitor.domain.notification.service.SectorTelegramReportSender;
 import dev.eolmae.marketmonitor.domain.notification.service.TelegramCollectionFailureNotifier;
@@ -54,8 +53,8 @@ public class CollectionScheduler {
     private final MarketMapQueryService marketMapQueryService;
     private final MarketMapCategoryChangeRateSnapshotService marketMapCategoryChangeRateSnapshotService;
     private final MarketMapTelegramReportSender marketMapTelegramReportSender;
-    private final DailyMarketReportSender dailyMarketReportSender;
     private final SectorTelegramReportSender sectorTelegramReportSender;
+    private final MarketMapAlbumReportSender marketMapAlbumReportSender;
     private final TelegramCollectionFailureNotifier telegramCollectionFailureNotifier;
     private final TelegramSendSchedule telegramSendSchedule;
     private final EscalationPublisher escalationPublisher;
@@ -74,9 +73,10 @@ public class CollectionScheduler {
     /**
      * 장중 시장 데이터 수집: 평일 collect.start-hour~end-hour, interval-minutes 간격.
      * collect.end-hour 정각(장 마감 시점) 이후엔 수집해봐야 데이터가 안 바뀌므로 수집기 호출은 스킵한다.
-     * 수집 직후 텔레그램 발송을 매번 호출하되, 실제 발송 여부와 주기({@link TelegramSendSchedule#due})는
-     * 여기서 한 곳에서만 게이팅한다(별도 스케줄로 분리하면 두 트리거의 실행 순서를 보장할 수 없어, 같은
-     * 호출 안에서 순차 실행되도록 묶었다).
+     * 수집 직후 텔레그램 발송을 매번 호출하되, 실제 발송 여부와 주기({@link TelegramSendSchedule#due},
+     * {@link TelegramSendSchedule#dueForMap})는 여기서 한 곳에서만 게이팅한다(별도 스케줄로 분리하면 두
+     * 트리거의 실행 순서를 보장할 수 없어, 같은 호출 안에서 순차 실행되도록 묶었다). 섹터(15분 간격)와
+     * 맵(telegram.map-send-times, 하루 세 번) 발송은 서로 독립적인 시각 판정이라 별도 if로 나뉜다.
      */
     @Scheduled(
             cron = "0 0/${collect.interval-minutes} ${collect.start-hour}-${collect.end-hour} * * MON-FRI",
@@ -108,20 +108,22 @@ public class CollectionScheduler {
         LocalDateTime dataTime =
                 shouldCollect ? snapshotTime : LocalDateTime.of(snapshotTime.toLocalDate(), LocalTime.of(endHour, 0));
 
-        TelegramSendKind sendKind = telegramSendSchedule.due(snapshotTime, shouldCollect);
-        if (sendKind != TelegramSendKind.NONE) {
+        if (telegramSendSchedule.due(snapshotTime, shouldCollect)) {
             if (!lastIndexContributionSuccess) {
                 run("데이터수집실패알림", () -> telegramCollectionFailureNotifier.notify(dataTime));
             } else {
                 boolean sectorImageAvailable = lastChangeRateSuccess;
-                if (sendKind == TelegramSendKind.WITH_MAP) {
-                    // 마켓맵 KOSPI/KOSDAQ + 섹터를 마켓별로 각각 한 메시지씩, 총 2건으로 발송.
-                    run("일일마켓리포트발송", () -> dailyMarketReportSender.send(dataTime, sectorImageAvailable));
-                } else {
-                    // 두 마켓 섹터만 한 메시지로 발송.
-                    run("섹터텔레그램발송", () -> sectorTelegramReportSender.send(dataTime, sectorImageAvailable));
-                }
+                // 마켓별로 섹터 이미지 1장 + 캡션 1개씩 각각 발송.
+                run("섹터텔레그램발송", () -> sectorTelegramReportSender.send(dataTime, sectorImageAvailable));
             }
+        }
+
+        // 맵 발송은 섹터와 별개 시각(telegram.map-send-times)에, 별개 판정으로 돈다. 맵 이미지는
+        // 카테고리 등락률 스냅샷과 무관해서 lastIndexContributionSuccess로 가두지 않는다 — 실패해도
+        // 맵은 그대로 보내고, 캡션(카테고리 등락률 기반)만 lastChangeRateSuccess에 따라 붙이거나 뺀다.
+        if (telegramSendSchedule.dueForMap(snapshotTime, shouldCollect)) {
+            boolean sectorImageAvailable = lastChangeRateSuccess;
+            run("맵텔레그램발송", () -> marketMapAlbumReportSender.send(dataTime, sectorImageAvailable));
         }
     }
 

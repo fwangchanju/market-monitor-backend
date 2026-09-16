@@ -4,8 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import dev.eolmae.marketmonitor.domain.notification.enums.TelegramSendKind;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class TelegramSendScheduleTest {
@@ -14,21 +15,22 @@ class TelegramSendScheduleTest {
     private static final int END_HOUR = 20;
     private static final int SEND_MINUTE = 10;
     private static final int SEND_INTERVAL_MINUTES = 15;
-    private static final int MAP_INTERVAL_MINUTES = 120;
+    private static final int COLLECT_INTERVAL_MINUTES = 5;
+    private static final List<LocalTime> MAP_SEND_TIMES = List.of(LocalTime.of(8, 15), LocalTime.of(15, 30));
     private static final LocalDateTime DATE = LocalDateTime.of(2025, 6, 2, 0, 0);
 
     @Test
     void due_기준점_이전이라_발송하지_않는다() {
         LocalDateTime now = DATE.withHour(8).withMinute(0);
 
-        assertThat(due(now, true)).isEqualTo(TelegramSendKind.NONE);
+        assertThat(due(now, true)).isFalse();
     }
 
     @Test
-    void due_기준_시각에는_맵을_포함해서_발송한다() {
+    void due_기준_시각에는_발송한다() {
         LocalDateTime now = DATE.withHour(8).withMinute(10);
 
-        assertThat(due(now, true)).isEqualTo(TelegramSendKind.WITH_MAP);
+        assertThat(due(now, true)).isTrue();
     }
 
     @Test
@@ -36,36 +38,36 @@ class TelegramSendScheduleTest {
         LocalDateTime now = DATE.withHour(8).withMinute(20);
 
         // 경과분 10 — 15의 배수가 아니다. 모듈로 판정이 깨지면 여기서 잡힌다.
-        assertThat(due(now, true)).isEqualTo(TelegramSendKind.NONE);
+        assertThat(due(now, true)).isFalse();
     }
 
     @Test
-    void due_08시40분은_섹터만_발송한다() {
+    void due_08시40분도_발송한다() {
         LocalDateTime now = DATE.withHour(8).withMinute(40);
 
         // 08:40 발송 복구 — startHour를 경계로 묶어 스킵하던 옛 버그가 여기서 사라졌는지 확인한다.
-        assertThat(due(now, true)).isEqualTo(TelegramSendKind.SECTOR_ONLY);
+        assertThat(due(now, true)).isTrue();
     }
 
     @Test
-    void due_두_시간_뒤에는_다시_맵을_포함해서_발송한다() {
+    void due_두_시간_뒤에도_동일한_격자로_발송한다() {
         LocalDateTime now = DATE.withHour(10).withMinute(10);
 
-        assertThat(due(now, true)).isEqualTo(TelegramSendKind.WITH_MAP);
+        assertThat(due(now, true)).isTrue();
     }
 
     @Test
-    void due_마감_시각에는_shouldCollect가_꺼져도_맵을_포함해서_발송한다() {
+    void due_마감_시각에는_shouldCollect가_꺼져도_발송한다() {
         LocalDateTime now = DATE.withHour(20).withMinute(10);
 
-        assertThat(due(now, false)).isEqualTo(TelegramSendKind.WITH_MAP);
+        assertThat(due(now, false)).isTrue();
     }
 
     @Test
     void due_마감_이후_추가_사이클은_발송하지_않는다() {
         LocalDateTime now = DATE.withHour(20).withMinute(40);
 
-        assertThat(due(now, false)).isEqualTo(TelegramSendKind.NONE);
+        assertThat(due(now, false)).isFalse();
     }
 
     @Test
@@ -75,71 +77,121 @@ class TelegramSendScheduleTest {
         // -10 % 15 == -10이라 이 케이스가 우연히 통과해버려서 가드 누락이 드러나지 않았다.
         LocalDateTime now = DATE.withHour(8).withMinute(0);
 
-        TelegramSendKind result =
-                TelegramSendSchedule.due(now, true, START_HOUR, END_HOUR, SEND_MINUTE, 5, MAP_INTERVAL_MINUTES);
+        boolean result = TelegramSendSchedule.due(now, true, START_HOUR, END_HOUR, SEND_MINUTE, 5);
 
-        assertThat(result).isEqualTo(TelegramSendKind.NONE);
+        assertThat(result).isFalse();
+    }
+
+    @Test
+    void dueForMap_지정된_시각에는_발송한다() {
+        LocalDateTime now = DATE.withHour(8).withMinute(15);
+
+        assertThat(dueForMap(now, true)).isTrue();
+    }
+
+    @Test
+    void dueForMap_지정되지_않은_시각은_발송하지_않는다() {
+        LocalDateTime now = DATE.withHour(8).withMinute(20);
+
+        assertThat(dueForMap(now, true)).isFalse();
+    }
+
+    @Test
+    void dueForMap_목록의_다른_시각도_발송한다() {
+        LocalDateTime now = DATE.withHour(15).withMinute(30);
+
+        assertThat(dueForMap(now, true)).isTrue();
+    }
+
+    @Test
+    void dueForMap_shouldCollect가_꺼지면_지정_시각이어도_발송하지_않는다() {
+        LocalDateTime now = DATE.withHour(8).withMinute(15);
+
+        assertThat(dueForMap(now, false)).isFalse();
     }
 
     @Test
     void validate_sendMinute이_0이하이면_기동을_막는다() {
-        assertThatThrownBy(() -> TelegramSendSchedule.validate(0, SEND_INTERVAL_MINUTES, MAP_INTERVAL_MINUTES, 15, 5))
+        assertThatThrownBy(() -> validate(0, SEND_INTERVAL_MINUTES, 15, MAP_SEND_TIMES))
                 .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
     void validate_sendIntervalMinutes가_0이하이면_기동을_막는다() {
-        assertThatThrownBy(() -> TelegramSendSchedule.validate(SEND_MINUTE, 0, MAP_INTERVAL_MINUTES, 15, 5))
-                .isInstanceOf(IllegalStateException.class);
-    }
-
-    @Test
-    void validate_mapIntervalMinutes가_0이하이면_기동을_막는다() {
-        assertThatThrownBy(() -> TelegramSendSchedule.validate(SEND_MINUTE, SEND_INTERVAL_MINUTES, 0, 15, 5))
+        assertThatThrownBy(() -> validate(SEND_MINUTE, 0, 15, MAP_SEND_TIMES))
                 .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
     void validate_beforeMinutes가_0이하이면_기동을_막는다() {
-        assertThatThrownBy(() ->
-                        TelegramSendSchedule.validate(SEND_MINUTE, SEND_INTERVAL_MINUTES, MAP_INTERVAL_MINUTES, 0, 5))
+        assertThatThrownBy(() -> validate(SEND_MINUTE, SEND_INTERVAL_MINUTES, 0, MAP_SEND_TIMES))
                 .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
     void validate_sendMinute이_collect_interval의_배수가_아니면_기동을_막는다() {
-        assertThatThrownBy(() -> TelegramSendSchedule.validate(7, SEND_INTERVAL_MINUTES, MAP_INTERVAL_MINUTES, 15, 5))
+        assertThatThrownBy(() -> validate(7, SEND_INTERVAL_MINUTES, 15, MAP_SEND_TIMES))
                 .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
     void validate_sendIntervalMinutes가_collect_interval의_배수가_아니면_기동을_막는다() {
-        assertThatThrownBy(() -> TelegramSendSchedule.validate(SEND_MINUTE, 7, MAP_INTERVAL_MINUTES, 15, 5))
+        assertThatThrownBy(() -> validate(SEND_MINUTE, 7, 15, MAP_SEND_TIMES))
                 .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
     void validate_beforeMinutes가_collect_interval의_배수가_아니면_기동을_막는다() {
-        assertThatThrownBy(() ->
-                        TelegramSendSchedule.validate(SEND_MINUTE, SEND_INTERVAL_MINUTES, MAP_INTERVAL_MINUTES, 7, 5))
+        assertThatThrownBy(() -> validate(SEND_MINUTE, SEND_INTERVAL_MINUTES, 7, MAP_SEND_TIMES))
                 .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
-    void validate_mapIntervalMinutes가_sendIntervalMinutes의_배수가_아니면_기동을_막는다() {
-        assertThatThrownBy(() -> TelegramSendSchedule.validate(SEND_MINUTE, SEND_INTERVAL_MINUTES, 50, 15, 5))
+    void validate_mapSendTimes가_비어있으면_기동을_막는다() {
+        assertThatThrownBy(() -> validate(SEND_MINUTE, SEND_INTERVAL_MINUTES, 15, List.of()))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void validate_mapSendTimes의_분이_collect_interval의_배수가_아니면_기동을_막는다() {
+        assertThatThrownBy(() -> validate(SEND_MINUTE, SEND_INTERVAL_MINUTES, 15, List.of(LocalTime.of(8, 17))))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void validate_mapSendTimes가_start_hour보다_이르면_기동을_막는다() {
+        assertThatThrownBy(() -> validate(SEND_MINUTE, SEND_INTERVAL_MINUTES, 15, List.of(LocalTime.of(7, 55))))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void validate_mapSendTimes가_end_hour보다_늦으면_기동을_막는다() {
+        assertThatThrownBy(() -> validate(SEND_MINUTE, SEND_INTERVAL_MINUTES, 15, List.of(LocalTime.of(20, 5))))
                 .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
     void validate_조건을_모두_만족하면_통과한다() {
-        assertThatCode(() ->
-                        TelegramSendSchedule.validate(SEND_MINUTE, SEND_INTERVAL_MINUTES, MAP_INTERVAL_MINUTES, 15, 5))
+        assertThatCode(() -> validate(SEND_MINUTE, SEND_INTERVAL_MINUTES, 15, MAP_SEND_TIMES))
                 .doesNotThrowAnyException();
     }
 
-    private TelegramSendKind due(LocalDateTime now, boolean shouldCollect) {
-        return TelegramSendSchedule.due(
-                now, shouldCollect, START_HOUR, END_HOUR, SEND_MINUTE, SEND_INTERVAL_MINUTES, MAP_INTERVAL_MINUTES);
+    private boolean due(LocalDateTime now, boolean shouldCollect) {
+        return TelegramSendSchedule.due(now, shouldCollect, START_HOUR, END_HOUR, SEND_MINUTE, SEND_INTERVAL_MINUTES);
+    }
+
+    private boolean dueForMap(LocalDateTime now, boolean shouldCollect) {
+        return TelegramSendSchedule.dueForMap(now, shouldCollect, MAP_SEND_TIMES);
+    }
+
+    private void validate(int sendMinute, int sendIntervalMinutes, int beforeMinutes, List<LocalTime> mapSendTimes) {
+        TelegramSendSchedule.validate(
+                sendMinute,
+                sendIntervalMinutes,
+                beforeMinutes,
+                mapSendTimes,
+                COLLECT_INTERVAL_MINUTES,
+                START_HOUR,
+                END_HOUR);
     }
 }

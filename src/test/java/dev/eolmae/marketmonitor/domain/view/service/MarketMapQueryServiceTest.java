@@ -33,6 +33,7 @@ import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -490,8 +491,8 @@ class MarketMapQueryServiceTest {
                 snapshotTime,
                 List.of(root, child),
                 List.of(),
-                changeRateItem(root.getId(), tier(10L, "대형", 50_000, 10000)), // +5%
-                changeRateItem(child.getId(), tier(10L, "대형", 900_000, 10000))); // +90%
+                changeRateItemWithFlatBefore(root.getId(), tier(10L, "대형", 50_000, 10000)), // +5%p
+                changeRateItemWithFlatBefore(child.getId(), tier(10L, "대형", 900_000, 10000))); // +90%p
 
         List<CategoryRankingSummary> summaries = service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60);
 
@@ -511,15 +512,50 @@ class MarketMapQueryServiceTest {
                 snapshotTime,
                 List.of(a, b, c),
                 List.of(),
-                changeRateItem(a.getId(), tier(10L, "대형", 100_000, 10000)), // +10%
-                changeRateItem(b.getId(), tier(10L, "대형", 50_000, 10000)), // +5%
-                changeRateItem(c.getId(), tier(10L, "대형", 20_000, 10000))); // +2%, 3위라 빠져야 함
+                changeRateItemWithFlatBefore(a.getId(), tier(10L, "대형", 100_000, 10000)), // +10%p
+                changeRateItemWithFlatBefore(b.getId(), tier(10L, "대형", 50_000, 10000)), // +5%p
+                changeRateItemWithFlatBefore(c.getId(), tier(10L, "대형", 20_000, 10000))); // +2%p, 3위라 빠져야 함
 
         List<CategoryRankingSummary> summaries = service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60);
 
         assertThat(summaries.get(0).topCategories())
                 .extracting(TopCategoryItem::categoryName)
                 .containsExactly("반도체", "화학");
+    }
+
+    // before가 없는 것을 0으로 치면 now가 그대로 델타가 되어, 실제로는 계산할 수 없는 카테고리가
+    // 1위로 올라온다. 순위에서 빼는 것이 맞다.
+    @Test
+    void getTopCategoryRankings_before가_없는_카테고리는_랭킹에서_빠진다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        MarketMapCategory a = category(1L, null, "반도체");
+        MarketMapCategory b = category(2L, null, "화학");
+        stubRankingForTopCategories(
+                snapshotTime,
+                List.of(a, b),
+                List.of(),
+                changeRateItem(a.getId(), tier(10L, "대형", 900_000, 10000)), // +90%, before 없음
+                changeRateItemWithFlatBefore(b.getId(), tier(10L, "대형", 50_000, 10000))); // +5%p
+
+        List<CategoryRankingSummary> summaries = service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60);
+
+        assertThat(summaries.get(0).topCategories())
+                .extracting(TopCategoryItem::categoryName)
+                .containsExactly("화학");
+    }
+
+    // 그 시각 스냅샷이 통째로 없는 경우 — 매일 첫 발송(08:10의 before는 07:55인데 수집은 08:00부터)이
+    // 여기 걸린다. 캡션 쪽에서 안내 문구로 바꿔 내보낸다.
+    @Test
+    void getTopCategoryRankings_before가_전부_없으면_빈_목록이_된다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        MarketMapCategory a = category(1L, null, "반도체");
+        stubRankingForTopCategories(
+                snapshotTime, List.of(a), List.of(), changeRateItem(a.getId(), tier(10L, "대형", 100_000, 10000)));
+
+        List<CategoryRankingSummary> summaries = service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60);
+
+        assertThat(summaries.get(0).topCategories()).isEmpty();
     }
 
     @Test
@@ -531,10 +567,10 @@ class MarketMapQueryServiceTest {
                 snapshotTime,
                 List.of(root),
                 List.of(20L),
-                changeRateItem(
+                changeRateItemWithFlatBefore(
                         root.getId(),
-                        tier(10L, "대형", 100_000, 10000), // +10%, 포함
-                        tier(20L, "소형", -500_000, 10000))); // -50%, 제외 대상
+                        tier(10L, "대형", 100_000, 10000), // +10%p, 포함
+                        tier(20L, "소형", -500_000, 10000))); // -50%p, 제외 대상
 
         List<CategoryRankingSummary> summaries = service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60);
 
@@ -574,6 +610,16 @@ class MarketMapQueryServiceTest {
 
     private CategoryChangeRateItem changeRateItem(Long categoryId, CategoryTierBreakdown... breakdowns) {
         return CategoryChangeRateItem.withoutBefore(categoryId, List.of(breakdowns));
+    }
+
+    /** 랭킹 값은 now - before이므로, before를 0%로 두면 델타가 곧 now가 되어 기대값을 읽기 쉽다.
+     * 같은 tierId를 써야 기본 제외 구간 필터가 now/before 양쪽에 똑같이 걸린다. */
+    private CategoryChangeRateItem changeRateItemWithFlatBefore(
+            Long categoryId, CategoryTierBreakdown... nowBreakdowns) {
+        List<CategoryTierBreakdown> before = Arrays.stream(nowBreakdowns)
+                .map(b -> tier(b.tierId(), b.tierLabel(), 0L, b.totalValue().longValue()))
+                .toList();
+        return CategoryChangeRateItem.withBefore(categoryId, List.of(nowBreakdowns), before);
     }
 
     private CategoryTierBreakdown tier(Long tierId, String label, long weightedSum, long totalValue) {

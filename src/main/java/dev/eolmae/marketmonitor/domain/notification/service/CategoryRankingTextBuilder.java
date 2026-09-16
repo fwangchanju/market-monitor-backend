@@ -28,18 +28,27 @@ public class CategoryRankingTextBuilder {
                 .collect(Collectors.joining("\n\n"));
     }
 
-    /** summary 하나(마켓 하나)를 "[#코스피 15분 전 대비]\n카테고리 +x.xx%\n.." 형태로 만든다. 마켓별로
+    /** summary 하나(마켓 하나)를 "[#코스피 15분 전 대비]\n카테고리 +x.xx%p\n.." 형태로 만든다. 마켓별로
      * 개별 메시지를 보내는 섹터 전용 발송(SectorTelegramReportSender)에서만 쓴다 — 지수 등락률 대신
-     * beforeMinutes로 "N분 전 대비" 라벨을 헤더에 붙인다. */
+     * beforeMinutes로 "N분 전 대비" 라벨을 헤더에 붙이고, 본문 값도 그 라벨에 맞는 %p 차이다
+     * (buildRankingText의 현재 등락률 %와 단위가 다르다). */
     public String buildSectorCaption(CategoryRankingSummary summary, int beforeMinutes) {
         String header = "[#" + MarketLabels.toKorean(summary.market()) + " " + beforeMinutes + "분 전 대비]";
+        // before가 없는 카테고리는 MarketMapQueryService가 순위에서 빼므로, 그 시각 스냅샷이 통째로
+        // 없으면 여기가 빈 목록이 된다(매일 첫 발송이 그렇다 — 08:10의 before는 07:55인데 수집은
+        // 08:00부터다). 헤더만 덜렁 내보내지 않고 없다고 적는다.
+        if (summary.topCategories().isEmpty()) {
+            return header + "\n" + beforeMinutes + "분 전 데이터가 없습니다";
+        }
         String body =
                 summary.topCategories().stream().map(this::formatTopCategory).collect(Collectors.joining("\n"));
         return header + "\n" + body;
     }
 
+    // TopCategoryItem.changeRate는 "N분 전 대비 변화"라 단위가 %가 아니라 %p다. 헤더의 지수 등락률은
+    // 현재값 그대로라 %를 쓴다 — 한 블록 안에서 단위가 갈리는 것이 의도다.
     private String formatTopCategory(TopCategoryItem top) {
-        return top.categoryName() + " " + formatPercent(top.changeRate());
+        return top.categoryName() + " " + formatPercent(top.changeRate()) + "p";
     }
 
     private String buildHeader(Market market, BigDecimal indexChangeRate) {

@@ -27,7 +27,7 @@ class CategoryRankingTextBuilderTest {
 
         String text = builder.buildRankingText(List.of(summary));
 
-        assertThat(text).isEqualTo("#코스피\n반도체 +10.00%\n화학 +5.00%\n자동차 +2.00%");
+        assertThat(text).isEqualTo("#코스피\n반도체 +10.00%p\n화학 +5.00%p\n자동차 +2.00%p");
     }
 
     @Test
@@ -37,7 +37,7 @@ class CategoryRankingTextBuilderTest {
 
         String text = builder.buildRankingText(List.of(summary));
 
-        assertThat(text).isEqualTo("#코스피 -1.23%\n반도체 +5.00%");
+        assertThat(text).isEqualTo("#코스피 -1.23%\n반도체 +5.00%p");
     }
 
     @Test
@@ -47,7 +47,7 @@ class CategoryRankingTextBuilderTest {
 
         String text = builder.buildRankingText(List.of(summary));
 
-        assertThat(text).isEqualTo("#코스피\n반도체 +5.00%");
+        assertThat(text).isEqualTo("#코스피\n반도체 +5.00%p");
     }
 
     @Test
@@ -57,7 +57,7 @@ class CategoryRankingTextBuilderTest {
 
         String text = builder.buildRankingText(List.of(summary));
 
-        assertThat(text).isEqualTo("#코스피\n반도체 -12.34%");
+        assertThat(text).isEqualTo("#코스피\n반도체 -12.34%p");
     }
 
     @Test
@@ -69,7 +69,7 @@ class CategoryRankingTextBuilderTest {
 
         String text = builder.buildRankingText(List.of(kospi, kosdaq));
 
-        assertThat(text).isEqualTo("#코스피\n반도체 +5.00%\n\n#코스닥\n제약 +3.00%");
+        assertThat(text).isEqualTo("#코스피\n반도체 +5.00%p\n\n#코스닥\n제약 +3.00%p");
     }
 
     @Test
@@ -83,7 +83,7 @@ class CategoryRankingTextBuilderTest {
 
         String text = builder.buildSectorCaption(summary, 15);
 
-        assertThat(text).isEqualTo("[#코스피 15분 전 대비]\n제약 +2.10%\n운송 +1.75%");
+        assertThat(text).isEqualTo("[#코스피 15분 전 대비]\n제약 +2.10%p\n운송 +1.75%p");
     }
 
     @Test
@@ -93,6 +93,15 @@ class CategoryRankingTextBuilderTest {
 
         String text = builder.buildSectorCaption(summary, 30);
 
-        assertThat(text).isEqualTo("[#코스닥 30분 전 대비]\n반도체 +1.00%");
+        assertThat(text).isEqualTo("[#코스닥 30분 전 대비]\n반도체 +1.00%p");
+    }
+
+    @Test
+    void buildSectorCaption_상위_카테고리가_비면_데이터_없음을_알린다() {
+        CategoryRankingSummary summary = new CategoryRankingSummary(Market.KOSPI, BigDecimal.ONE, List.of());
+
+        String text = builder.buildSectorCaption(summary, 15);
+
+        assertThat(text).isEqualTo("[#코스피 15분 전 대비]\n15분 전 데이터가 없습니다");
     }
 }

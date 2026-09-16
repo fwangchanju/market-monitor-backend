@@ -44,18 +44,36 @@ public class SectorTelegramReportSender {
         }
 
         int beforeMinutes = telegramProperties.beforeMinutes();
-        List<CategoryRankingSummary> rankings =
+        List<CategoryRankingSummary> deltaRankings =
                 marketMapQueryService.getTopCategoryRankings(MarketQuery.ALL_STOCK, dataTime, beforeMinutes);
-        if (rankings.isEmpty()) {
+        if (deltaRankings.isEmpty()) {
             log.warn("{} 시각 카테고리 등락률 랭킹 조회가 비어 있어 섹터 발송을 건너뜀", dataTime);
             return;
         }
 
         // 결과에 있는 마켓만 보낸다 — getTopCategoryRankings가 그 시각 데이터 없는 마켓을 이미 결과에서
         // 뺀다. 목록을 상수로 박아두면 데이터 없는 마켓의 빈 화면을 보내려다 실패한다.
+        // changeRateRankings는 매일 첫 발송(08:10, before 없음)처럼 어느 마켓이든 변화율을 못 구할 때만
+        // 필요하므로, 실제로 필요해질 때 한 번만 조회한다(하루 한 번 일어나는 추가 조회).
+        List<CategoryRankingSummary> changeRateRankings = null;
         int sentCount = 0;
-        for (CategoryRankingSummary summary : rankings) {
-            sentCount += sendOneMarket(summary, beforeMinutes);
+        for (CategoryRankingSummary delta : deltaRankings) {
+            CategoryRankingSummary summaryToSend = delta;
+            boolean isFallback = false;
+            if (delta.topCategories().isEmpty()) {
+                if (changeRateRankings == null) {
+                    changeRateRankings = marketMapQueryService.getTopCategoryRankingsByChangeRate(
+                            MarketQuery.ALL_STOCK, dataTime, beforeMinutes);
+                }
+                CategoryRankingSummary fallback = findByMarket(changeRateRankings, delta.market());
+                if (fallback == null || fallback.topCategories().isEmpty()) {
+                    log.warn("{} 시각 {} 마켓은 변화율·등락률 랭킹이 모두 비어 있어 발송을 건너뜀", dataTime, delta.market());
+                    continue;
+                }
+                summaryToSend = fallback;
+                isFallback = true;
+            }
+            sentCount += sendOneMarket(summaryToSend, beforeMinutes, isFallback);
         }
 
         // 한 장도 못 보냈으면 캡처가 통째로 빈 것이다. 마켓별로 나눠 보내기 전에는 빈 목록이
@@ -68,8 +86,15 @@ public class SectorTelegramReportSender {
         log.info("섹터 리포트 발송 완료: 메시지={}건", sentCount);
     }
 
+    private CategoryRankingSummary findByMarket(List<CategoryRankingSummary> rankings, Market market) {
+        return rankings.stream()
+                .filter(ranking -> ranking.market() == market)
+                .findFirst()
+                .orElse(null);
+    }
+
     /** 보낸 메시지 건수를 돌려준다 — 호출부가 "하나도 못 보냈는가"를 판정하는 근거다. */
-    private int sendOneMarket(CategoryRankingSummary summary, int beforeMinutes) {
+    private int sendOneMarket(CategoryRankingSummary summary, int beforeMinutes, boolean isFallback) {
         List<byte[]> images = screenshotClient.capture(
                 sectorPath(summary.market(), beforeMinutes), RenderTarget.CATEGORY_CHANGE_RATE.selector());
 
@@ -81,7 +106,9 @@ public class SectorTelegramReportSender {
             return 0;
         }
 
-        String caption = categoryRankingTextBuilder.buildSectorCaption(summary, beforeMinutes);
+        String caption = isFallback
+                ? categoryRankingTextBuilder.buildSectorFallbackCaption(summary)
+                : categoryRankingTextBuilder.buildSectorCaption(summary, beforeMinutes);
         for (byte[] image : images) {
             telegramClient.sendPhoto(telegramProperties.chatId(), image, caption);
         }

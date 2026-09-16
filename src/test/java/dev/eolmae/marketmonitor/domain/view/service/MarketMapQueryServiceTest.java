@@ -26,6 +26,7 @@ import dev.eolmae.marketmonitor.domain.view.dto.CategoryRankingSummary;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryTierBreakdown;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapResponse;
+import dev.eolmae.marketmonitor.domain.view.dto.MergedTopCategoryRanking;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotAverages;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
 import dev.eolmae.marketmonitor.domain.view.dto.TopCategoryItem;
@@ -575,6 +576,94 @@ class MarketMapQueryServiceTest {
         List<CategoryRankingSummary> summaries = service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60);
 
         assertThat(summaries.get(0).topCategories().get(0).changeRate()).isEqualByComparingTo(BigDecimal.TEN);
+    }
+
+    // 델타(now-before) 기준과 등락률(now) 기준이 서로 다른 카테고리를 뽑을 수 있음을 보인다 — 08:10
+    // 폴백이 델타 대신 이 랭킹을 쓰는 이유다.
+    @Test
+    void getTopCategoryRankingsByChangeRate_등락률_기준으로_델타_기준과_다른_카테고리를_뽑는다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        MarketMapCategory a = category(1L, null, "반도체");
+        MarketMapCategory b = category(2L, null, "화학");
+        MarketMapCategory c = category(3L, null, "자동차");
+        // a: now +20%, before +19% → 델타 +1%p. b: now +5%, before -10% → 델타 +15%p.
+        // c: now +10%, before +8% → 델타 +2%p.
+        CategoryChangeRateItem itemA = CategoryChangeRateItem.withBefore(
+                a.getId(), List.of(tier(10L, "대형", 200_000, 10_000)), List.of(tier(10L, "대형", 190_000, 10_000)));
+        CategoryChangeRateItem itemB = CategoryChangeRateItem.withBefore(
+                b.getId(), List.of(tier(10L, "대형", 50_000, 10_000)), List.of(tier(10L, "대형", -100_000, 10_000)));
+        CategoryChangeRateItem itemC = CategoryChangeRateItem.withBefore(
+                c.getId(), List.of(tier(10L, "대형", 100_000, 10_000)), List.of(tier(10L, "대형", 80_000, 10_000)));
+        stubRankingForTopCategories(snapshotTime, List.of(a, b, c), List.of(), itemA, itemB, itemC);
+
+        List<CategoryRankingSummary> deltaRankings =
+                service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60);
+        List<CategoryRankingSummary> changeRateRankings =
+                service.getTopCategoryRankingsByChangeRate(MarketQuery.KOSPI, snapshotTime, 60);
+
+        assertThat(deltaRankings.get(0).topCategories())
+                .extracting(TopCategoryItem::categoryName)
+                .containsExactly("화학", "자동차");
+        assertThat(changeRateRankings.get(0).topCategories())
+                .extracting(TopCategoryItem::categoryName)
+                .containsExactly("반도체", "자동차");
+    }
+
+    @Test
+    void getMergedTopCategoryRanking_두_마켓의_원시값을_합친_기준으로_TOP2를_뽑는다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        MarketMapCategory a = category(1L, null, "반도체");
+        MarketMapCategory b = category(2L, null, "화학");
+        MarketMapCategory c = category(3L, null, "자동차");
+        stubMergedRanking(List.of(a, b, c));
+
+        // a는 KOSPI 단독으로 보면 압도적 1위(+100%)지만 KOSDAQ에서 -90%라 합치면 +5%로 밀린다.
+        Map<Long, List<CategoryTierBreakdown>> kospiBreakdowns = Map.of(
+                a.getId(), List.of(tier(10L, "대형", 1_000_000, 10_000)),
+                b.getId(), List.of(tier(10L, "대형", 80_000, 10_000)),
+                c.getId(), List.of(tier(10L, "대형", 60_000, 10_000)));
+        Map<Long, List<CategoryTierBreakdown>> kosdaqBreakdowns = Map.of(
+                a.getId(), List.of(tier(10L, "대형", -900_000, 10_000)),
+                b.getId(), List.of(tier(10L, "대형", 80_000, 10_000)));
+        when(marketMapCategoryChangeRateSnapshotService.findTierBreakdownsByCategoryId(
+                        List.of(Market.KOSPI, Market.KOSDAQ), snapshotTime))
+                .thenReturn(Map.of(Market.KOSPI, kospiBreakdowns, Market.KOSDAQ, kosdaqBreakdowns));
+
+        MergedTopCategoryRanking merged = service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime);
+
+        // 병합 평균: a=(1,000,000-900,000)/20,000=+5%, b=(80,000+80,000)/20,000=+8%, c=60,000/10,000=+6%
+        assertThat(merged.topCategories())
+                .extracting(TopCategoryItem::categoryName)
+                .containsExactly("화학", "자동차");
+        assertThat(merged.markets()).containsExactly(Market.KOSPI, Market.KOSDAQ);
+    }
+
+    @Test
+    void getMergedTopCategoryRanking_원시값을_합산한_뒤_한_번만_나눈다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        MarketMapCategory a = category(1L, null, "반도체");
+        stubMergedRanking(List.of(a));
+
+        // KOSPI 시총 10,000에 +10%p, KOSDAQ 시총 40,000에 -2%p — 단순 평균이면 (10-2)/2=+4가 되지만,
+        // KOSDAQ 쪽 시총 비중이 훨씬 커서 원시값을 합산한 뒤 나누면 +0.4가 맞다.
+        Map<Long, List<CategoryTierBreakdown>> kospiBreakdowns =
+                Map.of(a.getId(), List.of(tier(10L, "대형", 100_000, 10_000)));
+        Map<Long, List<CategoryTierBreakdown>> kosdaqBreakdowns =
+                Map.of(a.getId(), List.of(tier(10L, "대형", -80_000, 40_000)));
+        when(marketMapCategoryChangeRateSnapshotService.findTierBreakdownsByCategoryId(
+                        List.of(Market.KOSPI, Market.KOSDAQ), snapshotTime))
+                .thenReturn(Map.of(Market.KOSPI, kospiBreakdowns, Market.KOSDAQ, kosdaqBreakdowns));
+
+        MergedTopCategoryRanking merged = service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime);
+
+        assertThat(merged.topCategories().get(0).changeRate()).isEqualByComparingTo(BigDecimal.valueOf(0.4));
+    }
+
+    private void stubMergedRanking(List<MarketMapCategory> categories) {
+        when(marketMapCategoryRepository.findAll()).thenReturn(categories);
+        when(marketValueTierThresholdService.getValueTiers()).thenReturn(List.of());
+        when(marketMapCategoryChangeRateSnapshotService.combine(Mockito.anyList()))
+                .thenAnswer(invocation -> combine(invocation.getArgument(0)));
     }
 
     private void stubRankingForTopCategories(

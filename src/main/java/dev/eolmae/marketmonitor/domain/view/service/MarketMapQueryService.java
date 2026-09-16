@@ -26,6 +26,7 @@ import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapItem;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapResponse;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketOverviewItem;
+import dev.eolmae.marketmonitor.domain.view.dto.MergedTopCategoryRanking;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotAverages;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
 import dev.eolmae.marketmonitor.domain.view.dto.TopCategoryItem;
@@ -225,15 +226,73 @@ public class MarketMapQueryService {
             MarketQuery marketQuery, LocalDateTime snapshotTime, int beforeMinutes) {
         SnapshotResponse<CategoryChangeRateMarketRanking> ranking =
                 getCategoryChangeRates(marketQuery, snapshotTime, beforeMinutes);
-
-        Set<Long> excludedTierIds = marketValueTierThresholdService.getValueTiers().stream()
-                .filter(MarketValueTierItem::isExcludedByDefault)
-                .map(MarketValueTierItem::id)
-                .collect(Collectors.toSet());
-
+        Set<Long> excludedTierIds = excludedTierIds();
         return ranking.items().stream()
                 .map(marketRanking -> toCategoryRankingSummary(marketRanking, excludedTierIds))
                 .toList();
+    }
+
+    /**
+     * 텔레그램 캡션용 카테고리 TOP2 랭킹 — 위와 같은 필터·TOP2 규칙이되 **등락률(now, %) 기준**, 마켓별.
+     * 매일 첫 발송(전날 대비 before가 없는 tick)의 변화율 폴백 전용이다. getCategoryChangeRates가
+     * before도 항상 같이 조회하지만 여기서는 now만 쓰고 버린다 — docs/backlog.md의 「텔레그램 경로가
+     * before를 조회하고 버린다」 항목, 이번에 고치지 않는다.
+     */
+    public List<CategoryRankingSummary> getTopCategoryRankingsByChangeRate(
+            MarketQuery marketQuery, LocalDateTime snapshotTime, int beforeMinutes) {
+        SnapshotResponse<CategoryChangeRateMarketRanking> ranking =
+                getCategoryChangeRates(marketQuery, snapshotTime, beforeMinutes);
+        Set<Long> excludedTierIds = excludedTierIds();
+        return ranking.items().stream()
+                .map(marketRanking -> toCategoryRankingSummaryByChangeRate(marketRanking, excludedTierIds))
+                .toList();
+    }
+
+    /**
+     * 맵 발송(코스피+코스닥 앨범) 캡션용 — 두 마켓의 카테고리별 breakdown을 먼저 합친 뒤 가중평균을 낸
+     * **등락률(now, %) 기준** TOP2. 마켓 구분이 없어 반환 타입도 마켓별 랭킹(CategoryRankingSummary)이
+     * 아니라 List&lt;TopCategoryItem&gt; 하나다. buildCustomMarketMap의 All Stocks 병합과 같은 패턴
+     * (카테고리별 breakdown을 합친 뒤 한 번만 나눈다 — 이미 나뉜 평균끼리 다시 평균내면 틀린다)이지만,
+     * 화면 트리 없이 랭킹만 필요해서 별도로 조립한다. 캡처할 마켓 목록도 이 조회에서 나오는 마켓별
+     * 결과 그대로 돌려준다 — 그 시각 데이터가 없는 마켓은 이미 빠져 있어 따로 조회할 필요가 없다.
+     */
+    public MergedTopCategoryRanking getMergedTopCategoryRanking(MarketQuery marketQuery, LocalDateTime snapshotTime) {
+        List<Market> markets = marketQuery.toMarkets();
+        Map<Market, Map<Long, List<CategoryTierBreakdown>>> breakdownsByMarket =
+                marketMapCategoryChangeRateSnapshotService.findTierBreakdownsByCategoryId(markets, snapshotTime);
+        List<Market> availableMarkets =
+                markets.stream().filter(breakdownsByMarket::containsKey).toList();
+
+        Map<Long, List<CategoryTierBreakdown>> mergedByCategoryId = breakdownsByMarket.values().stream()
+                .flatMap(byCategoryId -> byCategoryId.entrySet().stream())
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (a, b) -> {
+                    List<CategoryTierBreakdown> merged = new ArrayList<>(a);
+                    merged.addAll(b);
+                    return merged;
+                }));
+
+        Map<Long, MarketMapCategory> categoryById = marketMapCategoryRepository.findAll().stream()
+                .collect(Collectors.toMap(MarketMapCategory::getId, Function.identity()));
+        Set<Long> excludedTierIds = excludedTierIds();
+
+        List<TopCategoryItem> topCategories = mergedByCategoryId.entrySet().stream()
+                .filter(entry -> categoryById.containsKey(entry.getKey()))
+                .filter(entry -> categoryById.get(entry.getKey()).getDepth() == 0)
+                .map(entry -> toTopCategoryItemByChangeRate(
+                        categoryById.get(entry.getKey()).getName(), entry.getValue(), excludedTierIds))
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(TopCategoryItem::changeRate).reversed())
+                .limit(TOP_N)
+                .toList();
+
+        return new MergedTopCategoryRanking(availableMarkets, topCategories);
+    }
+
+    private Set<Long> excludedTierIds() {
+        return marketValueTierThresholdService.getValueTiers().stream()
+                .filter(MarketValueTierItem::isExcludedByDefault)
+                .map(MarketValueTierItem::id)
+                .collect(Collectors.toSet());
     }
 
     private CategoryRankingSummary toCategoryRankingSummary(
@@ -247,6 +306,20 @@ public class MarketMapQueryService {
                 .toList();
         // 지수는 캡션 본문과 달리 현재 등락률 그대로다 — 이 값을 쓰는 buildRankingText 쪽 서식이
         // "#코스피 +x.xx%"라 델타가 아니라 현재값을 기대한다.
+        BigDecimal indexChangeRate =
+                marketRanking.index() != null ? marketRanking.index().now() : null;
+        return new CategoryRankingSummary(marketRanking.market(), indexChangeRate, topCategories);
+    }
+
+    private CategoryRankingSummary toCategoryRankingSummaryByChangeRate(
+            CategoryChangeRateMarketRanking marketRanking, Set<Long> excludedTierIds) {
+        List<TopCategoryItem> topCategories = marketRanking.items().stream()
+                .filter(item -> item.depth() == 0)
+                .map(item -> toTopCategoryItemByChangeRate(item.categoryName(), item.now(), excludedTierIds))
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(TopCategoryItem::changeRate).reversed())
+                .limit(TOP_N)
+                .toList();
         BigDecimal indexChangeRate =
                 marketRanking.index() != null ? marketRanking.index().now() : null;
         return new CategoryRankingSummary(marketRanking.market(), indexChangeRate, topCategories);
@@ -267,6 +340,16 @@ public class MarketMapQueryService {
             return null;
         }
         return new TopCategoryItem(item.categoryName(), now.subtract(before));
+    }
+
+    /** 등락률(now) 기준 TOP2용 — before 없이 now의 가중평균 하나만 담는다. */
+    private TopCategoryItem toTopCategoryItemByChangeRate(
+            String categoryName, List<CategoryTierBreakdown> now, Set<Long> excludedTierIds) {
+        BigDecimal weightedAvg = weightedAvgOf(now, excludedTierIds);
+        if (weightedAvg == null) {
+            return null;
+        }
+        return new TopCategoryItem(categoryName, weightedAvg);
     }
 
     private BigDecimal weightedAvgOf(List<CategoryTierBreakdown> breakdowns, Set<Long> excludedTierIds) {

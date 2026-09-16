@@ -7,7 +7,7 @@ import dev.eolmae.marketmonitor.domain.notification.client.TelegramClient;
 import dev.eolmae.marketmonitor.domain.notification.enums.RenderTarget;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
 import dev.eolmae.marketmonitor.domain.renderer.client.ScreenshotClient;
-import dev.eolmae.marketmonitor.domain.view.dto.MergedTopCategoryRanking;
+import dev.eolmae.marketmonitor.domain.view.dto.TopCategoryItem;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
 import java.time.LocalDateTime;
@@ -26,6 +26,8 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class MarketMapAlbumReportSender {
 
+    private static final MarketQuery MAP_MARKETS = MarketQuery.ALL_STOCK;
+
     private final ScreenshotClient screenshotClient;
     private final TelegramClient telegramClient;
     private final TelegramProperties telegramProperties;
@@ -37,19 +39,32 @@ public class MarketMapAlbumReportSender {
      * 캡션(카테고리 등락률 기반)은 못 만드므로 캡션 없이 이미지만 보낸다.
      */
     public void send(LocalDateTime dataTime, boolean sectorAvailable) {
-        MergedTopCategoryRanking merged =
-                marketMapQueryService.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, dataTime);
-
-        List<byte[]> images = capture(merged.markets());
-        // 결과에 있는 마켓만 캡처한다 — SectorTelegramReportSender와 같은 규칙이다. 한 장도 못
-        // 보냈으면(두 마켓 다 그 시각 데이터가 없거나 캡처 자체가 비면) 캡처가 통째로 빈 것이다.
+        // 캡처 대상은 항상 두 마켓 고정이다. SectorTelegramReportSender처럼 랭킹 조회 결과로 마켓을
+        // 고르면 안 된다 — 섹터 페이지는 그 랭킹이 곧 화면이라 같은 소스지만, 맵 페이지는
+        // sector_price_snapshot으로 그려져서 등락률 수집만 실패한 tick에도 멀쩡히 나온다. 그때 조회
+        // 결과를 따르면 캡처를 한 장도 안 한 채 "캡처 실패"로 에스컬레이션한다.
+        List<byte[]> images = capture(MAP_MARKETS.toMarkets());
         if (images.isEmpty()) {
             throw new EscalateException(ErrorCode.SCREENSHOT_CAPTURE_FAILED);
         }
 
-        String caption = sectorAvailable ? categoryRankingTextBuilder.buildMapCaption(merged.topCategories()) : null;
-        sendImages(images, caption);
-        log.info("맵 리포트 발송 완료: 마켓={}건, 이미지={}장", merged.markets().size(), images.size());
+        sendImages(images, buildCaption(dataTime, sectorAvailable));
+        log.info("맵 리포트 발송 완료: 이미지={}장", images.size());
+    }
+
+    /** 캡션을 못 만들면 null — TelegramClient가 null/공백 캡션을 붙이지 않는다. */
+    private String buildCaption(LocalDateTime dataTime, boolean sectorAvailable) {
+        if (!sectorAvailable) {
+            return null;
+        }
+        List<TopCategoryItem> topCategories = marketMapQueryService.getMergedTopCategoryRanking(MAP_MARKETS, dataTime);
+        // sectorAvailable이 true면 그 시각 스냅샷이 있으니 보통은 안 비지만, 비면 헤더만 덜렁 남는다.
+        // 이미지는 이미 찍었으므로 캡션만 버리고 보낸다.
+        if (topCategories.isEmpty()) {
+            log.warn("{} 시각 병합 카테고리 랭킹이 비어 있어 맵 캡션 없이 발송", dataTime);
+            return null;
+        }
+        return categoryRankingTextBuilder.buildMapCaption(topCategories);
     }
 
     private List<byte[]> capture(List<Market> markets) {

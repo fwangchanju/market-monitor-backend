@@ -26,7 +26,6 @@ import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapItem;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapResponse;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketOverviewItem;
-import dev.eolmae.marketmonitor.domain.view.dto.MergedTopCategoryRanking;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotAverages;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
 import dev.eolmae.marketmonitor.domain.view.dto.TopCategoryItem;
@@ -253,29 +252,32 @@ public class MarketMapQueryService {
      * **등락률(now, %) 기준** TOP2. 마켓 구분이 없어 반환 타입도 마켓별 랭킹(CategoryRankingSummary)이
      * 아니라 List&lt;TopCategoryItem&gt; 하나다. buildCustomMarketMap의 All Stocks 병합과 같은 패턴
      * (카테고리별 breakdown을 합친 뒤 한 번만 나눈다 — 이미 나뉜 평균끼리 다시 평균내면 틀린다)이지만,
-     * 화면 트리 없이 랭킹만 필요해서 별도로 조립한다. 캡처할 마켓 목록도 이 조회에서 나오는 마켓별
-     * 결과 그대로 돌려준다 — 그 시각 데이터가 없는 마켓은 이미 빠져 있어 따로 조회할 필요가 없다.
+     * 화면 트리 없이 랭킹만 필요해서 별도로 조립한다.
+     *
+     * <p>캡션 전용이다. 이 결과로 "어느 마켓을 캡처할지"를 정하면 안 된다 — 맵 페이지는
+     * sector_price_snapshot으로 그려지는데 여기는 카테고리 등락률 스냅샷을 보므로, 등락률 수집만
+     * 실패한 tick에서는 맵이 멀쩡히 그려지는데도 빈 목록이 나온다. 그 시각 스냅샷이 통째로 없으면
+     * 빈 목록을 돌려주므로, 호출부가 캡션을 붙일지 말지 판단한다.
      */
-    public MergedTopCategoryRanking getMergedTopCategoryRanking(MarketQuery marketQuery, LocalDateTime snapshotTime) {
+    public List<TopCategoryItem> getMergedTopCategoryRanking(MarketQuery marketQuery, LocalDateTime snapshotTime) {
         List<Market> markets = marketQuery.toMarkets();
-        Map<Market, Map<Long, List<CategoryTierBreakdown>>> breakdownsByMarket =
-                marketMapCategoryChangeRateSnapshotService.findTierBreakdownsByCategoryId(markets, snapshotTime);
-        List<Market> availableMarkets =
-                markets.stream().filter(breakdownsByMarket::containsKey).toList();
-
-        Map<Long, List<CategoryTierBreakdown>> mergedByCategoryId = breakdownsByMarket.values().stream()
-                .flatMap(byCategoryId -> byCategoryId.entrySet().stream())
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (a, b) -> {
-                    List<CategoryTierBreakdown> merged = new ArrayList<>(a);
-                    merged.addAll(b);
-                    return merged;
-                }));
+        Map<Long, List<CategoryTierBreakdown>> mergedByCategoryId =
+                marketMapCategoryChangeRateSnapshotService
+                        .findTierBreakdownsByCategoryId(markets, snapshotTime)
+                        .values()
+                        .stream()
+                        .flatMap(byCategoryId -> byCategoryId.entrySet().stream())
+                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (a, b) -> {
+                            List<CategoryTierBreakdown> merged = new ArrayList<>(a);
+                            merged.addAll(b);
+                            return merged;
+                        }));
 
         Map<Long, MarketMapCategory> categoryById = marketMapCategoryRepository.findAll().stream()
                 .collect(Collectors.toMap(MarketMapCategory::getId, Function.identity()));
         Set<Long> excludedTierIds = excludedTierIds();
 
-        List<TopCategoryItem> topCategories = mergedByCategoryId.entrySet().stream()
+        return mergedByCategoryId.entrySet().stream()
                 .filter(entry -> categoryById.containsKey(entry.getKey()))
                 .filter(entry -> categoryById.get(entry.getKey()).getDepth() == 0)
                 .map(entry -> toTopCategoryItemByChangeRate(
@@ -284,8 +286,6 @@ public class MarketMapQueryService {
                 .sorted(Comparator.comparing(TopCategoryItem::changeRate).reversed())
                 .limit(TOP_N)
                 .toList();
-
-        return new MergedTopCategoryRanking(availableMarkets, topCategories);
     }
 
     private Set<Long> excludedTierIds() {

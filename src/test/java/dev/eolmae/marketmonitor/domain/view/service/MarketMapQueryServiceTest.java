@@ -26,7 +26,6 @@ import dev.eolmae.marketmonitor.domain.view.dto.CategoryRankingSummary;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryTierBreakdown;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapResponse;
-import dev.eolmae.marketmonitor.domain.view.dto.MergedTopCategoryRanking;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotAverages;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
 import dev.eolmae.marketmonitor.domain.view.dto.TopCategoryItem;
@@ -629,13 +628,10 @@ class MarketMapQueryServiceTest {
                         List.of(Market.KOSPI, Market.KOSDAQ), snapshotTime))
                 .thenReturn(Map.of(Market.KOSPI, kospiBreakdowns, Market.KOSDAQ, kosdaqBreakdowns));
 
-        MergedTopCategoryRanking merged = service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime);
+        List<TopCategoryItem> merged = service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime);
 
         // 병합 평균: a=(1,000,000-900,000)/20,000=+5%, b=(80,000+80,000)/20,000=+8%, c=60,000/10,000=+6%
-        assertThat(merged.topCategories())
-                .extracting(TopCategoryItem::categoryName)
-                .containsExactly("화학", "자동차");
-        assertThat(merged.markets()).containsExactly(Market.KOSPI, Market.KOSDAQ);
+        assertThat(merged).extracting(TopCategoryItem::categoryName).containsExactly("화학", "자동차");
     }
 
     @Test
@@ -654,9 +650,24 @@ class MarketMapQueryServiceTest {
                         List.of(Market.KOSPI, Market.KOSDAQ), snapshotTime))
                 .thenReturn(Map.of(Market.KOSPI, kospiBreakdowns, Market.KOSDAQ, kosdaqBreakdowns));
 
-        MergedTopCategoryRanking merged = service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime);
+        List<TopCategoryItem> merged = service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime);
 
-        assertThat(merged.topCategories().get(0).changeRate()).isEqualByComparingTo(BigDecimal.valueOf(0.4));
+        assertThat(merged.get(0).changeRate()).isEqualByComparingTo(BigDecimal.valueOf(0.4));
+    }
+
+    // 등락률 수집만 실패한 tick이 이 모양이다 — 맵 페이지는 sector_price_snapshot으로 그려져서 멀쩡히
+    // 나오는데 여기는 빈 목록이 된다. 호출부(MarketMapAlbumReportSender)가 이걸 "캡처할 마켓이 없다"로
+    // 읽으면 한 장도 안 찍고 에스컬레이션하므로, 빈 목록이 정상 반환이라는 것을 못박아둔다.
+    @Test
+    void getMergedTopCategoryRanking_그_시각_스냅샷이_없으면_빈_목록이다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        stubMergedRanking(List.of(category(1L, null, "반도체")));
+        when(marketMapCategoryChangeRateSnapshotService.findTierBreakdownsByCategoryId(
+                        List.of(Market.KOSPI, Market.KOSDAQ), snapshotTime))
+                .thenReturn(Map.of());
+
+        assertThat(service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime))
+                .isEmpty();
     }
 
     private void stubMergedRanking(List<MarketMapCategory> categories) {

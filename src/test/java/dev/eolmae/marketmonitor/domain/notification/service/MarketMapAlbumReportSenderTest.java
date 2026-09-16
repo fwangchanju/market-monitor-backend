@@ -6,12 +6,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.domain.notification.client.TelegramClient;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
 import dev.eolmae.marketmonitor.domain.renderer.client.ScreenshotClient;
-import dev.eolmae.marketmonitor.domain.view.dto.MergedTopCategoryRanking;
 import dev.eolmae.marketmonitor.domain.view.dto.TopCategoryItem;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
@@ -25,6 +23,9 @@ import org.mockito.Mockito;
 class MarketMapAlbumReportSenderTest {
 
     private static final List<LocalTime> MAP_SEND_TIMES = List.of(LocalTime.of(8, 15));
+    private static final String KOSPI_MAP_PATH = "/market-map?market=KOSPI";
+    private static final String KOSDAQ_MAP_PATH = "/market-map?market=KOSDAQ";
+    private static final String MAP_SELECTOR = "[data-captureid='market-map-capture']";
 
     private final ScreenshotClient screenshotClient = Mockito.mock(ScreenshotClient.class);
     private final TelegramClient telegramClient = Mockito.mock(TelegramClient.class);
@@ -42,13 +43,10 @@ class MarketMapAlbumReportSenderTest {
     private final List<TopCategoryItem> topCategories = List.of(new TopCategoryItem("반도체", BigDecimal.valueOf(1.35)));
 
     @Test
-    void send_두_마켓_다_있으면_앨범으로_묶어_보낸다() {
-        when(marketMapQueryService.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, dataTime))
-                .thenReturn(new MergedTopCategoryRanking(List.of(Market.KOSPI, Market.KOSDAQ), topCategories));
-        when(screenshotClient.capture("/market-map?market=KOSPI", "[data-captureid='market-map-capture']"))
-                .thenReturn(List.of(kospiImage));
-        when(screenshotClient.capture("/market-map?market=KOSDAQ", "[data-captureid='market-map-capture']"))
-                .thenReturn(List.of(kosdaqImage));
+    void send_두_마켓을_앨범으로_묶어_보낸다() {
+        captureReturns(KOSPI_MAP_PATH, kospiImage);
+        captureReturns(KOSDAQ_MAP_PATH, kosdaqImage);
+        rankingReturns(topCategories);
         when(categoryRankingTextBuilder.buildMapCaption(topCategories)).thenReturn("[#코스피 / #코스닥 섹터 등락률]\n...");
 
         sender.send(dataTime, true);
@@ -58,11 +56,10 @@ class MarketMapAlbumReportSenderTest {
     }
 
     @Test
-    void send_한_마켓만_있으면_sendPhoto로_보낸다() {
-        when(marketMapQueryService.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, dataTime))
-                .thenReturn(new MergedTopCategoryRanking(List.of(Market.KOSPI), topCategories));
-        when(screenshotClient.capture("/market-map?market=KOSPI", "[data-captureid='market-map-capture']"))
-                .thenReturn(List.of(kospiImage));
+    void send_한_마켓만_캡처되면_sendPhoto로_보낸다() {
+        captureReturns(KOSPI_MAP_PATH, kospiImage);
+        when(screenshotClient.capture(KOSDAQ_MAP_PATH, MAP_SELECTOR)).thenReturn(List.of());
+        rankingReturns(topCategories);
         when(categoryRankingTextBuilder.buildMapCaption(topCategories)).thenReturn("[#코스피 / #코스닥 섹터 등락률]\n...");
 
         sender.send(dataTime, true);
@@ -73,12 +70,8 @@ class MarketMapAlbumReportSenderTest {
 
     @Test
     void send_캡처가_통째로_비면_에스컬레이션한다() {
-        when(marketMapQueryService.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, dataTime))
-                .thenReturn(new MergedTopCategoryRanking(List.of(Market.KOSPI, Market.KOSDAQ), topCategories));
-        when(screenshotClient.capture("/market-map?market=KOSPI", "[data-captureid='market-map-capture']"))
-                .thenReturn(List.of());
-        when(screenshotClient.capture("/market-map?market=KOSDAQ", "[data-captureid='market-map-capture']"))
-                .thenReturn(List.of());
+        when(screenshotClient.capture(KOSPI_MAP_PATH, MAP_SELECTOR)).thenReturn(List.of());
+        when(screenshotClient.capture(KOSDAQ_MAP_PATH, MAP_SELECTOR)).thenReturn(List.of());
 
         assertThatThrownBy(() -> sender.send(dataTime, true)).isInstanceOf(EscalateException.class);
 
@@ -89,16 +82,39 @@ class MarketMapAlbumReportSenderTest {
     // 다만 캡션(카테고리 등락률 기반)은 못 만드므로 캡션 없이 보낸다.
     @Test
     void send_sectorAvailable이_false면_캡션_없이_이미지만_보낸다() {
-        when(marketMapQueryService.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, dataTime))
-                .thenReturn(new MergedTopCategoryRanking(List.of(Market.KOSPI, Market.KOSDAQ), topCategories));
-        when(screenshotClient.capture("/market-map?market=KOSPI", "[data-captureid='market-map-capture']"))
-                .thenReturn(List.of(kospiImage));
-        when(screenshotClient.capture("/market-map?market=KOSDAQ", "[data-captureid='market-map-capture']"))
-                .thenReturn(List.of(kosdaqImage));
+        captureReturns(KOSPI_MAP_PATH, kospiImage);
+        captureReturns(KOSDAQ_MAP_PATH, kosdaqImage);
 
         sender.send(dataTime, false);
 
         verify(telegramClient).sendMediaGroup("chat-id", List.of(kospiImage, kosdaqImage), null);
         verifyNoInteractions(categoryRankingTextBuilder);
+    }
+
+    /**
+     * 캡처 대상 마켓을 랭킹 조회 결과로 정하면 이 상황에서 한 장도 안 찍고 에스컬레이션한다 — 맵 페이지는
+     * sector_price_snapshot으로 그려져서 카테고리 등락률 스냅샷이 없어도 멀쩡히 나오기 때문이다.
+     * sectorAvailable은 그 수집의 성공 여부라 항상 같이 false가 되지만, 늦게 도는 tick 등으로 true인
+     * 채 조회만 빌 수도 있어 그쪽도 이미지는 그대로 보낸다.
+     */
+    @Test
+    void send_병합_랭킹이_비어도_이미지는_보낸다() {
+        captureReturns(KOSPI_MAP_PATH, kospiImage);
+        captureReturns(KOSDAQ_MAP_PATH, kosdaqImage);
+        rankingReturns(List.of());
+
+        sender.send(dataTime, true);
+
+        verify(telegramClient).sendMediaGroup("chat-id", List.of(kospiImage, kosdaqImage), null);
+        verify(categoryRankingTextBuilder, never()).buildMapCaption(Mockito.any());
+    }
+
+    private void captureReturns(String path, byte[] image) {
+        when(screenshotClient.capture(path, MAP_SELECTOR)).thenReturn(List.of(image));
+    }
+
+    private void rankingReturns(List<TopCategoryItem> items) {
+        when(marketMapQueryService.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, dataTime))
+                .thenReturn(items);
     }
 }

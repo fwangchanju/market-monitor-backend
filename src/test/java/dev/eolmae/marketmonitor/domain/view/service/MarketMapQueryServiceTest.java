@@ -734,7 +734,8 @@ class MarketMapQueryServiceTest {
     void getTopCategoryRankings_평균_방식에_따라_델타_결과가_달라진다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
         MarketMapCategory a = category(1L, null, "반도체");
-        // now: 가중 +28%(위와 동일), before: 가중 +8%(시총 90,000 +10%/10,000 -2%, 산술 +5%)
+        // now:    시총 90,000 +30% / 10,000 +10%  → 가중 +28%, 산술 +20%
+        // before: 시총 80,000 +10% / 20,000   0%  → 가중  +8%, 산술  +5%
         // → 가중 델타는 +20%p, 산술 델타는 +15%p로 서로 다르다.
         CategoryChangeRateItem item = CategoryChangeRateItem.withBefore(
                 a.getId(),

@@ -8,6 +8,7 @@ import dev.eolmae.marketmonitor.common.event.EscalationEvent;
 import dev.eolmae.marketmonitor.domain.notification.client.TelegramClient;
 import dev.eolmae.marketmonitor.domain.notification.exception.TelegramSendException;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
+import dev.eolmae.marketmonitor.domain.view.enums.AverageMode;
 import java.time.LocalTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -19,7 +20,7 @@ class EscalationNotifierTest {
 
     private final TelegramClient telegramClient = Mockito.mock(TelegramClient.class);
     private final TelegramProperties properties =
-            new TelegramProperties("token", "chat", "dev-chat", 10, 15, 15, MAP_SEND_TIMES);
+            new TelegramProperties("token", "chat", "dev-chat", 10, 15, 15, AverageMode.SIMPLE, true, MAP_SEND_TIMES);
     private final EscalationNotifier notifier = new EscalationNotifier(telegramClient, properties);
 
     @Test
@@ -34,7 +35,8 @@ class EscalationNotifierTest {
 
     @Test
     void onEscalation_개발자_채팅방_아이디가_없으면_발송하지_않는다() {
-        TelegramProperties noDevChat = new TelegramProperties("token", "chat", "", 10, 15, 15, MAP_SEND_TIMES);
+        TelegramProperties noDevChat =
+                new TelegramProperties("token", "chat", "", 10, 15, 15, AverageMode.SIMPLE, true, MAP_SEND_TIMES);
         EscalationNotifier withoutDevChat = new EscalationNotifier(telegramClient, noDevChat);
 
         withoutDevChat.onEscalation(new EscalationEvent("장애 발생"));

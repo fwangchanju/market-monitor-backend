@@ -5,7 +5,6 @@ import dev.eolmae.marketmonitor.domain.notification.client.TelegramClient;
 import dev.eolmae.marketmonitor.domain.notification.enums.RenderTarget;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
 import dev.eolmae.marketmonitor.domain.renderer.client.ScreenshotClient;
-import dev.eolmae.marketmonitor.domain.view.enums.AverageMode;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
 import java.time.LocalDateTime;
@@ -48,10 +47,12 @@ public class MarketMapTelegramReportSender extends TelegramReportSender {
     // 섹터 이미지 발송은 비활성화돼 있지만 랭킹 텍스트 자체는 유용하므로, 맵 캡션에 그대로 이어붙인다.
     @Override
     protected String buildText(LocalDateTime dataTime, MarketQuery query) {
-        // 컴파일이 서게 하려고 임시로 고정값을 직접 넘긴다 — telegramProperties에 averageMode/sectorFilter가
-        // 아직 없다. 다음 커밋에서 프로퍼티 값으로 교체한다.
         return "Custom Map\n"
                 + categoryRankingTextBuilder.buildRankingText(marketMapQueryService.getTopCategoryRankings(
-                        query, dataTime, telegramProperties.beforeMinutes(), AverageMode.SIMPLE, true));
+                        query,
+                        dataTime,
+                        telegramProperties.beforeMinutes(),
+                        telegramProperties.averageMode(),
+                        telegramProperties.sectorFilter()));
     }
 }

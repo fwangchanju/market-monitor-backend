@@ -24,14 +24,14 @@ import org.mockito.Mockito;
 class MarketMapAlbumReportSenderTest {
 
     private static final List<LocalTime> MAP_SEND_TIMES = List.of(LocalTime.of(8, 15));
-    private static final String KOSPI_MAP_PATH = "/market-map?market=KOSPI";
-    private static final String KOSDAQ_MAP_PATH = "/market-map?market=KOSDAQ";
+    private static final String KOSPI_MAP_PATH = "/market-map?market=KOSPI&avgMode=simple&sectorFilter=true";
+    private static final String KOSDAQ_MAP_PATH = "/market-map?market=KOSDAQ&avgMode=simple&sectorFilter=true";
     private static final String MAP_SELECTOR = "[data-captureid='market-map-capture']";
 
     private final ScreenshotClient screenshotClient = Mockito.mock(ScreenshotClient.class);
     private final TelegramClient telegramClient = Mockito.mock(TelegramClient.class);
-    private final TelegramProperties telegramProperties =
-            new TelegramProperties("token", "chat-id", "dev-chat", 10, 15, 15, MAP_SEND_TIMES);
+    private final TelegramProperties telegramProperties = new TelegramProperties(
+            "token", "chat-id", "dev-chat", 10, 15, 15, AverageMode.SIMPLE, true, MAP_SEND_TIMES);
     private final CategoryRankingTextBuilder categoryRankingTextBuilder =
             Mockito.mock(CategoryRankingTextBuilder.class);
     private final MarketMapQueryService marketMapQueryService = Mockito.mock(MarketMapQueryService.class);

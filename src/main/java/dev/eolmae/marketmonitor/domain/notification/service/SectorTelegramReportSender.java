@@ -45,10 +45,10 @@ public class SectorTelegramReportSender {
         }
 
         int beforeMinutes = telegramProperties.beforeMinutes();
-        // 컴파일이 서게 하려고 임시로 고정값을 직접 넘긴다 — telegramProperties에 averageMode/sectorFilter가
-        // 아직 없다. 다음 커밋에서 프로퍼티 값으로 교체한다.
+        AverageMode averageMode = telegramProperties.averageMode();
+        boolean sectorFilter = telegramProperties.sectorFilter();
         List<CategoryRankingSummary> deltaRankings = marketMapQueryService.getTopCategoryRankings(
-                MarketQuery.ALL_STOCK, dataTime, beforeMinutes, AverageMode.SIMPLE, true);
+                MarketQuery.ALL_STOCK, dataTime, beforeMinutes, averageMode, sectorFilter);
         if (deltaRankings.isEmpty()) {
             log.warn("{} 시각 카테고리 등락률 랭킹 조회가 비어 있어 섹터 발송을 건너뜀", dataTime);
             return;
@@ -66,7 +66,7 @@ public class SectorTelegramReportSender {
             if (delta.topCategories().isEmpty()) {
                 if (changeRateRankings == null) {
                     changeRateRankings = marketMapQueryService.getTopCategoryRankingsByChangeRate(
-                            MarketQuery.ALL_STOCK, dataTime, beforeMinutes, AverageMode.SIMPLE, true);
+                            MarketQuery.ALL_STOCK, dataTime, beforeMinutes, averageMode, sectorFilter);
                 }
                 CategoryRankingSummary fallback = findByMarket(changeRateRankings, delta.market());
                 if (fallback == null || fallback.topCategories().isEmpty()) {
@@ -76,7 +76,7 @@ public class SectorTelegramReportSender {
                 summaryToSend = fallback;
                 isFallback = true;
             }
-            sentCount += sendOneMarket(summaryToSend, beforeMinutes, isFallback);
+            sentCount += sendOneMarket(summaryToSend, beforeMinutes, averageMode, sectorFilter, isFallback);
         }
 
         // 한 장도 못 보냈으면 캡처가 통째로 빈 것이다. 마켓별로 나눠 보내기 전에는 빈 목록이
@@ -97,9 +97,15 @@ public class SectorTelegramReportSender {
     }
 
     /** 보낸 메시지 건수를 돌려준다 — 호출부가 "하나도 못 보냈는가"를 판정하는 근거다. */
-    private int sendOneMarket(CategoryRankingSummary summary, int beforeMinutes, boolean isFallback) {
+    private int sendOneMarket(
+            CategoryRankingSummary summary,
+            int beforeMinutes,
+            AverageMode averageMode,
+            boolean sectorFilter,
+            boolean isFallback) {
         List<byte[]> images = screenshotClient.capture(
-                sectorPath(summary.market(), beforeMinutes), RenderTarget.CATEGORY_CHANGE_RATE.selector());
+                sectorPath(summary.market(), beforeMinutes, averageMode, sectorFilter),
+                RenderTarget.CATEGORY_CHANGE_RATE.selector());
 
         // ScreenshotClient.capture는 응답의 images가 null일 때만 던지고 빈 배열은 그대로 돌려준다.
         // 셀렉터가 아무것도 못 찾는 경우(예: 프론트가 에러 화면을 그려 capture 대상 요소가 없음)가
@@ -118,8 +124,11 @@ public class SectorTelegramReportSender {
         return images.size();
     }
 
-    private String sectorPath(Market market, int beforeMinutes) {
-        return RenderTarget.CATEGORY_CHANGE_RATE.path() + "?market=" + market.name() + "&beforeMinutes="
-                + beforeMinutes;
+    private String sectorPath(Market market, int beforeMinutes, AverageMode averageMode, boolean sectorFilter) {
+        return RenderTarget.CATEGORY_CHANGE_RATE.path()
+                + "?market=" + market.name()
+                + "&beforeMinutes=" + beforeMinutes
+                + "&avgMode=" + averageMode.queryValue()
+                + "&sectorFilter=" + sectorFilter;
     }
 }

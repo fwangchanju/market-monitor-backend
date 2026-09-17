@@ -2,6 +2,7 @@ package dev.eolmae.marketmonitor.domain.notification.properties;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.eolmae.marketmonitor.domain.view.enums.AverageMode;
 import java.time.LocalTime;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -40,6 +41,8 @@ class TelegramPropertiesBindingTest {
             assertThat(properties.sendMinute()).isEqualTo(10);
             assertThat(properties.sendIntervalMinutes()).isEqualTo(15);
             assertThat(properties.beforeMinutes()).isEqualTo(15);
+            assertThat(properties.averageMode()).isEqualTo(AverageMode.SIMPLE);
+            assertThat(properties.sectorFilter()).isTrue();
             assertThat(properties.mapSendTimes())
                     .containsExactly(LocalTime.of(8, 15), LocalTime.of(9, 15), LocalTime.of(15, 30));
         });

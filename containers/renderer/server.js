@@ -15,6 +15,7 @@ const CLEANUP_TIMEOUT_MS = 10000
 const MAX_QUEUE_WAIT_MS = 30000
 const MAX_CONSECUTIVE_FAILURES = 3
 const RECYCLE_AFTER_CAPTURES = 200
+const SHUTDOWN_GRACE_MS = 5000
 
 // 죽은 Chromium이 남긴 SingletonLock 등이 재시작 후에도 남아 있지 않도록, 기동 시 한 번 지운다 —
 // process.exit(1) + restart: always는 컨테이너 파일시스템을 보존하므로 이 정리가 없으면 다음
@@ -28,6 +29,7 @@ let consecutiveFailures = 0
 let capturesSinceRecycle = 0
 let totalCaptureCount = 0
 let queueTail = Promise.resolve()
+let shutdownRequested = false
 
 // promise를 최대 ms까지만 기다린다. 그 안에 안 끝나면(성공/실패 무관) 기다리지 않고 넘어간다 — 정리
 // 작업(페이지·컨텍스트 닫기)이 응답을 멈춘 Chromium 때문에 무기한 대기하는 것을 막기 위해서다.
@@ -35,8 +37,21 @@ function withTimeout(promise, ms) {
   return Promise.race([promise.catch(() => {}), new Promise((resolve) => setTimeout(resolve, ms))])
 }
 
+// 종료가 예약된 뒤에는 응답이 실제로 나간 다음에 프로세스를 끝낸다. 먼저 죽으면 백엔드는 500을 받지
+// 못하고 read timeout(90초)까지 매달린다 — 재기동보다 "빨리 실패를 알리는 것"이 급하다. 응답이 끝내
+// 안 나가는 경우를 대비해 상한도 같이 건다.
+function exitAfterResponse(res) {
+  if (!shutdownRequested) {
+    return
+  }
+  const exit = () => process.exit(1)
+  res.on('finish', exit)
+  res.on('close', exit)
+  setTimeout(exit, SHUTDOWN_GRACE_MS).unref()
+}
+
 app.get('/health', (req, res) => {
-  const healthy = contextState !== 'dead'
+  const healthy = contextState !== 'dead' && !shutdownRequested
   res.status(healthy ? 200 : 503).json({
     status: healthy ? 'ok' : 'degraded',
     contextState,
@@ -75,15 +90,18 @@ app.post('/capture', (req, res) => {
       onCaptureSucceeded()
       maybeRecycleContext()
       res.json({ images })
+      exitAfterResponse(res)
     },
     (err) => {
       if (err.isQueueTimeout) {
         console.error('[renderer] 캡처 요청이 대기열에서 시간 초과:', err.message)
         res.status(503).json({ error: err.message })
+        exitAfterResponse(res)
         return
       }
       console.error('[renderer] 캡처 오류:', err.message)
       res.status(500).json({ error: err.message })
+      exitAfterResponse(res)
     },
   )
 })
@@ -184,8 +202,8 @@ async function onBrowserFailure(err) {
   }
 
   if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-    console.error(`[renderer] 연속 실패 ${consecutiveFailures}회 — 정리 후 재기동한다`)
-    process.exit(1)
+    console.error(`[renderer] 연속 실패 ${consecutiveFailures}회 — 이번 응답을 보낸 뒤 재기동한다`)
+    shutdownRequested = true
   }
 }
 

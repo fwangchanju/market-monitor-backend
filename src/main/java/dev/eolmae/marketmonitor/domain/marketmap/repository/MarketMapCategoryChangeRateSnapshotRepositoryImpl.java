@@ -4,12 +4,17 @@ import static dev.eolmae.marketmonitor.domain.marketmap.entity.QMarketMapCategor
 
 import com.querydsl.core.Tuple;
 import com.querydsl.core.types.dsl.BooleanExpression;
+import com.querydsl.core.types.dsl.NumberExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import dev.eolmae.marketmonitor.common.enums.Market;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
@@ -36,18 +41,33 @@ public class MarketMapCategoryChangeRateSnapshotRepositoryImpl
     }
 
     @Override
-    public long deleteSnapshotsBefore(LocalDateTime cutoff, LocalTime marketCloseTime) {
+    public List<MarketSnapshotTime> findMarketSnapshotTimesInWindow(
+            LocalDateTime cutoff, LocalTime windowStart, LocalTime windowEnd) {
+        var snapshot = marketMapCategoryChangeRateSnapshot;
+        return queryFactory
+                .select(snapshot.marketType, snapshot.snapshotTime)
+                .distinct()
+                .from(snapshot)
+                .where(snapshot.snapshotTime.before(cutoff).and(inWindow(windowStart, windowEnd)))
+                .fetch()
+                .stream()
+                .map(tuple -> new MarketSnapshotTime(tuple.get(snapshot.marketType), tuple.get(snapshot.snapshotTime)))
+                .toList();
+    }
+
+    @Override
+    public long deleteSnapshotsBefore(LocalDateTime cutoff, List<MarketSnapshotTime> retainedSnapshotTimes) {
         return queryFactory
                 .delete(marketMapCategoryChangeRateSnapshot)
-                .where(targetPredicate(cutoff, marketCloseTime))
+                .where(targetPredicate(cutoff, retainedSnapshotTimes))
                 .execute();
     }
 
     @Override
     public SnapshotRetentionSummary summarizeSnapshotsToDelete(
-            LocalDateTime cutoff, LocalTime marketCloseTime, int sampleSize) {
+            LocalDateTime cutoff, List<MarketSnapshotTime> retainedSnapshotTimes, int sampleSize) {
         var snapshot = marketMapCategoryChangeRateSnapshot;
-        BooleanExpression targetCondition = targetPredicate(cutoff, marketCloseTime);
+        BooleanExpression targetCondition = targetPredicate(cutoff, retainedSnapshotTimes);
 
         Tuple aggregate = queryFactory
                 .select(snapshot.count(), snapshot.snapshotTime.min(), snapshot.snapshotTime.max())
@@ -73,22 +93,91 @@ public class MarketMapCategoryChangeRateSnapshotRepositoryImpl
                 .map(LocalDateTime::toLocalTime)
                 .toList();
 
+        List<MarketSnapshotTime> retainedSampleSnapshotTimes = retainedSnapshotTimes.stream()
+                .sorted(Comparator.comparing(MarketSnapshotTime::snapshotTime).reversed())
+                .limit(sampleSize)
+                .toList();
+        int retainedDateCount = (int) retainedSnapshotTimes.stream()
+                .map(retained -> retained.snapshotTime().toLocalDate())
+                .distinct()
+                .count();
+
+        List<MarketDate> emptyWindowTargets = findEmptyWindowTargets(cutoff, retainedSnapshotTimes);
+
         return new SnapshotRetentionSummary(
                 aggregate.get(snapshot.count()),
                 totalCountBeforeCutoff,
                 aggregate.get(snapshot.snapshotTime.min()),
                 aggregate.get(snapshot.snapshotTime.max()),
-                sampleSnapshotTimes);
+                sampleSnapshotTimes,
+                retainedSampleSnapshotTimes,
+                retainedDateCount,
+                emptyWindowTargets);
     }
 
-    // cutoff 이전(30일 지남)이면서 marketCloseTime(15:30)이 아닌 스냅샷 — 삭제/조회 양쪽에서 동일하게 쓰는 술어.
-    private BooleanExpression targetPredicate(LocalDateTime cutoff, LocalTime marketCloseTime) {
+    // cutoff 이전이면서 retainedSnapshotTimes(순수 자바 함수가 보존 윈도우에서 고른 (마켓,시각))에 없는 행 —
+    // 삭제/조회 양쪽에서 동일하게 쓰는 술어. retainedSnapshotTimes가 비면(그 구간에 데이터가 아예 없던
+    // 날) cutoff 조건만 남아 그 구간 전체가 삭제 대상이 된다 — 의도된 동작이다.
+    private BooleanExpression targetPredicate(LocalDateTime cutoff, List<MarketSnapshotTime> retainedSnapshotTimes) {
         var snapshot = marketMapCategoryChangeRateSnapshot;
-        return snapshot.snapshotTime
-                .before(cutoff)
-                .and(snapshot.snapshotTime
-                        .hour()
-                        .ne(marketCloseTime.getHour())
-                        .or(snapshot.snapshotTime.minute().ne(marketCloseTime.getMinute())));
+        BooleanExpression cutoffCondition = snapshot.snapshotTime.before(cutoff);
+        BooleanExpression retainedCondition = retainedPredicate(retainedSnapshotTimes);
+        if (retainedCondition == null) {
+            return cutoffCondition;
+        }
+        return cutoffCondition.and(retainedCondition.not());
+    }
+
+    private BooleanExpression retainedPredicate(List<MarketSnapshotTime> retainedSnapshotTimes) {
+        var snapshot = marketMapCategoryChangeRateSnapshot;
+        BooleanExpression matched = null;
+        for (MarketSnapshotTime retained : retainedSnapshotTimes) {
+            BooleanExpression term =
+                    snapshot.marketType.eq(retained.market()).and(snapshot.snapshotTime.eq(retained.snapshotTime()));
+            matched = matched == null ? term : matched.or(term);
+        }
+        return matched;
+    }
+
+    // 윈도우 [windowStart, windowEnd) — 두 값이 같은 시(hour)라는 가정 없이 하루 중 분(分) 단위로 비교한다.
+    private BooleanExpression inWindow(LocalTime windowStart, LocalTime windowEnd) {
+        var snapshot = marketMapCategoryChangeRateSnapshot;
+        NumberExpression<Integer> minuteOfDay =
+                snapshot.snapshotTime.hour().multiply(60).add(snapshot.snapshotTime.minute());
+        int startMinuteOfDay = windowStart.getHour() * 60 + windowStart.getMinute();
+        int endMinuteOfDay = windowEnd.getHour() * 60 + windowEnd.getMinute();
+        return minuteOfDay.goe(startMinuteOfDay).and(minuteOfDay.lt(endMinuteOfDay));
+    }
+
+    // cutoff 이전에 존재하는 모든 (마켓, 날짜) 중 retainedSnapshotTimes에 없는 것 — "그 구간에 남길 행이
+    // 하나도 없었다"는 뜻이다(수집 gap 등으로 윈도우가 통째로 빈 날).
+    private List<MarketDate> findEmptyWindowTargets(
+            LocalDateTime cutoff, List<MarketSnapshotTime> retainedSnapshotTimes) {
+        var snapshot = marketMapCategoryChangeRateSnapshot;
+        Set<MarketDate> retainedMarketDates = new HashSet<>();
+        for (MarketSnapshotTime retained : retainedSnapshotTimes) {
+            retainedMarketDates.add(
+                    new MarketDate(retained.market(), retained.snapshotTime().toLocalDate()));
+        }
+
+        return queryFactory
+                .select(
+                        snapshot.marketType,
+                        snapshot.snapshotTime.year(),
+                        snapshot.snapshotTime.month(),
+                        snapshot.snapshotTime.dayOfMonth())
+                .distinct()
+                .from(snapshot)
+                .where(snapshot.snapshotTime.before(cutoff))
+                .fetch()
+                .stream()
+                .map(tuple -> new MarketDate(
+                        tuple.get(snapshot.marketType),
+                        LocalDate.of(
+                                tuple.get(snapshot.snapshotTime.year()),
+                                tuple.get(snapshot.snapshotTime.month()),
+                                tuple.get(snapshot.snapshotTime.dayOfMonth()))))
+                .filter(marketDate -> !retainedMarketDates.contains(marketDate))
+                .toList();
     }
 }

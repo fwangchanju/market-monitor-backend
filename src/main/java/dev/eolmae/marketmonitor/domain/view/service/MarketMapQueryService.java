@@ -29,6 +29,7 @@ import dev.eolmae.marketmonitor.domain.view.dto.MarketOverviewItem;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotAverages;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
 import dev.eolmae.marketmonitor.domain.view.dto.TopCategoryItem;
+import dev.eolmae.marketmonitor.domain.view.enums.AverageMode;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -157,8 +158,7 @@ public class MarketMapQueryService {
                 toChangeRateByMarket(findOverviewsBySnapshotTime(snapshotTime));
         Map<Market, BigDecimal> beforeIndexChangeRateByMarket =
                 toChangeRateByMarket(findOverviewsBySnapshotTime(snapshotTime.minusMinutes(beforeMinutes)));
-        Map<Long, MarketMapCategory> categoryById = marketMapCategoryRepository.findAll().stream()
-                .collect(Collectors.toMap(MarketMapCategory::getId, Function.identity()));
+        Map<Long, MarketMapCategory> categoryById = findCategoryById();
 
         return new SnapshotResponse<>(
                 snapshotTime,
@@ -222,12 +222,18 @@ public class MarketMapQueryService {
      * topCategories가 빈 목록이 된다. 그 처리는 호출부(CategoryRankingTextBuilder)가 한다.
      */
     public List<CategoryRankingSummary> getTopCategoryRankings(
-            MarketQuery marketQuery, LocalDateTime snapshotTime, int beforeMinutes) {
+            MarketQuery marketQuery,
+            LocalDateTime snapshotTime,
+            int beforeMinutes,
+            AverageMode averageMode,
+            boolean sectorFilter) {
         SnapshotResponse<CategoryChangeRateMarketRanking> ranking =
                 getCategoryChangeRates(marketQuery, snapshotTime, beforeMinutes);
         Set<Long> excludedTierIds = excludedTierIds();
+        Map<Long, MarketMapCategory> categoryById = findCategoryById();
         return ranking.items().stream()
-                .map(marketRanking -> toCategoryRankingSummary(marketRanking, excludedTierIds))
+                .map(marketRanking -> toCategoryRankingSummary(
+                        marketRanking, excludedTierIds, averageMode, sectorFilter, categoryById))
                 .toList();
     }
 
@@ -238,12 +244,18 @@ public class MarketMapQueryService {
      * before를 조회하고 버린다」 항목, 이번에 고치지 않는다.
      */
     public List<CategoryRankingSummary> getTopCategoryRankingsByChangeRate(
-            MarketQuery marketQuery, LocalDateTime snapshotTime, int beforeMinutes) {
+            MarketQuery marketQuery,
+            LocalDateTime snapshotTime,
+            int beforeMinutes,
+            AverageMode averageMode,
+            boolean sectorFilter) {
         SnapshotResponse<CategoryChangeRateMarketRanking> ranking =
                 getCategoryChangeRates(marketQuery, snapshotTime, beforeMinutes);
         Set<Long> excludedTierIds = excludedTierIds();
+        Map<Long, MarketMapCategory> categoryById = findCategoryById();
         return ranking.items().stream()
-                .map(marketRanking -> toCategoryRankingSummaryByChangeRate(marketRanking, excludedTierIds))
+                .map(marketRanking -> toCategoryRankingSummaryByChangeRate(
+                        marketRanking, excludedTierIds, averageMode, sectorFilter, categoryById))
                 .toList();
     }
 
@@ -259,7 +271,8 @@ public class MarketMapQueryService {
      * 실패한 tick에서는 맵이 멀쩡히 그려지는데도 빈 목록이 나온다. 그 시각 스냅샷이 통째로 없으면
      * 빈 목록을 돌려주므로, 호출부가 캡션을 붙일지 말지 판단한다.
      */
-    public List<TopCategoryItem> getMergedTopCategoryRanking(MarketQuery marketQuery, LocalDateTime snapshotTime) {
+    public List<TopCategoryItem> getMergedTopCategoryRanking(
+            MarketQuery marketQuery, LocalDateTime snapshotTime, AverageMode averageMode, boolean sectorFilter) {
         List<Market> markets = marketQuery.toMarkets();
         Map<Long, List<CategoryTierBreakdown>> mergedByCategoryId =
                 marketMapCategoryChangeRateSnapshotService
@@ -273,19 +286,34 @@ public class MarketMapQueryService {
                             return merged;
                         }));
 
-        Map<Long, MarketMapCategory> categoryById = marketMapCategoryRepository.findAll().stream()
-                .collect(Collectors.toMap(MarketMapCategory::getId, Function.identity()));
+        Map<Long, MarketMapCategory> categoryById = findCategoryById();
         Set<Long> excludedTierIds = excludedTierIds();
 
         return mergedByCategoryId.entrySet().stream()
                 .filter(entry -> categoryById.containsKey(entry.getKey()))
                 .filter(entry -> categoryById.get(entry.getKey()).getDepth() == 0)
+                .filter(entry -> isSectorIncluded(entry.getKey(), sectorFilter, categoryById))
                 .map(entry -> toTopCategoryItemByChangeRate(
-                        categoryById.get(entry.getKey()).getName(), entry.getValue(), excludedTierIds))
+                        categoryById.get(entry.getKey()).getName(), entry.getValue(), excludedTierIds, averageMode))
                 .filter(Objects::nonNull)
                 .sorted(Comparator.comparing(TopCategoryItem::changeRate).reversed())
                 .limit(TOP_N)
                 .toList();
+    }
+
+    private Map<Long, MarketMapCategory> findCategoryById() {
+        return marketMapCategoryRepository.findAll().stream()
+                .collect(Collectors.toMap(MarketMapCategory::getId, Function.identity()));
+    }
+
+    /** sectorFilter가 꺼져 있으면 전부 포함. 켜져 있으면 그 카테고리의 isExcluded만 본다(결정 4 —
+     * getCategoryChangeRates가 아니라 TOP2 경로에만 거는 필터). */
+    private boolean isSectorIncluded(Long categoryId, boolean sectorFilter, Map<Long, MarketMapCategory> categoryById) {
+        if (!sectorFilter) {
+            return true;
+        }
+        MarketMapCategory category = categoryById.get(categoryId);
+        return category != null && !category.isExcluded();
     }
 
     private Set<Long> excludedTierIds() {
@@ -296,10 +324,15 @@ public class MarketMapQueryService {
     }
 
     private CategoryRankingSummary toCategoryRankingSummary(
-            CategoryChangeRateMarketRanking marketRanking, Set<Long> excludedTierIds) {
+            CategoryChangeRateMarketRanking marketRanking,
+            Set<Long> excludedTierIds,
+            AverageMode averageMode,
+            boolean sectorFilter,
+            Map<Long, MarketMapCategory> categoryById) {
         List<TopCategoryItem> topCategories = marketRanking.items().stream()
                 .filter(item -> item.depth() == 0)
-                .map(item -> toTopCategoryItem(item, excludedTierIds))
+                .filter(item -> isSectorIncluded(item.categoryId(), sectorFilter, categoryById))
+                .map(item -> toTopCategoryItem(item, excludedTierIds, averageMode))
                 .filter(Objects::nonNull)
                 .sorted(Comparator.comparing(TopCategoryItem::changeRate).reversed())
                 .limit(TOP_N)
@@ -312,10 +345,16 @@ public class MarketMapQueryService {
     }
 
     private CategoryRankingSummary toCategoryRankingSummaryByChangeRate(
-            CategoryChangeRateMarketRanking marketRanking, Set<Long> excludedTierIds) {
+            CategoryChangeRateMarketRanking marketRanking,
+            Set<Long> excludedTierIds,
+            AverageMode averageMode,
+            boolean sectorFilter,
+            Map<Long, MarketMapCategory> categoryById) {
         List<TopCategoryItem> topCategories = marketRanking.items().stream()
                 .filter(item -> item.depth() == 0)
-                .map(item -> toTopCategoryItemByChangeRate(item.categoryName(), item.now(), excludedTierIds))
+                .filter(item -> isSectorIncluded(item.categoryId(), sectorFilter, categoryById))
+                .map(item ->
+                        toTopCategoryItemByChangeRate(item.categoryName(), item.now(), excludedTierIds, averageMode))
                 .filter(Objects::nonNull)
                 .sorted(Comparator.comparing(TopCategoryItem::changeRate).reversed())
                 .limit(TOP_N)
@@ -330,29 +369,31 @@ public class MarketMapQueryService {
      * 순위에서 빠진다 — 없는 것을 0으로 치면 now가 그대로 델타가 되어 조용히 틀린 값이 1위로 올라온다.
      * combine()이 빈 목록에 0을 돌려주므로 빈 목록도 같이 걸러야 한다.
      */
-    private TopCategoryItem toTopCategoryItem(CategoryChangeRateItem item, Set<Long> excludedTierIds) {
+    private TopCategoryItem toTopCategoryItem(
+            CategoryChangeRateItem item, Set<Long> excludedTierIds, AverageMode averageMode) {
         if (item.before() == null) {
             return null;
         }
-        BigDecimal now = weightedAvgOf(item.now(), excludedTierIds);
-        BigDecimal before = weightedAvgOf(item.before(), excludedTierIds);
+        BigDecimal now = avgOf(item.now(), excludedTierIds, averageMode);
+        BigDecimal before = avgOf(item.before(), excludedTierIds, averageMode);
         if (now == null || before == null) {
             return null;
         }
         return new TopCategoryItem(item.categoryName(), now.subtract(before));
     }
 
-    /** 등락률(now) 기준 TOP2용 — before 없이 now의 가중평균 하나만 담는다. */
+    /** 등락률(now) 기준 TOP2용 — before 없이 now의 평균 하나만 담는다. */
     private TopCategoryItem toTopCategoryItemByChangeRate(
-            String categoryName, List<CategoryTierBreakdown> now, Set<Long> excludedTierIds) {
-        BigDecimal weightedAvg = weightedAvgOf(now, excludedTierIds);
-        if (weightedAvg == null) {
+            String categoryName, List<CategoryTierBreakdown> now, Set<Long> excludedTierIds, AverageMode averageMode) {
+        BigDecimal avg = avgOf(now, excludedTierIds, averageMode);
+        if (avg == null) {
             return null;
         }
-        return new TopCategoryItem(categoryName, weightedAvg);
+        return new TopCategoryItem(categoryName, avg);
     }
 
-    private BigDecimal weightedAvgOf(List<CategoryTierBreakdown> breakdowns, Set<Long> excludedTierIds) {
+    private BigDecimal avgOf(
+            List<CategoryTierBreakdown> breakdowns, Set<Long> excludedTierIds, AverageMode averageMode) {
         List<CategoryTierBreakdown> included = breakdowns.stream()
                 .filter(breakdown -> !excludedTierIds.contains(breakdown.tierId()))
                 .toList();
@@ -360,7 +401,10 @@ public class MarketMapQueryService {
             return null;
         }
         SnapshotAverages averages = marketMapCategoryChangeRateSnapshotService.combine(included);
-        return averages.weightedAvgChangeRate();
+        return switch (averageMode) {
+            case WEIGHTED -> averages.weightedAvgChangeRate();
+            case SIMPLE -> averages.simpleAvgChangeRate();
+        };
     }
 
     /** markets가 정확히 하나일 때만 의미 있는 단일 지수 개요 — ALL_STOCK처럼 여럿이면 단일 값이 없어 null. */

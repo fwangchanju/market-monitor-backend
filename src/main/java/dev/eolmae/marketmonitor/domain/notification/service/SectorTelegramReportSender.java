@@ -8,6 +8,7 @@ import dev.eolmae.marketmonitor.domain.notification.enums.RenderTarget;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
 import dev.eolmae.marketmonitor.domain.renderer.client.ScreenshotClient;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryRankingSummary;
+import dev.eolmae.marketmonitor.domain.view.enums.AverageMode;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
 import java.time.LocalDateTime;
@@ -44,8 +45,10 @@ public class SectorTelegramReportSender {
         }
 
         int beforeMinutes = telegramProperties.beforeMinutes();
-        List<CategoryRankingSummary> deltaRankings =
-                marketMapQueryService.getTopCategoryRankings(MarketQuery.ALL_STOCK, dataTime, beforeMinutes);
+        // 컴파일이 서게 하려고 임시로 고정값을 직접 넘긴다 — telegramProperties에 averageMode/sectorFilter가
+        // 아직 없다. 다음 커밋에서 프로퍼티 값으로 교체한다.
+        List<CategoryRankingSummary> deltaRankings = marketMapQueryService.getTopCategoryRankings(
+                MarketQuery.ALL_STOCK, dataTime, beforeMinutes, AverageMode.SIMPLE, true);
         if (deltaRankings.isEmpty()) {
             log.warn("{} 시각 카테고리 등락률 랭킹 조회가 비어 있어 섹터 발송을 건너뜀", dataTime);
             return;
@@ -63,7 +66,7 @@ public class SectorTelegramReportSender {
             if (delta.topCategories().isEmpty()) {
                 if (changeRateRankings == null) {
                     changeRateRankings = marketMapQueryService.getTopCategoryRankingsByChangeRate(
-                            MarketQuery.ALL_STOCK, dataTime, beforeMinutes);
+                            MarketQuery.ALL_STOCK, dataTime, beforeMinutes, AverageMode.SIMPLE, true);
                 }
                 CategoryRankingSummary fallback = findByMarket(changeRateRankings, delta.market());
                 if (fallback == null || fallback.topCategories().isEmpty()) {

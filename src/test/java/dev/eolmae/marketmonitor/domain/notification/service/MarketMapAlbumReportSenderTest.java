@@ -11,6 +11,7 @@ import dev.eolmae.marketmonitor.domain.notification.client.TelegramClient;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
 import dev.eolmae.marketmonitor.domain.renderer.client.ScreenshotClient;
 import dev.eolmae.marketmonitor.domain.view.dto.TopCategoryItem;
+import dev.eolmae.marketmonitor.domain.view.enums.AverageMode;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
 import java.math.BigDecimal;
@@ -114,7 +115,8 @@ class MarketMapAlbumReportSenderTest {
     }
 
     private void rankingReturns(List<TopCategoryItem> items) {
-        when(marketMapQueryService.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, dataTime))
+        when(marketMapQueryService.getMergedTopCategoryRanking(
+                        MarketQuery.ALL_STOCK, dataTime, AverageMode.SIMPLE, true))
                 .thenReturn(items);
     }
 }

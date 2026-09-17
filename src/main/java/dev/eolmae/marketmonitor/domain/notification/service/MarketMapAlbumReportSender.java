@@ -8,6 +8,7 @@ import dev.eolmae.marketmonitor.domain.notification.enums.RenderTarget;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
 import dev.eolmae.marketmonitor.domain.renderer.client.ScreenshotClient;
 import dev.eolmae.marketmonitor.domain.view.dto.TopCategoryItem;
+import dev.eolmae.marketmonitor.domain.view.enums.AverageMode;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
 import java.time.LocalDateTime;
@@ -57,7 +58,10 @@ public class MarketMapAlbumReportSender {
         if (!sectorAvailable) {
             return null;
         }
-        List<TopCategoryItem> topCategories = marketMapQueryService.getMergedTopCategoryRanking(MAP_MARKETS, dataTime);
+        // 컴파일이 서게 하려고 임시로 고정값을 직접 넘긴다 — telegramProperties에 averageMode/sectorFilter가
+        // 아직 없다. 다음 커밋에서 프로퍼티 값으로 교체한다.
+        List<TopCategoryItem> topCategories =
+                marketMapQueryService.getMergedTopCategoryRanking(MAP_MARKETS, dataTime, AverageMode.SIMPLE, true);
         // sectorAvailable이 true면 그 시각 스냅샷이 있으니 보통은 안 비지만, 비면 헤더만 덜렁 남는다.
         // 이미지는 이미 찍었으므로 캡션만 버리고 보낸다.
         if (topCategories.isEmpty()) {

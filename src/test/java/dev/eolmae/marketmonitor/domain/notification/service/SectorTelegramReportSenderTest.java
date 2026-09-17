@@ -14,6 +14,7 @@ import dev.eolmae.marketmonitor.domain.notification.properties.TelegramPropertie
 import dev.eolmae.marketmonitor.domain.renderer.client.ScreenshotClient;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryRankingSummary;
 import dev.eolmae.marketmonitor.domain.view.dto.TopCategoryItem;
+import dev.eolmae.marketmonitor.domain.view.enums.AverageMode;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
 import java.math.BigDecimal;
@@ -55,7 +56,8 @@ class SectorTelegramReportSenderTest {
 
     @Test
     void send_랭킹_결과가_통째로_비면_캡처도_발송도_하지_않는다() {
-        when(marketMapQueryService.getTopCategoryRankings(MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES))
+        when(marketMapQueryService.getTopCategoryRankings(
+                        MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(List.of());
 
         sender.send(dataTime, true);
@@ -71,7 +73,8 @@ class SectorTelegramReportSenderTest {
         CategoryRankingSummary kosdaqSummary =
                 new CategoryRankingSummary(Market.KOSDAQ, indexChangeRate, List.of(topCategoryItem()));
         List<CategoryRankingSummary> rankings = List.of(kospiSummary, kosdaqSummary);
-        when(marketMapQueryService.getTopCategoryRankings(MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES))
+        when(marketMapQueryService.getTopCategoryRankings(
+                        MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(rankings);
         when(screenshotClient.capture(
                         "/category-change-rate?market=KOSPI&beforeMinutes=15",
@@ -102,7 +105,8 @@ class SectorTelegramReportSenderTest {
         CategoryRankingSummary kospiSummary =
                 new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of(topCategoryItem()));
         List<CategoryRankingSummary> rankings = List.of(kospiSummary);
-        when(marketMapQueryService.getTopCategoryRankings(MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES))
+        when(marketMapQueryService.getTopCategoryRankings(
+                        MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(rankings);
         when(screenshotClient.capture(
                         "/category-change-rate?market=KOSPI&beforeMinutes=15",
@@ -125,7 +129,8 @@ class SectorTelegramReportSenderTest {
     void send_캡처가_통째로_비면_에스컬레이션한다() {
         CategoryRankingSummary kospiSummary =
                 new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of(topCategoryItem()));
-        when(marketMapQueryService.getTopCategoryRankings(MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES))
+        when(marketMapQueryService.getTopCategoryRankings(
+                        MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(List.of(kospiSummary));
         when(screenshotClient.capture(
                         "/category-change-rate?market=KOSPI&beforeMinutes=15",
@@ -143,7 +148,8 @@ class SectorTelegramReportSenderTest {
                 new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of(topCategoryItem()));
         CategoryRankingSummary kosdaqSummary =
                 new CategoryRankingSummary(Market.KOSDAQ, indexChangeRate, List.of(topCategoryItem()));
-        when(marketMapQueryService.getTopCategoryRankings(MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES))
+        when(marketMapQueryService.getTopCategoryRankings(
+                        MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(List.of(kospiSummary, kosdaqSummary));
         when(screenshotClient.capture(
                         "/category-change-rate?market=KOSPI&beforeMinutes=15",
@@ -170,12 +176,14 @@ class SectorTelegramReportSenderTest {
         CategoryRankingSummary kospiDeltaEmpty = new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of());
         CategoryRankingSummary kosdaqDelta =
                 new CategoryRankingSummary(Market.KOSDAQ, indexChangeRate, List.of(topCategoryItem()));
-        when(marketMapQueryService.getTopCategoryRankings(MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES))
+        when(marketMapQueryService.getTopCategoryRankings(
+                        MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(List.of(kospiDeltaEmpty, kosdaqDelta));
 
         CategoryRankingSummary kospiFallback =
                 new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of(topCategoryItem()));
-        when(marketMapQueryService.getTopCategoryRankingsByChangeRate(MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES))
+        when(marketMapQueryService.getTopCategoryRankingsByChangeRate(
+                        MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(List.of(kospiFallback));
 
         when(screenshotClient.capture(
@@ -207,12 +215,14 @@ class SectorTelegramReportSenderTest {
         CategoryRankingSummary kospiDeltaEmpty = new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of());
         CategoryRankingSummary kosdaqDelta =
                 new CategoryRankingSummary(Market.KOSDAQ, indexChangeRate, List.of(topCategoryItem()));
-        when(marketMapQueryService.getTopCategoryRankings(MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES))
+        when(marketMapQueryService.getTopCategoryRankings(
+                        MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(List.of(kospiDeltaEmpty, kosdaqDelta));
 
         CategoryRankingSummary kospiFallbackAlsoEmpty =
                 new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of());
-        when(marketMapQueryService.getTopCategoryRankingsByChangeRate(MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES))
+        when(marketMapQueryService.getTopCategoryRankingsByChangeRate(
+                        MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(List.of(kospiFallbackAlsoEmpty));
 
         when(screenshotClient.capture(
@@ -234,14 +244,16 @@ class SectorTelegramReportSenderTest {
     void send_변화율_폴백_조회는_한_번만_한다() {
         CategoryRankingSummary kospiDeltaEmpty = new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of());
         CategoryRankingSummary kosdaqDeltaEmpty = new CategoryRankingSummary(Market.KOSDAQ, indexChangeRate, List.of());
-        when(marketMapQueryService.getTopCategoryRankings(MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES))
+        when(marketMapQueryService.getTopCategoryRankings(
+                        MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(List.of(kospiDeltaEmpty, kosdaqDeltaEmpty));
 
         CategoryRankingSummary kospiFallback =
                 new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of(topCategoryItem()));
         CategoryRankingSummary kosdaqFallback =
                 new CategoryRankingSummary(Market.KOSDAQ, indexChangeRate, List.of(topCategoryItem()));
-        when(marketMapQueryService.getTopCategoryRankingsByChangeRate(MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES))
+        when(marketMapQueryService.getTopCategoryRankingsByChangeRate(
+                        MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(List.of(kospiFallback, kosdaqFallback));
 
         when(screenshotClient.capture(Mockito.contains("KOSPI"), Mockito.any())).thenReturn(List.of(kospiImage));
@@ -251,7 +263,8 @@ class SectorTelegramReportSenderTest {
         sender.send(dataTime, true);
 
         verify(marketMapQueryService, Mockito.times(1))
-                .getTopCategoryRankingsByChangeRate(MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES);
+                .getTopCategoryRankingsByChangeRate(
+                        MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true);
     }
 
     private TopCategoryItem topCategoryItem() {

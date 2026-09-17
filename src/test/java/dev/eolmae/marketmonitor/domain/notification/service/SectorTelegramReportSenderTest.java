@@ -275,6 +275,44 @@ class SectorTelegramReportSenderTest {
                         MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true);
     }
 
+    // 프로퍼티 값이 캡처 URL과 캡션 계산 양쪽에 같은 값으로 들어가는지 — 기본값(SIMPLE/true)이 아닌
+    // 값(WEIGHTED/false)으로 바꿔도 둘이 같이 바뀌어야 한다.
+    @Test
+    void send_프로퍼티가_WEIGHTED와_sectorFilter_false면_캡처_URL과_캡션_계산에_그대로_반영된다() {
+        TelegramProperties weightedProperties = new TelegramProperties(
+                "token",
+                "chat-id",
+                "dev-chat",
+                10,
+                BEFORE_MINUTES,
+                BEFORE_MINUTES,
+                AverageMode.WEIGHTED,
+                false,
+                MAP_SEND_TIMES);
+        SectorTelegramReportSender weightedSender = new SectorTelegramReportSender(
+                screenshotClient,
+                telegramClient,
+                weightedProperties,
+                categoryRankingTextBuilder,
+                marketMapQueryService);
+        CategoryRankingSummary kospiSummary =
+                new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of(topCategoryItem()));
+        when(marketMapQueryService.getTopCategoryRankings(
+                        MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.WEIGHTED, false))
+                .thenReturn(List.of(kospiSummary));
+        when(screenshotClient.capture(
+                        "/category-change-rate?market=KOSPI&beforeMinutes=15&avgMode=weighted&sectorFilter=false",
+                        "[data-captureid='category-change-rate-capture']"))
+                .thenReturn(List.of(kospiImage));
+        when(categoryRankingTextBuilder.buildSectorCaption(kospiSummary, BEFORE_MINUTES))
+                .thenReturn("[#코스피 15분 전 대비]\n...");
+
+        weightedSender.send(dataTime, true);
+
+        verify(telegramClient)
+                .sendPhoto(Mockito.eq("chat-id"), Mockito.eq(kospiImage), Mockito.eq("[#코스피 15분 전 대비]\n..."));
+    }
+
     private TopCategoryItem topCategoryItem() {
         return new TopCategoryItem("반도체", BigDecimal.valueOf(3.21));
     }

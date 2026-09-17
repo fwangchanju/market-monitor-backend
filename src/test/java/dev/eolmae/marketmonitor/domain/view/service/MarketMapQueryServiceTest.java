@@ -679,6 +679,32 @@ class MarketMapQueryServiceTest {
                 .isEmpty();
     }
 
+    // 맵 앨범 캡션(getMergedTopCategoryRanking)에서도 섹터 제외 on/off로 TOP2가 달라진다 — 지시서 결정
+    // 3이 고치는 두 캡션 경로(섹터/맵) 중 나머지 하나.
+    @Test
+    void getMergedTopCategoryRanking_섹터_제외를_켜면_isExcluded_카테고리가_빠진다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        MarketMapCategory excluded = category(1L, null, "반도체");
+        excluded.exclude();
+        MarketMapCategory included = category(2L, null, "화학");
+        stubMergedRanking(List.of(excluded, included));
+
+        Map<Long, List<CategoryTierBreakdown>> kospiBreakdowns = Map.of(
+                excluded.getId(), List.of(tier(10L, "대형", 900_000, 10_000)), // +90%, 제외 대상이면 빠져야 함
+                included.getId(), List.of(tier(10L, "대형", 50_000, 10_000))); // +5%
+        when(marketMapCategoryChangeRateSnapshotService.findTierBreakdownsByCategoryId(
+                        List.of(Market.KOSPI, Market.KOSDAQ), snapshotTime))
+                .thenReturn(Map.of(Market.KOSPI, kospiBreakdowns));
+
+        List<TopCategoryItem> filtered =
+                service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime, AverageMode.WEIGHTED, true);
+        List<TopCategoryItem> unfiltered =
+                service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime, AverageMode.WEIGHTED, false);
+
+        assertThat(filtered).extracting(TopCategoryItem::categoryName).containsExactly("화학");
+        assertThat(unfiltered).extracting(TopCategoryItem::categoryName).containsExactlyInAnyOrder("반도체", "화학");
+    }
+
     // 가중평균과 산술평균이 실제로 다른 값이 나오는 것을 보여준다 — 4-arg tier()만 쓰는 기존 픽스처는
     // itemCount가 항상 1이라 두 평균이 우연히 같아서 이 분기를 검증하지 못한다.
     @Test
@@ -700,6 +726,29 @@ class MarketMapQueryServiceTest {
 
         assertThat(weighted.get(0).topCategories().get(0).changeRate()).isEqualByComparingTo(BigDecimal.valueOf(28));
         assertThat(simple.get(0).topCategories().get(0).changeRate()).isEqualByComparingTo(BigDecimal.valueOf(20));
+    }
+
+    // 평상시(매 tick) 경로 — getTopCategoryRankings → toTopCategoryItem은 avgOf를 now·before 두 번
+    // 불러 그 차이를 쓴다. ByChangeRate 폴백 경로만 덮으면 두 호출 중 하나가 다른 모드를 써도 못 잡는다.
+    @Test
+    void getTopCategoryRankings_평균_방식에_따라_델타_결과가_달라진다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        MarketMapCategory a = category(1L, null, "반도체");
+        // now: 가중 +28%(위와 동일), before: 가중 +8%(시총 90,000 +10%/10,000 -2%, 산술 +5%)
+        // → 가중 델타는 +20%p, 산술 델타는 +15%p로 서로 다르다.
+        CategoryChangeRateItem item = CategoryChangeRateItem.withBefore(
+                a.getId(),
+                List.of(tier(10L, "대형", 2_800_000, 100_000, 40, 2)),
+                List.of(tier(10L, "대형", 800_000, 100_000, 10, 2)));
+        stubRankingForTopCategories(snapshotTime, List.of(a), List.of(), item);
+
+        List<CategoryRankingSummary> weighted =
+                service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
+        List<CategoryRankingSummary> simple =
+                service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.SIMPLE, false);
+
+        assertThat(weighted.get(0).topCategories().get(0).changeRate()).isEqualByComparingTo(BigDecimal.valueOf(20));
+        assertThat(simple.get(0).topCategories().get(0).changeRate()).isEqualByComparingTo(BigDecimal.valueOf(15));
     }
 
     // 섹터 제외(market_map_category.is_excluded)를 켜고 끄면 TOP2에 들어오는 카테고리가 달라진다.
@@ -788,10 +837,11 @@ class MarketMapQueryServiceTest {
         return CategoryChangeRateItem.withBefore(categoryId, List.of(nowBreakdowns), before);
     }
 
-    /** 가중평균만 검증하는 기존 픽스처용 — itemCount 1에 simpleSum을 weightedSum과 같게 둬서 산술평균이
-     * 가중평균과 같아지게 한다(6-arg tier()의 특수 케이스일 뿐, 산술평균 자체를 검증하는 데는 쓰지 않는다). */
+    /** 가중평균만 검증하는 기존 픽스처용 — itemCount 1에 simpleSum을 종목당 등락률(weightedSum/totalValue,
+     * Σ가 아니라 1건짜리 평균)로 채워서 산술평균이 가중평균과 실제로 같아지게 한다(6-arg tier()의 특수
+     * 케이스일 뿐, 산술평균 자체를 검증하는 데는 쓰지 않는다). */
     private CategoryTierBreakdown tier(Long tierId, String label, long weightedSum, long totalValue) {
-        return tier(tierId, label, weightedSum, totalValue, weightedSum, 1);
+        return tier(tierId, label, weightedSum, totalValue, weightedSum / totalValue, 1);
     }
 
     /** 가중평균과 산술평균이 실제로 달라지는 픽스처용 — simpleSum·itemCount를 따로 받는다. */

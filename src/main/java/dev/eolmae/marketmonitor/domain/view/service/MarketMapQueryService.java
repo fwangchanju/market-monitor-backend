@@ -307,7 +307,9 @@ public class MarketMapQueryService {
     }
 
     /** sectorFilter가 꺼져 있으면 전부 포함. 켜져 있으면 그 카테고리의 isExcluded만 본다(결정 4 —
-     * getCategoryChangeRates가 아니라 TOP2 경로에만 거는 필터). */
+     * getCategoryChangeRates가 아니라 TOP2 경로에만 거는 필터). 세 호출부 모두 categoryId가
+     * categoryById에 이미 존재함을 보장한 뒤 부른다(getMergedTopCategoryRanking은 앞선 containsKey
+     * 필터, 나머지 둘은 decorateRanking이 이미 걸러냄) — category가 null인 경로는 현재 없다. */
     private boolean isSectorIncluded(Long categoryId, boolean sectorFilter, Map<Long, MarketMapCategory> categoryById) {
         if (!sectorFilter) {
             return true;

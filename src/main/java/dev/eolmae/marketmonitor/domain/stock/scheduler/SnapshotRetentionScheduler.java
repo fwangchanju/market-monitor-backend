@@ -16,9 +16,10 @@ import org.springframework.stereotype.Component;
 
 /**
  * 스냅샷 정리 배치: sector_price_snapshot, market_map_category_change_rate_snapshot 두 테이블에서
- * cutoff(오늘 KST 기준 RETENTION_DAYS일 전 00:00)보다 오래됐으면서 장마감(15:30) 시각이 아닌 데이터를 지운다.
- * 두 테이블은 서로 다른 도메인(stock/marketmap) 소관이라 삭제 로직은 각 도메인의 서비스에 두고,
- * 이 스케줄러는 언제 돌지와 테이블별 독립 실행(하나가 실패해도 다른 하나는 계속)만 담당한다.
+ * cutoff(오늘 KST 기준 RETENTION_DAYS일 전 00:00)보다 오래된 데이터 중, 그 날짜·마켓의 보존 윈도우
+ * ([15:30, 15:40))에서 가장 늦은 시각(latest)이 아닌 것을 지운다. 두 테이블은 서로 다른 도메인
+ * (stock/marketmap) 소관이라 삭제 로직은 각 도메인의 서비스에 두고, 이 스케줄러는 언제 돌지와
+ * 테이블별 독립 실행(하나가 실패해도 다른 하나는 계속)만 담당한다.
  */
 @Slf4j
 @Component

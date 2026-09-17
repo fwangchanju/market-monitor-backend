@@ -415,3 +415,12 @@ jobs:
             git -C "$REPO_DIR" fetch origin "$GIT_REF"
             git -C "$REPO_DIR" reset --hard "origin/$GIT_REF"
             bash "$REPO_DIR/infra/scripts/deploy-renderer.sh"
+
+      - name: Health check
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.RENDERER_SERVER_HOST }}
+          username: ${{ secrets.RENDERER_SERVER_USER }}
+          key: ${{ secrets.RENDERER_SERVER_SSH_KEY }}
+          script: |
+            bash "$HOME/repo/market-monitor-backend/infra/scripts/renderer-health-check.sh"

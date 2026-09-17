@@ -8,6 +8,7 @@ import dev.eolmae.marketmonitor.domain.notification.enums.RenderTarget;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
 import dev.eolmae.marketmonitor.domain.renderer.client.ScreenshotClient;
 import dev.eolmae.marketmonitor.domain.view.dto.TopCategoryItem;
+import dev.eolmae.marketmonitor.domain.view.enums.AverageMode;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
 import java.time.LocalDateTime;
@@ -43,7 +44,8 @@ public class MarketMapAlbumReportSender {
         // 고르면 안 된다 — 섹터 페이지는 그 랭킹이 곧 화면이라 같은 소스지만, 맵 페이지는
         // sector_price_snapshot으로 그려져서 등락률 수집만 실패한 tick에도 멀쩡히 나온다. 그때 조회
         // 결과를 따르면 캡처를 한 장도 안 한 채 "캡처 실패"로 에스컬레이션한다.
-        List<byte[]> images = capture(MAP_MARKETS.toMarkets());
+        List<byte[]> images =
+                capture(MAP_MARKETS.toMarkets(), telegramProperties.averageMode(), telegramProperties.sectorFilter());
         if (images.isEmpty()) {
             throw new EscalateException(ErrorCode.SCREENSHOT_CAPTURE_FAILED);
         }
@@ -57,7 +59,8 @@ public class MarketMapAlbumReportSender {
         if (!sectorAvailable) {
             return null;
         }
-        List<TopCategoryItem> topCategories = marketMapQueryService.getMergedTopCategoryRanking(MAP_MARKETS, dataTime);
+        List<TopCategoryItem> topCategories = marketMapQueryService.getMergedTopCategoryRanking(
+                MAP_MARKETS, dataTime, telegramProperties.averageMode(), telegramProperties.sectorFilter());
         // sectorAvailable이 true면 그 시각 스냅샷이 있으니 보통은 안 비지만, 비면 헤더만 덜렁 남는다.
         // 이미지는 이미 찍었으므로 캡션만 버리고 보낸다.
         if (topCategories.isEmpty()) {
@@ -67,10 +70,12 @@ public class MarketMapAlbumReportSender {
         return categoryRankingTextBuilder.buildMapCaption(topCategories);
     }
 
-    private List<byte[]> capture(List<Market> markets) {
+    private List<byte[]> capture(List<Market> markets, AverageMode averageMode, boolean sectorFilter) {
         return markets.stream()
-                .flatMap(market ->
-                        screenshotClient.capture(mapPath(market), RenderTarget.MARKET_MAP.selector()).stream())
+                .flatMap(
+                        market -> screenshotClient
+                                .capture(mapPath(market, averageMode, sectorFilter), RenderTarget.MARKET_MAP.selector())
+                                .stream())
                 .toList();
     }
 
@@ -83,7 +88,9 @@ public class MarketMapAlbumReportSender {
         telegramClient.sendMediaGroup(telegramProperties.chatId(), images, caption);
     }
 
-    private String mapPath(Market market) {
-        return RenderTarget.MARKET_MAP.path() + "?market=" + market.name();
+    private String mapPath(Market market, AverageMode averageMode, boolean sectorFilter) {
+        return RenderTarget.MARKET_MAP.path() + "?market=" + market.name()
+                + "&avgMode=" + averageMode.queryValue()
+                + "&sectorFilter=" + sectorFilter;
     }
 }

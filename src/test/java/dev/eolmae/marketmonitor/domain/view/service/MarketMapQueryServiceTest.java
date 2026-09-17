@@ -29,6 +29,7 @@ import dev.eolmae.marketmonitor.domain.view.dto.MarketMapResponse;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotAverages;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
 import dev.eolmae.marketmonitor.domain.view.dto.TopCategoryItem;
+import dev.eolmae.marketmonitor.domain.view.enums.AverageMode;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -494,7 +495,8 @@ class MarketMapQueryServiceTest {
                 changeRateItemWithFlatBefore(root.getId(), tier(10L, "대형", 50_000, 10000)), // +5%p
                 changeRateItemWithFlatBefore(child.getId(), tier(10L, "대형", 900_000, 10000))); // +90%p
 
-        List<CategoryRankingSummary> summaries = service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60);
+        List<CategoryRankingSummary> summaries =
+                service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
 
         assertThat(summaries).hasSize(1);
         assertThat(summaries.get(0).topCategories())
@@ -516,7 +518,8 @@ class MarketMapQueryServiceTest {
                 changeRateItemWithFlatBefore(b.getId(), tier(10L, "대형", 50_000, 10000)), // +5%p
                 changeRateItemWithFlatBefore(c.getId(), tier(10L, "대형", 20_000, 10000))); // +2%p, 3위라 빠져야 함
 
-        List<CategoryRankingSummary> summaries = service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60);
+        List<CategoryRankingSummary> summaries =
+                service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
 
         assertThat(summaries.get(0).topCategories())
                 .extracting(TopCategoryItem::categoryName)
@@ -537,7 +540,8 @@ class MarketMapQueryServiceTest {
                 changeRateItem(a.getId(), tier(10L, "대형", 900_000, 10000)), // +90%, before 없음
                 changeRateItemWithFlatBefore(b.getId(), tier(10L, "대형", 50_000, 10000))); // +5%p
 
-        List<CategoryRankingSummary> summaries = service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60);
+        List<CategoryRankingSummary> summaries =
+                service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
 
         assertThat(summaries.get(0).topCategories())
                 .extracting(TopCategoryItem::categoryName)
@@ -553,7 +557,8 @@ class MarketMapQueryServiceTest {
         stubRankingForTopCategories(
                 snapshotTime, List.of(a), List.of(), changeRateItem(a.getId(), tier(10L, "대형", 100_000, 10000)));
 
-        List<CategoryRankingSummary> summaries = service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60);
+        List<CategoryRankingSummary> summaries =
+                service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
 
         assertThat(summaries.get(0).topCategories()).isEmpty();
     }
@@ -572,7 +577,8 @@ class MarketMapQueryServiceTest {
                         tier(10L, "대형", 100_000, 10000), // +10%p, 포함
                         tier(20L, "소형", -500_000, 10000))); // -50%p, 제외 대상
 
-        List<CategoryRankingSummary> summaries = service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60);
+        List<CategoryRankingSummary> summaries =
+                service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
 
         assertThat(summaries.get(0).topCategories().get(0).changeRate()).isEqualByComparingTo(BigDecimal.TEN);
     }
@@ -596,9 +602,9 @@ class MarketMapQueryServiceTest {
         stubRankingForTopCategories(snapshotTime, List.of(a, b, c), List.of(), itemA, itemB, itemC);
 
         List<CategoryRankingSummary> deltaRankings =
-                service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60);
-        List<CategoryRankingSummary> changeRateRankings =
-                service.getTopCategoryRankingsByChangeRate(MarketQuery.KOSPI, snapshotTime, 60);
+                service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
+        List<CategoryRankingSummary> changeRateRankings = service.getTopCategoryRankingsByChangeRate(
+                MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
 
         assertThat(deltaRankings.get(0).topCategories())
                 .extracting(TopCategoryItem::categoryName)
@@ -628,7 +634,8 @@ class MarketMapQueryServiceTest {
                         List.of(Market.KOSPI, Market.KOSDAQ), snapshotTime))
                 .thenReturn(Map.of(Market.KOSPI, kospiBreakdowns, Market.KOSDAQ, kosdaqBreakdowns));
 
-        List<TopCategoryItem> merged = service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime);
+        List<TopCategoryItem> merged =
+                service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime, AverageMode.WEIGHTED, false);
 
         // 병합 평균: a=(1,000,000-900,000)/20,000=+5%, b=(80,000+80,000)/20,000=+8%, c=60,000/10,000=+6%
         assertThat(merged).extracting(TopCategoryItem::categoryName).containsExactly("화학", "자동차");
@@ -650,7 +657,8 @@ class MarketMapQueryServiceTest {
                         List.of(Market.KOSPI, Market.KOSDAQ), snapshotTime))
                 .thenReturn(Map.of(Market.KOSPI, kospiBreakdowns, Market.KOSDAQ, kosdaqBreakdowns));
 
-        List<TopCategoryItem> merged = service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime);
+        List<TopCategoryItem> merged =
+                service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime, AverageMode.WEIGHTED, false);
 
         assertThat(merged.get(0).changeRate()).isEqualByComparingTo(BigDecimal.valueOf(0.4));
     }
@@ -666,8 +674,109 @@ class MarketMapQueryServiceTest {
                         List.of(Market.KOSPI, Market.KOSDAQ), snapshotTime))
                 .thenReturn(Map.of());
 
-        assertThat(service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime))
+        assertThat(service.getMergedTopCategoryRanking(
+                        MarketQuery.ALL_STOCK, snapshotTime, AverageMode.WEIGHTED, false))
                 .isEmpty();
+    }
+
+    // 맵 앨범 캡션(getMergedTopCategoryRanking)에서도 섹터 제외 on/off로 TOP2가 달라진다 — 지시서 결정
+    // 3이 고치는 두 캡션 경로(섹터/맵) 중 나머지 하나.
+    @Test
+    void getMergedTopCategoryRanking_섹터_제외를_켜면_isExcluded_카테고리가_빠진다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        MarketMapCategory excluded = category(1L, null, "반도체");
+        excluded.exclude();
+        MarketMapCategory included = category(2L, null, "화학");
+        stubMergedRanking(List.of(excluded, included));
+
+        Map<Long, List<CategoryTierBreakdown>> kospiBreakdowns = Map.of(
+                excluded.getId(), List.of(tier(10L, "대형", 900_000, 10_000)), // +90%, 제외 대상이면 빠져야 함
+                included.getId(), List.of(tier(10L, "대형", 50_000, 10_000))); // +5%
+        when(marketMapCategoryChangeRateSnapshotService.findTierBreakdownsByCategoryId(
+                        List.of(Market.KOSPI, Market.KOSDAQ), snapshotTime))
+                .thenReturn(Map.of(Market.KOSPI, kospiBreakdowns));
+
+        List<TopCategoryItem> filtered =
+                service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime, AverageMode.WEIGHTED, true);
+        List<TopCategoryItem> unfiltered =
+                service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime, AverageMode.WEIGHTED, false);
+
+        assertThat(filtered).extracting(TopCategoryItem::categoryName).containsExactly("화학");
+        assertThat(unfiltered).extracting(TopCategoryItem::categoryName).containsExactlyInAnyOrder("반도체", "화학");
+    }
+
+    // 가중평균과 산술평균이 실제로 다른 값이 나오는 것을 보여준다 — 4-arg tier()만 쓰는 기존 픽스처는
+    // itemCount가 항상 1이라 두 평균이 우연히 같아서 이 분기를 검증하지 못한다.
+    @Test
+    void getTopCategoryRankingsByChangeRate_평균_방식에_따라_결과가_달라진다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        MarketMapCategory a = category(1L, null, "반도체");
+        // 시총 90,000짜리 종목 +30%, 시총 10,000짜리 종목 +10% — 가중평균은 시총이 큰 쪽에 끌려 +28%,
+        // 산술평균은 종목당 등락률을 그대로 평균내 +20%.
+        stubRankingForTopCategories(
+                snapshotTime,
+                List.of(a),
+                List.of(),
+                changeRateItem(a.getId(), tier(10L, "대형", 2_800_000, 100_000, 40, 2)));
+
+        List<CategoryRankingSummary> weighted = service.getTopCategoryRankingsByChangeRate(
+                MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
+        List<CategoryRankingSummary> simple = service.getTopCategoryRankingsByChangeRate(
+                MarketQuery.KOSPI, snapshotTime, 60, AverageMode.SIMPLE, false);
+
+        assertThat(weighted.get(0).topCategories().get(0).changeRate()).isEqualByComparingTo(BigDecimal.valueOf(28));
+        assertThat(simple.get(0).topCategories().get(0).changeRate()).isEqualByComparingTo(BigDecimal.valueOf(20));
+    }
+
+    // 평상시(매 tick) 경로 — getTopCategoryRankings → toTopCategoryItem은 avgOf를 now·before 두 번
+    // 불러 그 차이를 쓴다. ByChangeRate 폴백 경로만 덮으면 두 호출 중 하나가 다른 모드를 써도 못 잡는다.
+    @Test
+    void getTopCategoryRankings_평균_방식에_따라_델타_결과가_달라진다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        MarketMapCategory a = category(1L, null, "반도체");
+        // now:    시총 90,000 +30% / 10,000 +10%  → 가중 +28%, 산술 +20%
+        // before: 시총 80,000 +10% / 20,000   0%  → 가중  +8%, 산술  +5%
+        // → 가중 델타는 +20%p, 산술 델타는 +15%p로 서로 다르다.
+        CategoryChangeRateItem item = CategoryChangeRateItem.withBefore(
+                a.getId(),
+                List.of(tier(10L, "대형", 2_800_000, 100_000, 40, 2)),
+                List.of(tier(10L, "대형", 800_000, 100_000, 10, 2)));
+        stubRankingForTopCategories(snapshotTime, List.of(a), List.of(), item);
+
+        List<CategoryRankingSummary> weighted =
+                service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
+        List<CategoryRankingSummary> simple =
+                service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.SIMPLE, false);
+
+        assertThat(weighted.get(0).topCategories().get(0).changeRate()).isEqualByComparingTo(BigDecimal.valueOf(20));
+        assertThat(simple.get(0).topCategories().get(0).changeRate()).isEqualByComparingTo(BigDecimal.valueOf(15));
+    }
+
+    // 섹터 제외(market_map_category.is_excluded)를 켜고 끄면 TOP2에 들어오는 카테고리가 달라진다.
+    @Test
+    void getTopCategoryRankingsByChangeRate_섹터_제외를_켜면_isExcluded_카테고리가_빠진다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        MarketMapCategory excluded = category(1L, null, "반도체");
+        excluded.exclude();
+        MarketMapCategory included = category(2L, null, "화학");
+        stubRankingForTopCategories(
+                snapshotTime,
+                List.of(excluded, included),
+                List.of(),
+                changeRateItem(excluded.getId(), tier(10L, "대형", 900_000, 10000)), // +90%, 제외 대상이면 빠져야 함
+                changeRateItem(included.getId(), tier(10L, "대형", 50_000, 10000))); // +5%
+
+        List<CategoryRankingSummary> filtered = service.getTopCategoryRankingsByChangeRate(
+                MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, true);
+        List<CategoryRankingSummary> unfiltered = service.getTopCategoryRankingsByChangeRate(
+                MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
+
+        assertThat(filtered.get(0).topCategories())
+                .extracting(TopCategoryItem::categoryName)
+                .containsExactly("화학");
+        assertThat(unfiltered.get(0).topCategories())
+                .extracting(TopCategoryItem::categoryName)
+                .containsExactly("반도체", "화학");
     }
 
     private void stubMergedRanking(List<MarketMapCategory> categories) {
@@ -699,13 +808,20 @@ class MarketMapQueryServiceTest {
     private SnapshotAverages combine(List<CategoryTierBreakdown> breakdowns) {
         BigDecimal weightedSum = BigDecimal.ZERO;
         BigDecimal totalValue = BigDecimal.ZERO;
+        BigDecimal simpleSum = BigDecimal.ZERO;
+        int itemCount = 0;
         for (CategoryTierBreakdown breakdown : breakdowns) {
             weightedSum = weightedSum.add(breakdown.weightedSum());
             totalValue = totalValue.add(breakdown.totalValue());
+            simpleSum = simpleSum.add(breakdown.simpleSum());
+            itemCount += breakdown.itemCount();
         }
         BigDecimal weightedAvg =
                 totalValue.signum() == 0 ? BigDecimal.ZERO : weightedSum.divide(totalValue, 4, RoundingMode.HALF_UP);
-        return new SnapshotAverages(weightedAvg, BigDecimal.ZERO);
+        BigDecimal simpleAvg = itemCount == 0
+                ? BigDecimal.ZERO
+                : simpleSum.divide(BigDecimal.valueOf(itemCount), 4, RoundingMode.HALF_UP);
+        return new SnapshotAverages(weightedAvg, simpleAvg);
     }
 
     private CategoryChangeRateItem changeRateItem(Long categoryId, CategoryTierBreakdown... breakdowns) {
@@ -722,14 +838,23 @@ class MarketMapQueryServiceTest {
         return CategoryChangeRateItem.withBefore(categoryId, List.of(nowBreakdowns), before);
     }
 
+    /** 가중평균만 검증하는 기존 픽스처용 — itemCount 1에 simpleSum을 종목당 등락률(weightedSum/totalValue,
+     * Σ가 아니라 1건짜리 평균)로 채워서 산술평균이 가중평균과 실제로 같아지게 한다(6-arg tier()의 특수
+     * 케이스일 뿐, 산술평균 자체를 검증하는 데는 쓰지 않는다). */
     private CategoryTierBreakdown tier(Long tierId, String label, long weightedSum, long totalValue) {
+        return tier(tierId, label, weightedSum, totalValue, weightedSum / totalValue, 1);
+    }
+
+    /** 가중평균과 산술평균이 실제로 달라지는 픽스처용 — simpleSum·itemCount를 따로 받는다. */
+    private CategoryTierBreakdown tier(
+            Long tierId, String label, long weightedSum, long totalValue, long simpleSum, int itemCount) {
         return new CategoryTierBreakdown(
                 tierId,
                 label,
                 BigDecimal.valueOf(weightedSum),
                 BigDecimal.valueOf(totalValue),
-                BigDecimal.valueOf(weightedSum),
-                1);
+                BigDecimal.valueOf(simpleSum),
+                itemCount);
     }
 
     private MarketOverviewSnapshot marketOverviewSnapshot(

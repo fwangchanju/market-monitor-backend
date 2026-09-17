@@ -49,6 +49,10 @@ public class MarketMapTelegramReportSender extends TelegramReportSender {
     protected String buildText(LocalDateTime dataTime, MarketQuery query) {
         return "Custom Map\n"
                 + categoryRankingTextBuilder.buildRankingText(marketMapQueryService.getTopCategoryRankings(
-                        query, dataTime, telegramProperties.beforeMinutes()));
+                        query,
+                        dataTime,
+                        telegramProperties.beforeMinutes(),
+                        telegramProperties.averageMode(),
+                        telegramProperties.sectorFilter()));
     }
 }

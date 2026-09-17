@@ -433,7 +433,10 @@ Spring의 relaxed binding이 String→Enum을 처리하긴 하지만, 이름을 
 7. 프로퍼티를 `WEIGHTED` / `sector-filter=false`로 바꾸면 **캡처 URL이 따라 바뀐다** (발송기 테스트)
 8. 같은 값으로 **캡션 계산이 따라 바뀐다** (`MarketMapQueryServiceTest`)
 9. `TelegramPropertiesBindingTest`가 새 필드 두 개를 단언한다
-10. 이 지시서 파일(`docs/instructions-telegram-average-mode.md`)을 마지막 커밋에서 삭제한다
+
+**이 지시서 파일은 삭제하지 마라.** 이 파일은 백엔드 레포에 있는데 5절(프론트)을 프론트 레포
+작업이 읽어야 한다. 백엔드 PR이 먼저 병합되면서 파일이 사라지면 프론트 쪽이 근거를 잃는다. 삭제는
+두 PR이 모두 끝난 뒤 문서 역할이 한다.
 
 7번과 8번을 하나로 합치지 마라. 발송기 테스트는 `MarketMapQueryService`를 Mockito로 목킹해서
 (`SectorTelegramReportSenderTest.java:38`, `MarketMapAlbumReportSenderTest.java:36`) 실제 계산이
@@ -451,7 +454,6 @@ Spring의 relaxed binding이 String→Enum을 처리하긴 하지만, 이름을 
    **이 커밋에서는 세 발송기가 `AverageMode.SIMPLE`과 `true`를 직접 넘긴다.**
 2. `TelegramProperties` + `application.properties` + 두 발송기의 캡처 URL.
    1번에서 하드코딩한 값을 프로퍼티로 교체한다
-3. 지시서 파일 삭제
 
 1번에서 상수를 직접 넘기는 이유: 그 세 public 메서드의 **유일한 호출자가 발송기들**이라, 시그니처만
 늘리면 `telegramProperties.averageMode()`가 아직 없어서 컴파일이 안 된다. 커밋을 합치지 말고 이

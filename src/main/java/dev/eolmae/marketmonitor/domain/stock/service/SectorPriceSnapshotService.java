@@ -91,17 +91,30 @@ public class SectorPriceSnapshotService {
                 "[섹터가격스냅샷정리] 보존시각 | 표본:{} | 보존날짜수:{}",
                 summary.retainedSampleSnapshotTimes(),
                 summary.retainedDateCount());
-        log.info(
-                "[섹터가격스냅샷정리] 보존할행없음 | 대상:{} | 건수:{}",
-                summary.emptyWindowTargets(),
-                summary.emptyWindowTargets().size());
 
         if (dryRun) {
             return;
         }
+        requireRetainedSnapshotTimes("섹터가격스냅샷정리", retainedSnapshotTimes, summary);
 
         long deletedCount = sectorPriceSnapshotRepository.deleteSnapshotsBefore(cutoff, retainedSnapshotTimes);
         log.info("[섹터가격스냅샷정리] 삭제완료 | 삭제건수:{}", deletedCount);
+    }
+
+    /**
+     * 보존 목록이 통째로 비었는데 cutoff 이전에 행이 있으면 삭제를 중단한다. 삭제 술어는 "보존 목록에 없는
+     * 것"이라 목록이 비면 cutoff 이전 전체가 대상이 된다. 날짜 하나의 윈도우가 빈 것(그날은 전량 삭제가
+     * 맞다)과 목록 전체가 빈 것은 다르다 — 후자는 윈도우 상수가 뒤집혔거나 SQL 술어가 틀렸을 때 나오는
+     * 모양이고, 이 레포는 DB 테스트가 없어 그 고장이 빌드에서 걸러지지 않는다. 지우고 나서는 되돌릴 수
+     * 없으므로 여기서 멈추고 스케줄러가 에스컬레이션하게 둔다.
+     */
+    private static void requireRetainedSnapshotTimes(
+            String taskName, List<MarketSnapshotTime> retainedSnapshotTimes, SnapshotRetentionSummary summary) {
+        if (!retainedSnapshotTimes.isEmpty() || summary.totalCountBeforeCutoff() == 0) {
+            return;
+        }
+        throw new IllegalStateException("[%s] 보존할 스냅샷이 하나도 없어 삭제를 중단한다 — cutoff이전전체건수:%d, 삭제대상건수:%d"
+                .formatted(taskName, summary.totalCountBeforeCutoff(), summary.targetCount()));
     }
 
     /** 보존 윈도우 후보를 (마켓, 날짜)로 묶어 각 그룹의 가장 늦은 시각만 남긴다. 윈도우 필터를 SQL(1단계)뿐

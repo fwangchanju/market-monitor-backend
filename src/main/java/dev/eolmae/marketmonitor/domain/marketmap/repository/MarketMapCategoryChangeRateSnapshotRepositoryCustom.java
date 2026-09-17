@@ -1,7 +1,6 @@
 package dev.eolmae.marketmonitor.domain.marketmap.repository;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
@@ -23,15 +22,12 @@ public interface MarketMapCategoryChangeRateSnapshotRepositoryCustom {
     long deleteSnapshotsBefore(LocalDateTime cutoff, List<MarketSnapshotTime> retainedSnapshotTimes);
 
     /** deleteSnapshotsBefore와 같은 조건의 삭제 대상 현황 — 드라이런 로그 및 실제 삭제 전 확인용.
-     * 보존 시각 표본·보존 날짜수·보존 윈도우 안에 아무 행도 없는 (마켓, 날짜)까지 함께 집계한다. */
+     * 보존 시각 표본과 보존 날짜수까지 함께 집계한다. */
     SnapshotRetentionSummary summarizeSnapshotsToDelete(
             LocalDateTime cutoff, List<MarketSnapshotTime> retainedSnapshotTimes, int sampleSize);
 
     /** 보존 윈도우 안 후보 하나 — 어느 마켓의 몇 시 스냅샷인지. */
     record MarketSnapshotTime(Market market, LocalDateTime snapshotTime) {}
-
-    /** 마켓 하나의 날짜 하나 — 보존 윈도우 안에 남길 행이 하나도 없는 대상을 가리킬 때 쓴다. */
-    record MarketDate(Market market, LocalDate date) {}
 
     record SnapshotRetentionSummary(
             long targetCount,
@@ -40,6 +36,5 @@ public interface MarketMapCategoryChangeRateSnapshotRepositoryCustom {
             LocalDateTime maxSnapshotTime,
             List<LocalTime> sampleSnapshotTimes,
             List<MarketSnapshotTime> retainedSampleSnapshotTimes,
-            int retainedDateCount,
-            List<MarketDate> emptyWindowTargets) {}
+            int retainedDateCount) {}
 }

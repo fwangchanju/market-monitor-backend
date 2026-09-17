@@ -7,14 +7,11 @@ import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.core.types.dsl.NumberExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import dev.eolmae.marketmonitor.common.enums.Market;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
@@ -100,8 +97,6 @@ public class SectorPriceSnapshotRepositoryImpl implements SectorPriceSnapshotRep
                 .distinct()
                 .count();
 
-        List<MarketDate> emptyWindowTargets = findEmptyWindowTargets(cutoff, retainedSnapshotTimes);
-
         return new SnapshotRetentionSummary(
                 aggregate.get(sectorPriceSnapshot.count()),
                 totalCountBeforeCutoff,
@@ -109,8 +104,7 @@ public class SectorPriceSnapshotRepositoryImpl implements SectorPriceSnapshotRep
                 aggregate.get(sectorPriceSnapshot.snapshotTime.max()),
                 sampleSnapshotTimes,
                 retainedSampleSnapshotTimes,
-                retainedDateCount,
-                emptyWindowTargets);
+                retainedDateCount);
     }
 
     // cutoff 이전이면서 retainedSnapshotTimes(순수 자바 함수가 보존 윈도우에서 고른 (마켓,시각))에 없는 행 —
@@ -144,36 +138,5 @@ public class SectorPriceSnapshotRepositoryImpl implements SectorPriceSnapshotRep
         int startMinuteOfDay = windowStart.getHour() * 60 + windowStart.getMinute();
         int endMinuteOfDay = windowEnd.getHour() * 60 + windowEnd.getMinute();
         return minuteOfDay.goe(startMinuteOfDay).and(minuteOfDay.lt(endMinuteOfDay));
-    }
-
-    // cutoff 이전에 존재하는 모든 (마켓, 날짜) 중 retainedSnapshotTimes에 없는 것 — "그 구간에 남길 행이
-    // 하나도 없었다"는 뜻이다(수집 gap 등으로 윈도우가 통째로 빈 날).
-    private List<MarketDate> findEmptyWindowTargets(
-            LocalDateTime cutoff, List<MarketSnapshotTime> retainedSnapshotTimes) {
-        Set<MarketDate> retainedMarketDates = new HashSet<>();
-        for (MarketSnapshotTime retained : retainedSnapshotTimes) {
-            retainedMarketDates.add(
-                    new MarketDate(retained.market(), retained.snapshotTime().toLocalDate()));
-        }
-
-        return queryFactory
-                .select(
-                        sectorPriceSnapshot.marketType,
-                        sectorPriceSnapshot.snapshotTime.year(),
-                        sectorPriceSnapshot.snapshotTime.month(),
-                        sectorPriceSnapshot.snapshotTime.dayOfMonth())
-                .distinct()
-                .from(sectorPriceSnapshot)
-                .where(sectorPriceSnapshot.snapshotTime.before(cutoff))
-                .fetch()
-                .stream()
-                .map(tuple -> new MarketDate(
-                        tuple.get(sectorPriceSnapshot.marketType),
-                        LocalDate.of(
-                                tuple.get(sectorPriceSnapshot.snapshotTime.year()),
-                                tuple.get(sectorPriceSnapshot.snapshotTime.month()),
-                                tuple.get(sectorPriceSnapshot.snapshotTime.dayOfMonth()))))
-                .filter(marketDate -> !retainedMarketDates.contains(marketDate))
-                .toList();
     }
 }

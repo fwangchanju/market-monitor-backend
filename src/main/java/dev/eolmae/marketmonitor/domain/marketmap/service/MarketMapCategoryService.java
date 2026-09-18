@@ -24,11 +24,13 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /** 카테고리 추가/삭제/재부모화. 항상 라이브(현재 표시 중인) 트리만을 대상으로 한다. */
+@Slf4j
 @Service
 @Transactional
 @RequiredArgsConstructor
@@ -238,6 +240,13 @@ public class MarketMapCategoryService {
                 marketMapStockCategoryRepository.findByCategoryIdIn(subCategoryIds);
         if (!findBlockingStockCategories(stockCategories).isEmpty()) {
             throw new ConflictException(ErrorCode.CATEGORY_HAS_ASSIGNED_STOCK, categoryId);
+        }
+
+        // 활성 주권 배정은 없다고 확인했지만(위 판정), 비활성 종목의 배정 행은 여전히 남아있을 수 있다 —
+        // market_map_category를 가리키는 FK라 카테고리 삭제 전에 먼저 지워야 한다(결정 1).
+        if (!stockCategories.isEmpty()) {
+            log.info("[카테고리삭제] 비활성 배정 행 삭제 | categoryId={}|count={}", categoryId, stockCategories.size());
+            marketMapStockCategoryRepository.deleteByCategoryIdIn(subCategoryIds);
         }
 
         marketMapCategoryChangeRateSnapshotRepository.deleteByCategoryIdIn(subCategoryIds);

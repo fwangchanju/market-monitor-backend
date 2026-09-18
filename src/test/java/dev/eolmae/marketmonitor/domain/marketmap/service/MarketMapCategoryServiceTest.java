@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mockito;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -226,6 +227,7 @@ class MarketMapCategoryServiceTest {
 
         assertThatCode(() -> service.delete(1L)).doesNotThrowAnyException();
 
+        verify(marketMapStockCategoryRepository).deleteByCategoryIdIn(List.of(1L));
         verify(marketMapCategoryRepository).deleteAll(List.of(semiconductor));
     }
 
@@ -241,6 +243,32 @@ class MarketMapCategoryServiceTest {
         when(stockInfoCacheService.getCache()).thenReturn(Map.of("069500", etf));
 
         assertThatCode(() -> service.delete(1L)).doesNotThrowAnyException();
+
+        verify(marketMapStockCategoryRepository).deleteByCategoryIdIn(List.of(1L));
+    }
+
+    // FK 위반을 막는 순서 — 이 레포는 DB 테스트가 없으므로(docs/rules/testing.md) 여기서 확인 가능한
+    // 것은 서비스의 호출 순서까지다. 실제 SQL 순서는 Hibernate ActionQueue가 정하고, FK 위반 여부는
+    // 배포 후에만 확인된다(지시서 5-2/8절).
+    @Test
+    void delete_비활성_배정_행이_카테고리보다_먼저_삭제된다() {
+        MarketMapCategory semiconductor = category(1L, null, "반도체");
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
+        when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L)))
+                .thenReturn(List.of(MarketMapStockCategory.create("005930", 1L)));
+        StockInfo delisted = StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", "반도체", 100L, BigDecimal.TEN);
+        delisted.markInactive();
+        when(stockInfoCacheService.getCache()).thenReturn(Map.of("005930", delisted));
+
+        service.delete(1L);
+
+        InOrder inOrder = Mockito.inOrder(
+                marketMapStockCategoryRepository,
+                marketMapCategoryChangeRateSnapshotRepository,
+                marketMapCategoryRepository);
+        inOrder.verify(marketMapStockCategoryRepository).deleteByCategoryIdIn(List.of(1L));
+        inOrder.verify(marketMapCategoryChangeRateSnapshotRepository).deleteByCategoryIdIn(List.of(1L));
+        inOrder.verify(marketMapCategoryRepository).deleteAll(Mockito.anyList());
     }
 
     // 과잉 수정 방지 — 활성 주권 종목이 하나라도 섞여 있으면 나머지가 전부 비활성이어도 여전히 막힌다.
@@ -257,6 +285,8 @@ class MarketMapCategoryServiceTest {
         when(stockInfoCacheService.getCache()).thenReturn(Map.of("005930", delisted, "000660", active));
 
         assertThatThrownBy(() -> service.delete(1L)).isInstanceOf(ConflictException.class);
+
+        verify(marketMapStockCategoryRepository, never()).deleteByCategoryIdIn(Mockito.anyList());
     }
 
     @Test

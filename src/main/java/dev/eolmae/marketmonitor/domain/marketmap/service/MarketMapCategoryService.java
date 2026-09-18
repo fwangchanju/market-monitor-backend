@@ -219,9 +219,10 @@ public class MarketMapCategoryService {
         List<Long> subCategoryIds = collectSubCategoryIds(categoryId, maps.categoryByParentId());
         List<MarketMapStockCategory> stockCategories =
                 marketMapStockCategoryRepository.findByCategoryIdIn(subCategoryIds);
-        if (!stockCategories.isEmpty()) {
+        List<MarketMapStockCategory> blockingStockCategories = findBlockingStockCategories(stockCategories);
+        if (!blockingStockCategories.isEmpty()) {
             return CategoryDeletePreview.blocked(
-                    target.getName(), toBlockingStockCategoryItems(stockCategories, categoryById));
+                    target.getName(), toBlockingStockCategoryItems(blockingStockCategories, categoryById));
         }
         return CategoryDeletePreview.deletable(
                 target.getName(), toDeletableCategoryNames(categoryId, subCategoryIds, categoryById));
@@ -233,7 +234,9 @@ public class MarketMapCategoryService {
         findCategory(categoryId, categoryById);
 
         List<Long> subCategoryIds = collectSubCategoryIds(categoryId, maps.categoryByParentId());
-        if (!marketMapStockCategoryRepository.findByCategoryIdIn(subCategoryIds).isEmpty()) {
+        List<MarketMapStockCategory> stockCategories =
+                marketMapStockCategoryRepository.findByCategoryIdIn(subCategoryIds);
+        if (!findBlockingStockCategories(stockCategories).isEmpty()) {
             throw new ConflictException(ErrorCode.CATEGORY_HAS_ASSIGNED_STOCK, categoryId);
         }
 
@@ -284,15 +287,38 @@ public class MarketMapCategoryService {
                 .toList();
     }
 
+    /** "이 카테고리들을 막는" 배정만 남긴다 — 그 행이 가리키는 종목이 stock_info 캐시에서 활성 주권인
+     * 것만(캐시에 아예 없는 종목은 화면에도 안 보이므로 "막지 않음"으로 친다, 5-3). deletePreview·delete가
+     * 이 필터를 공유해서 화면(종목 관리 페이지)과 같은 기준으로 판정한다. */
+    private List<MarketMapStockCategory> findBlockingStockCategories(List<MarketMapStockCategory> stockCategories) {
+        Map<String, StockInfo> stockInfoCache = stockInfoCacheService.getCache();
+        return stockCategories.stream()
+                .filter(stockCategory -> isActiveOrdinaryStock(stockCategory, stockInfoCache))
+                .toList();
+    }
+
+    private boolean isActiveOrdinaryStock(MarketMapStockCategory stockCategory, Map<String, StockInfo> stockInfoCache) {
+        StockInfo stockInfo = stockInfoCache.get(stockCategory.getStockCode());
+        return stockInfo != null && stockInfo.isActiveAndOrdinary();
+    }
+
     private List<StockCategoryItem> toBlockingStockCategoryItems(
             List<MarketMapStockCategory> stockCategories, Map<Long, MarketMapCategory> categoryById) {
         Map<String, StockInfo> stockInfoCache = stockInfoCacheService.getCache();
         return stockCategories.stream()
                 .map(stockCategory -> new StockCategoryItem(
                         stockCategory.getStockCode(),
-                        stockInfoCache.get(stockCategory.getStockCode()).getStockName(),
+                        resolveStockName(stockCategory.getStockCode(), stockInfoCache),
                         categoryById.get(stockCategory.getCategoryId()).getName()))
                 .toList();
+    }
+
+    /** 캐시에 없는 종목이면 종목코드를 그대로 이름 자리에 넣는다 — findBlockingStockCategories가 활성
+     * 주권만 통과시키므로 이 자리는 지금 도달 불가능하지만, "캐시가 낡았을 때"의 대가(5-3)를 실제 예외로
+     * 만들지 않기 위한 방어다. */
+    private String resolveStockName(String stockCode, Map<String, StockInfo> stockInfoCache) {
+        StockInfo stockInfo = stockInfoCache.get(stockCode);
+        return stockInfo != null ? stockInfo.getStockName() : stockCode;
     }
 
     private List<Long> collectSubCategoryIds(Long categoryId, Map<Long, List<MarketMapCategory>> categoryByParentId) {

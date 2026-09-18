@@ -89,6 +89,71 @@
 "예외 계층에 403이 없어서 `ResponseStatusException`으로 우회하는 문제"는 정비 범위에서 제외했다.
 이 작업에서 새 구조로 제대로 잡는다.
 
+### `/api/admin/` 을 `/api/custom/` 으로 바꾼다
+
+지금 이 접두사가 붙어 있는 이유는 **nginx가 경로로 권한을 판정하기 때문**이다.
+
+```nginx
+location /api/admin/ { auth_request /internal/access-check-admin; ... }
+location /api/       { auth_request /internal/access-check-general; ... }
+```
+
+로그인이 들어오면 권한은 사용자에서 나오므로 **경로가 권한을 의미할 이유가 없어진다.** 그리고 지금
+그 밑에 있는 것을 보면 이름 자체가 틀렸다.
+
+```
+/api/admin/allowed-ips                  ← 화이트리스트와 함께 사라진다
+/api/admin/market-map/categories        ┐
+/api/admin/market-map/scale             │ 전부 마켓맵 커스터마이징 —
+/api/admin/market-map/stock-categories  │ "관리자 기능"이 아니라 "내 설정"이다
+/api/admin/market-map/versions          ┘
+```
+
+살아남는 넷은 사용자별 데이터가 되므로(`userId` 컬럼 추가 대상과 정확히 같은 테이블들) `custom`이
+맞는 이름이다. 프론트의 `marketMapAdmin.ts`·`MarketMapAdminPage`·`useMarketMapAdmin` 같은 이름도
+같이 따라간다.
+
+### 화이트리스트가 없어질 때 같이 봐야 하는 것 — 부하와 남용
+
+**전제를 먼저 바로잡는다. nginx는 지금도 요청을 쳐내주지 않는다.** `auth_request`가 매 요청마다
+Spring을 호출하는 구조라, 낯선 IP의 요청도 이미 앱까지 들어온다. 정적 파일(`location /`)까지 그렇다.
+
+```
+낯선 IP가 GET /
+  → nginx가 Spring의 /internal/access-check/general 호출   ← 여기서 이미 앱이 일한다
+  → false → nginx가 403
+```
+
+그래서 "화이트리스트를 없애면 서버가 부하를 받기 시작한다"가 아니라, **이미 받고 있고 요청당 비용만
+바뀐다.** 지금은 캐시 조회 하나인데, 그 뒤로는 `/api/market-map/custom`처럼 4,300행을 읽는 조회가
+된다.
+
+그리고 게이트가 사라지는 것도 아니다 — IP 조회가 토큰 검증으로 바뀔 뿐이고 비용은 비슷하다.
+**진짜 새로 열리는 표면은 가입·로그인 엔드포인트**다. 인증 없이 열려야 하므로 무차별 대입과 계정
+남용의 표적이 된다. 화이트리스트 시절엔 없던 면이다.
+
+#### 할 일
+
+- **응답 캐싱.** 마켓맵 데이터는 5분에 한 번만 바뀌는데 지금은 요청마다 4,300행을 새로 읽는다.
+  TTL 캐시 하나면 그 조회가 5분에 한 번이 된다. 남용 대비이면서 평상시 응답 속도 개선이고, 위
+  「멀티테넌시 — 카테고리 집계 테이블을 없앤다」의 "집계 없이 견디나"에도 그대로 먹히는 카드다.
+  단 `userId`가 붙으면 캐시 키도 사용자별이 되므로 메모리 상한을 같이 정해야 한다
+- **가입·로그인 엔드포인트만 따로 빡빡한 제한.** 일반 API보다 훨씬 낮은 임계로 IP당 분당 N회
+- **`ALLOWED_IP` 캐시의 교훈을 반복하지 않는다.** 지금 그 캐시는 `expireAfterWrite(10s)`만 있고
+  `maximumSize`가 없다. IP를 바꿔가며 들어오면 10초 치가 그대로 힙에 쌓인다. 사용자 키 캐시를
+  만들 때 상한을 빠뜨리지 않는다
+- **정적 경로에서 `auth_request`를 떼어낸다.** 지금은 백엔드가 죽으면 nginx가 정적 페이지조차 못
+  준다(`auth_request` 백엔드 실패는 500이다). SPA 껍데기는 인증 대상이 아니고 데이터는 `/api/`가
+  지키므로, 이 커플링을 끊을 자리가 여기다
+
+#### 범위 밖
+
+- **nginx `limit_req`/`limit_conn`** — 이 작업을 기다릴 이유가 없어서 **선행 작업에 포함했다.**
+  지금 `infra/nginx.conf`에는 요청 제한이 한 줄도 없고, 그래서 `auth_request` 자체가 무방비다.
+  로그인과 무관하게 이미 뚫려 있는 구멍이라 먼저 막는다
+- **볼륨 DDoS** — 서버에서 막을 수 없다. 대역폭이 먼저 죽는다. 앞단 프록시(Cloudflare 등)가 필요한데
+  지금 duckdns 도메인을 쓰고 있어 도메인 이전 얘기가 된다. 실제로 공격받으면 그때 판단한다
+
 ---
 
 ## 데이터 지연 감지

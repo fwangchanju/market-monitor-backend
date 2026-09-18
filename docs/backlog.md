@@ -1677,12 +1677,21 @@ override = market_map_stock_category 에 행이 있는 종목만
 사용자에게 뿌리는 싱크도 **통째로 사라진다.**
 
 "없으면 이렇게, 있으면 이렇게"가 코드 전체에 번질까 봐 애초에 미러로 출발했는데, **실제로 미러를
-전제하는 자리는 한 곳이다.**
+전제하는 자리는 두 곳뿐이다.** 둘 다 배정이 없으면 NPE다.
 
 ```java
-// MarketMapQueryService:310 — 없으면 NPE
+// ① MarketMapQueryService — 지도 트리를 만들 때
 stockCategoryMap.get(stockInfo.getStockCode()).getCategoryId()
+
+// ② MarketMapStockCategoryService.toStockCategoryListItem — 종목 관리 페이지
+//    stockCategory 인자가 null일 수 있는데(getStockCategories가 Map.get으로 넘긴다) 그대로 쓴다
+MarketMapCategory category = categoryById.get(stockCategory.getCategoryId());
 ```
+
+> ②는 처음에 빠뜨렸다가 카테고리 삭제 버그를 조사하면서 찾았다. 지금은 신규 상장 종목을 자동
+> 배정하는 `MarketMapCategoryService.onStockInfoSynced`(`StockInfoSyncedEvent` 수신)가 미러 불변식을
+> 떠받쳐서 null이 오지 않는다. **이 작업에서 두 곳을 같이 고친다** — 한 곳만 고치면 종목 관리
+> 페이지가 통째로 500이 된다.
 
 이 자리를 resolver 하나로 바꾸면 나머지는 지금 모양 그대로다. 호출부는 여전히 `Map`을 받는다.
 

@@ -88,7 +88,13 @@ CONSTRAINT fk_market_map_stock_category_category
 `StockInfoCollector.sync()`(평일 07:00)가 비활성이 된 종목의 배정을 같이 지우는 안을 검토했고
 **택하지 않았다.** 이유가 둘이다.
 
-**`active`는 영구 딱지가 아니다.** "키움 ka10099 목록에 지금 있는가"이고, 다시 나타나면 되살아난다.
+**첫째, 추가는 수동인데 삭제만 자동인 것이 앞뒤가 안 맞는다**(사용자 결정). 곧 진행할 작업에서
+`market_map_stock_category`는 "기본값에서 벗어나게 손댄 것"만 담는 override 테이블이 되고, 가입 시
+전 종목 초기 적재는 사라진다. 신규 상장 종목을 자동으로 넣지 않기로 한 마당에 상장폐지 종목만 자동으로
+빼면 지금 넣은 코드를 그 작업에서 도로 걷어내야 한다.
+
+**둘째, `active`는 영구 딱지가 아니다.** "키움 ka10099 목록에 지금 있는가"이고, 다시 나타나면
+되살아난다.
 
 ```java
 // StockInfoCollector.sync()
@@ -102,12 +108,10 @@ if (fetched == null) {
 this.active = true;                                      // ← 되살아난다
 ```
 
-실측 목록의 `125 거래정지` 카테고리가 그 위험을 보여준다. 거래재개되면 배정이 날아간 채로 돌아온다.
-
-**그리고 곧 비대칭이 된다.** `docs/backlog.md`의 「가입 비용 — 미러 대신 sparse override」대로 가면
-`market_map_stock_category`는 "기본값에서 벗어나게 손댄 것"만 담는 override 테이블이 된다. 신규 상장
-종목을 자동으로 넣지 않기로 한 마당에 상장폐지 종목만 자동으로 빼는 것은 앞뒤가 안 맞는다. 지금 넣으면
-그 작업에서 걷어내야 한다.
+실측 목록의 `125 거래정지` 카테고리가 그 경우다. **다만 배정이 영영 사라지지는 않는다** —
+`MarketMapCategoryService.findMissingAssignments`(65행)가 다음 sync에서 "활성 주권인데 배정 행이 없는
+종목"을 찾아 다시 채운다. 실제로 잃는 것은 **사용자가 손으로 옮겨둔 카테고리와 `alias`**다. 거래재개된
+종목이 키움 업종명 기준 카테고리로 되돌아가 버린다. 첫째 이유보다 약하지만 공짜로 생기는 손실은 아니다.
 
 ### 결정 3 — 종목 관리 페이지는 이번에 손대지 않는다
 
@@ -119,7 +123,9 @@ MarketMapCategory category = categoryById.get(stockCategory.getCategoryId());   
 
 지금은 `MarketMapCategoryService.onStockInfoSynced`(`StockInfoSyncedEvent` 수신)가 신규 상장 종목을
 자동 배정해 미러 불변식을 떠받치므로 null이 오지 않는다. **sparse override로 바꾸는 작업에서
-`MarketMapQueryService` 쪽과 함께 고친다**(사용자 결정). `docs/backlog.md`에 두 곳이라고 적어뒀다.
+`MarketMapQueryService.java:467`과 함께 고친다**(사용자 결정). 미러를 전제하는 자리는 그 두 곳뿐이다.
+
+단, 이번 변경이 그 전제에 금을 낸다. **5-3을 반드시 읽어라.**
 
 ---
 
@@ -138,6 +144,12 @@ MarketMapCategory category = categoryById.get(stockCategory.getCategoryId());   
 - **고아 행을 일괄 정리하는 배치나 SQL을 만들지 않는다.** 위 실측 10건은 해당 카테고리를 지울 때
   같이 딸려 나가고, 계속 쓰는 카테고리에 붙은 것은 아무것도 막지 않는다
 - **`market_code`를 별도로 다루지 않는다.** `isActiveAndOrdinary` 하나가 둘 다 판정한다
+- **버전 복원이 지운 카테고리를 되살리는 것을 막지 않는다.** `MarketMapCategoryTreeService.buildTree`가
+  스냅샷에 배정을 필터 없이(비활성 포함) 담고 `restore`가 그대로 다시 넣으므로, 삭제 전에 저장해둔
+  버전을 복원하면 그 카테고리가 비활성 배정과 함께 돌아온다. 새 규칙에서는 **다시 지울 수 있으므로**
+  잠기지 않는다. 알고 감수한다
+- **삭제되는 배정 건수를 미리보기에 표시하지 않는다.** 비활성 배정만 있는 카테고리를 지우면 그 행들과
+  `alias`가 조용히 같이 사라진다. 고지 UI는 이번 범위 밖이다 — 대신 삭제 시 건수를 로그로 남긴다
 
 ---
 
@@ -145,7 +157,7 @@ MarketMapCategory category = categoryById.get(stockCategory.getCategoryId());   
 
 ### 4-1. 차단 판정
 
-`MarketMapCategoryService`에는 **`stockInfoCacheService`가 이미 주입돼 있다**(37행). 새 의존성이
+`MarketMapCategoryService`에는 **`stockInfoCacheService`가 이미 주입돼 있다**(43행). 새 의존성이
 필요 없다.
 
 `deletePreview`(214행)와 `delete`(230행)가 같은 판정을 쓰므로, "이 카테고리들을 막는 활성 주권 배정"을
@@ -167,8 +179,11 @@ List<MarketMapStockCategory> stockCategories =
 stockInfoCache.get(stockCategory.getStockCode()).getStockName()   // ← 캐시에 없으면 NPE
 ```
 
-필터링된 목록만 넘어오면 이 자리는 자연히 안전해진다. **그래도 그 전제에 기대지 말고**, 이 메서드가
-받는 목록이 이미 걸러진 것임을 주석으로 남겨라.
+필터링된 목록만 넘어오면 이 자리는 자연히 안전해진다. **그래도 실제 null 가드를 넣어라** — 주석만으로는
+안 된다. 없는 종목은 종목코드를 그대로 이름 자리에 넣으면 된다(5-3).
+
+같은 줄의 `categoryById.get(...)`도 가드 없는 `.get()`이다. 이쪽은 같은 스냅샷에서 온 맵이라 지금은
+도달 불가능하므로 **건드리지 마라.** 둘을 같이 고치려 들면 범위가 번진다.
 
 ### 4-2. 삭제 순서
 
@@ -186,35 +201,46 @@ public void delete(Long categoryId) {
 Spring Data 파생 메서드로 추가한다 — `market_map_category_change_rate_snapshot` 쪽에 같은 이름의
 메서드가 이미 있으니 그 모양을 따른다.
 
-**카테고리를 참조하는 FK는 넷이고 전부 처리된다.** 빠뜨린 것이 없는지 확인용으로 적어둔다.
+**`market_map_category`를 가리키는 FK는 셋이고 전부 처리된다.** 빠뜨린 것이 없는지 확인용으로 적어둔다.
+`V1__create_schema.sql` 기준이다.
 
 ```
-parent_id                         → 하위부터 depth 역순 삭제 (기존)
-version_id                        → ON DELETE SET NULL, 방향도 반대라 무관
-market_map_stock_category         → 이번에 추가하는 1번
-change_rate_snapshot.category_id  → 기존 deleteByCategoryIdIn
+52행   market_map_category.parent_id               → 하위부터 depth 역순 삭제 (기존)
+64행   market_map_stock_category.category_id       → 이번에 추가하는 1번
+277행  change_rate_snapshot.category_id            → 기존 deleteByCategoryIdIn
 ```
+
+53행 `market_map_category.version_id`는 **카테고리에서 나가는** FK다. 카테고리 삭제와 무관하니 찾지
+마라. `ON DELETE SET NULL`도 그쪽에 붙은 것이다.
 
 ---
 
 ## 5. 함정
 
-### 5-1. 기존 테스트 다섯 개가 이 동작을 고정하고 있다 ★
+### 5-1. 기존 테스트 중 깨지는 것은 **하나뿐이다** ★
 
-`MarketMapCategoryServiceTest`의 아래 테스트들이 **"배정 행이 있으면 무조건 막는다"를 전제로 짜여
-있다.** 스텁이 `stock_info` 캐시를 안 채우고 있으면 고친 코드에서 "활성 주권 0건"이 되어 판정이
-뒤집힌다.
+`MarketMapCategoryServiceTest` 203행.
 
 ```
-163행  deletePreview_배정된_종목이_있으면_종목_목록과_함께_차단된다
-181행  deletePreview_배정된_종목이_없으면_삭제_가능하고_하위카테고리_목록을_반환한다
-196행  deletePreview_존재하지_않는_카테고리는_404를_반환한다
 203행  delete_배정된_종목이_있으면_409로_차단된다
-213행  delete_성공하면_대상과_하위카테고리가_삭제된다
 ```
 
-**기대값을 지우지 말고 스텁을 채워라.** "배정된 종목이 있으면 막는다"는 여전히 참이어야 하고, 그
-종목이 활성 주권일 때만 그렇다는 조건이 붙을 뿐이다.
+이 테스트는 `findByCategoryIdIn`만 스텁하고 **`stockInfoCacheService.getCache()`는 스텁하지 않는다.**
+Mockito가 `Map` 반환형에 빈 맵을 돌려주므로 `cache.get("005930")`이 `null` → 5-3 규칙에 따라 "막지
+않음" → `ConflictException`이 안 던져져 실패한다.
+
+**고치는 법은 스텁 한 줄 추가다.** 기대값(`ConflictException`)은 그대로 둔다.
+
+```java
+when(stockInfoCacheService.getCache()).thenReturn(Map.of("005930",
+        StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", "반도체", 100L, BigDecimal.TEN)));
+```
+
+163행 테스트는 이미 같은 스텁을 갖고 있어 그대로 통과한다(169행). **손대지 마라.** 181·196·213행은
+배정 목록이 비어 있거나 404로 먼저 빠져서 판정에 도달하지 않는다. 역시 그대로다.
+
+**테스트를 돌려 하나만 실패하는 것이 정상이다.** 다섯 개가 다 깨질 것으로 예상하고 접근하면 멀쩡한
+스텁을 건드리게 된다.
 
 ### 5-2. 새로 추가해야 하는 테스트
 
@@ -222,17 +248,43 @@ change_rate_snapshot.category_id  → 기존 deleteByCategoryIdIn
   고쳤는지 알 수 없다
 - **주권이 아닌 종목(`market_code`가 `"0"`/`"10"`이 아님)도 막지 않는다** — 지금 운영에 사례가
   없지만 판정이 `isActiveAndOrdinary`라 같이 덮인다. 나중에 사례가 생겼을 때 걸리도록
-- **삭제할 때 비활성 배정 행도 같이 지워진다** — FK 위반을 막는 그 동작이다. 이것이 없으면
-  "판정은 통과했는데 DB에서 터지는" 상태를 테스트가 못 잡는다
+- **삭제할 때 비활성 배정 행도 같이 지워진다** — FK 위반을 막는 그 동작이다. 단, 이 레포에는 DB
+  테스트가 없으므로(`docs/rules/testing.md`) **이 테스트가 잡는 것은 FK 위반이 아니라 서비스의 호출
+  순서다.** `verify(marketMapStockCategoryRepository).deleteByCategoryIdIn(...)` 또는 `InOrder`까지가
+  얻을 수 있는 최대치다. 실제 SQL 순서는 Hibernate의 `ActionQueue`가 정한다. FK 위반 여부는 배포 후
+  8절로만 확인된다 — 그 이상을 시도하지 마라
 - **카테고리에 활성 주권 종목이 하나라도 있으면 여전히 막힌다** — 과잉 수정 방지
 
-### 5-3. `stock_info` 캐시에 없는 종목
+### 5-3. 캐시가 판정의 유일한 기준이다 — 그 대가를 알고 간다 ★
 
-`stockInfoCache.get(stockCode)`가 `null`을 돌려줄 수 있다(`market_map_stock_category`에 있는데
-`stock_info`에서 사라진 경우). 실측에서는 0건이었지만 방어가 필요하다.
+먼저 오해를 하나 걷어낸다. **"`market_map_stock_category`에 있는데 `stock_info`에서 사라진 종목"은
+존재할 수 없다.** FK가 막는다.
 
-**"막지 않음"으로 친다.** 화면에 안 보이는 종목이므로 판정 기준과 일관된다. 그리고 `NullPointer`로
-터지지 않게 한다.
+```sql
+-- V1__create_schema.sql:63
+CONSTRAINT fk_market_map_stock_category_stock
+    FOREIGN KEY (stock_code) REFERENCES stock_info (stock_code)
+```
+
+게다가 `StockInfoCollector.sync()`는 종목을 **지우지 않는다.** `markInactive()`만 한다.
+
+그러니 캐시 miss가 나는 경로는 하나뿐이다 — **캐시가 낡은 경우.** `StockInfoCacheService.getCache()`는
+TTL이 없고(`ApplicationConfig`의 `CaffeineCacheManager`에 `expireAfterWrite` 없음), 평일 07:00 sync의
+`afterCommit` 훅 한 곳에서만 비워진다.
+
+**그래도 캐시를 기준으로 삼는다.** 종목 관리 페이지가 바로 그 캐시로 목록을 만들기 때문이다
+(`MarketMapStockCategoryService:90`). 리포지토리를 직접 읽으면 판정이 화면보다 엄격해져서, **사용자가
+볼 수 없는 종목 때문에 다시 막히는** 지금 그 버그가 작은 규모로 되살아난다.
+
+대가는 이것이다. DB에서는 활성인데 캐시가 비활성으로 알고 있으면(수동 DB 편집, 또는 sync 커밋과 evict
+사이) 그 종목의 배정 행이 삭제되고, 캐시가 갱신된 뒤 **종목 관리 페이지 첫 로드에서 NPE가 난다**
+(결정 3에서 인용한 자리다). 자동 복구는 다음 sync의 `findMissingAssignments`까지 기다려야 한다.
+
+수동 DB 편집을 전제하지 않으면 이 창은 sync 커밋과 `afterCommit` evict 사이뿐이라 사실상 없다.
+**알고 받는다.** 구획 2에서 null을 견디게 고치면 이 대가도 같이 사라진다.
+
+그리고 캐시 miss 자체는 **"막지 않음"으로 친다.** 화면에 안 보이는 종목이므로 판정 기준과 일관된다.
+`toBlockingStockCategoryItems`에서도 `NullPointer`로 터지지 않게 한다(4-1).
 
 ### 5-4. `docs/`는 수정하지 않는다
 
@@ -243,9 +295,10 @@ change_rate_snapshot.category_id  → 기존 deleteByCategoryIdIn
 ## 6. 완료 기준
 
 1. `./gradlew spotlessApply build` 통과 (`compileJava`에 `-Werror`가 걸려 있어 경고가 빌드를 깬다)
-2. 5-1의 기존 테스트 다섯 개가 기대값을 유지한 채 통과한다
+2. 5-1의 203행 테스트에 스텁을 추가해 통과한다. 163·181·196·213행은 **변경 없이** 통과한다
 3. 5-2의 테스트 넷이 있다
-4. 비활성 종목만 배정된 카테고리를 지울 때, 배정 행 → 스냅샷 → 카테고리 순으로 삭제된다
+4. 비활성 종목만 배정된 카테고리를 지울 때, 서비스가 배정 행 → 스냅샷 → 카테고리 순으로 호출한다
+   (실제 SQL 순서는 테스트 범위 밖 — 5-2)
 5. 활성 주권 종목이 있는 카테고리는 여전히 차단된다
 6. 이 지시서 파일(`docs/instructions-category-delete-fix.md`)을 마지막 커밋에서 삭제한다
 
@@ -266,9 +319,12 @@ change_rate_snapshot.category_id  → 기존 deleteByCategoryIdIn
 이 PR이 배포되면 아래 카테고리들이 **수동 SQL 없이** 화면에서 삭제 가능해진다.
 
 ```
-52 더테크놀로지 / 54 시스웍 / 55 신세계푸드     ← 비활성 종목 하나뿐이라 확실히 풀린다
+52 더테크놀로지 / 54 시스웍 / 55 신세계푸드     ← 이름이 종목명과 같다. 풀릴 가능성이 높다
 49 엔터 / 62 석유·화학 / 83 SPAC / 107 생명보험 / 125 거래정지
-                                                ← 활성 종목이 같이 있으면 여전히 막힌다(정상)
 ```
 
-뒤쪽이 막히면 버그가 아니다. 그 종목은 화면에 보이므로 옮기고 나서 지우면 된다.
+**단정하지 마라.** 1절의 실측 쿼리는 `active = false` 행만 뽑은 것이라, 그 카테고리에 활성 배정이
+**함께** 있는지는 저 결과로 알 수 없다. 8건 중 무엇이 풀릴지는 배포해봐야 안다.
+
+**막히는 것은 버그가 아니다.** 활성 종목이 같이 있다는 뜻이고, 그 종목은 화면에 보이므로 옮기고 나서
+지우면 된다. 차단 화면에 종목이 뜨는지로 구분된다 — 뜨면 정상, 빈 목록인데 막히면 그때가 버그다.

@@ -179,6 +179,28 @@ class MarketMapCategoryServiceTest {
                 .containsExactly(tuple("반도체", "삼성전자"));
     }
 
+    // 리뷰에서 지적된 구멍 — 기존 163행 테스트는 활성 종목 하나뿐이라 필터를 걸든 안 걸든 결과가 같다.
+    // 활성·비활성이 섞인 경우로 blockingStocks가 실제로 필터링되는지 확인한다.
+    @Test
+    void deletePreview_차단_목록에는_활성_주권_종목만_담긴다() {
+        MarketMapCategory semiconductor = category(1L, null, "반도체");
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
+        when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L)))
+                .thenReturn(List.of(
+                        MarketMapStockCategory.create("005930", 1L), MarketMapStockCategory.create("000660", 1L)));
+        StockInfo delisted = StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", "반도체", 100L, BigDecimal.TEN);
+        delisted.markInactive();
+        StockInfo active = StockInfo.create("000660", "SK하이닉스", Market.KOSPI, "0", "반도체", 100L, BigDecimal.TEN);
+        when(stockInfoCacheService.getCache()).thenReturn(Map.of("005930", delisted, "000660", active));
+
+        CategoryDeletePreview preview = service.deletePreview(1L);
+
+        assertThat(preview.deletable()).isFalse();
+        assertThat(preview.blockingStocks())
+                .extracting("stockCode", "stockName")
+                .containsExactly(tuple("000660", "SK하이닉스"));
+    }
+
     @Test
     void deletePreview_배정된_종목이_없으면_삭제_가능하고_하위카테고리_목록을_반환한다() {
         MarketMapCategory electronics = category(1L, null, "전기/전자");

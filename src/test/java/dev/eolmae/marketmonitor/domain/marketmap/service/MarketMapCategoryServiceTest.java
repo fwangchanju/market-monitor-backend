@@ -1,6 +1,7 @@
 package dev.eolmae.marketmonitor.domain.marketmap.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.Mockito.never;
@@ -28,6 +29,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mockito;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -177,6 +179,28 @@ class MarketMapCategoryServiceTest {
                 .containsExactly(tuple("반도체", "삼성전자"));
     }
 
+    // 리뷰에서 지적된 구멍 — 기존 163행 테스트는 활성 종목 하나뿐이라 필터를 걸든 안 걸든 결과가 같다.
+    // 활성·비활성이 섞인 경우로 blockingStocks가 실제로 필터링되는지 확인한다.
+    @Test
+    void deletePreview_차단_목록에는_활성_주권_종목만_담긴다() {
+        MarketMapCategory semiconductor = category(1L, null, "반도체");
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
+        when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L)))
+                .thenReturn(List.of(
+                        MarketMapStockCategory.create("005930", 1L), MarketMapStockCategory.create("000660", 1L)));
+        StockInfo delisted = StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", "반도체", 100L, BigDecimal.TEN);
+        delisted.markInactive();
+        StockInfo active = StockInfo.create("000660", "SK하이닉스", Market.KOSPI, "0", "반도체", 100L, BigDecimal.TEN);
+        when(stockInfoCacheService.getCache()).thenReturn(Map.of("005930", delisted, "000660", active));
+
+        CategoryDeletePreview preview = service.deletePreview(1L);
+
+        assertThat(preview.deletable()).isFalse();
+        assertThat(preview.blockingStocks())
+                .extracting("stockCode", "stockName")
+                .containsExactly(tuple("000660", "SK하이닉스"));
+    }
+
     @Test
     void deletePreview_배정된_종목이_없으면_삭제_가능하고_하위카테고리_목록을_반환한다() {
         MarketMapCategory electronics = category(1L, null, "전기/전자");
@@ -205,8 +229,86 @@ class MarketMapCategoryServiceTest {
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
         when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L)))
                 .thenReturn(List.of(MarketMapStockCategory.create("005930", 1L)));
+        StockInfo samsung = StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", "반도체", 100L, BigDecimal.TEN);
+        when(stockInfoCacheService.getCache()).thenReturn(Map.of("005930", samsung));
 
         assertThatThrownBy(() -> service.delete(1L)).isInstanceOf(ConflictException.class);
+    }
+
+    // 이번 버그의 재현 — 배정된 종목이 상장폐지 등으로 비활성이 되면 화면(종목 관리 페이지)에는 안
+    // 보이는데, 이 종목 때문에 삭제가 막혀서는 안 된다.
+    @Test
+    void delete_비활성_종목만_배정된_카테고리는_삭제된다() {
+        MarketMapCategory semiconductor = category(1L, null, "반도체");
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
+        when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L)))
+                .thenReturn(List.of(MarketMapStockCategory.create("005930", 1L)));
+        StockInfo delisted = StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", "반도체", 100L, BigDecimal.TEN);
+        delisted.markInactive();
+        when(stockInfoCacheService.getCache()).thenReturn(Map.of("005930", delisted));
+
+        assertThatCode(() -> service.delete(1L)).doesNotThrowAnyException();
+
+        verify(marketMapStockCategoryRepository).deleteByCategoryIdIn(List.of(1L));
+        verify(marketMapCategoryRepository).deleteAll(List.of(semiconductor));
+    }
+
+    // 캐시 miss와 별개로, stock_info에 있지만 주권(코스피/코스닥)이 아닌 종목(ETF 등)도 판정 기준
+    // (isActiveAndOrdinary)에 걸려 막지 않아야 한다. 지금 운영에 사례는 없지만 나중을 위해 남겨둔다.
+    @Test
+    void delete_주권이_아닌_종목만_배정된_카테고리는_삭제된다() {
+        MarketMapCategory etfCategory = category(1L, null, "ETF");
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(etfCategory));
+        when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L)))
+                .thenReturn(List.of(MarketMapStockCategory.create("069500", 1L)));
+        StockInfo etf = StockInfo.create("069500", "KODEX 200", Market.KOSPI, "8", "ETF", 100L, BigDecimal.TEN);
+        when(stockInfoCacheService.getCache()).thenReturn(Map.of("069500", etf));
+
+        assertThatCode(() -> service.delete(1L)).doesNotThrowAnyException();
+
+        verify(marketMapStockCategoryRepository).deleteByCategoryIdIn(List.of(1L));
+    }
+
+    // FK 위반을 막는 순서 — 이 레포는 DB 테스트가 없으므로(docs/rules/testing.md) 여기서 확인 가능한
+    // 것은 서비스의 호출 순서까지다. 실제 SQL 순서는 Hibernate ActionQueue가 정하고, FK 위반 여부는
+    // 배포 후에만 확인된다(지시서 5-2/8절).
+    @Test
+    void delete_비활성_배정_행이_카테고리보다_먼저_삭제된다() {
+        MarketMapCategory semiconductor = category(1L, null, "반도체");
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
+        when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L)))
+                .thenReturn(List.of(MarketMapStockCategory.create("005930", 1L)));
+        StockInfo delisted = StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", "반도체", 100L, BigDecimal.TEN);
+        delisted.markInactive();
+        when(stockInfoCacheService.getCache()).thenReturn(Map.of("005930", delisted));
+
+        service.delete(1L);
+
+        InOrder inOrder = Mockito.inOrder(
+                marketMapStockCategoryRepository,
+                marketMapCategoryChangeRateSnapshotRepository,
+                marketMapCategoryRepository);
+        inOrder.verify(marketMapStockCategoryRepository).deleteByCategoryIdIn(List.of(1L));
+        inOrder.verify(marketMapCategoryChangeRateSnapshotRepository).deleteByCategoryIdIn(List.of(1L));
+        inOrder.verify(marketMapCategoryRepository).deleteAll(Mockito.anyList());
+    }
+
+    // 과잉 수정 방지 — 활성 주권 종목이 하나라도 섞여 있으면 나머지가 전부 비활성이어도 여전히 막힌다.
+    @Test
+    void delete_활성_주권_종목이_하나라도_있으면_여전히_차단된다() {
+        MarketMapCategory semiconductor = category(1L, null, "반도체");
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
+        when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L)))
+                .thenReturn(List.of(
+                        MarketMapStockCategory.create("005930", 1L), MarketMapStockCategory.create("000660", 1L)));
+        StockInfo delisted = StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", "반도체", 100L, BigDecimal.TEN);
+        delisted.markInactive();
+        StockInfo active = StockInfo.create("000660", "SK하이닉스", Market.KOSPI, "0", "반도체", 100L, BigDecimal.TEN);
+        when(stockInfoCacheService.getCache()).thenReturn(Map.of("005930", delisted, "000660", active));
+
+        assertThatThrownBy(() -> service.delete(1L)).isInstanceOf(ConflictException.class);
+
+        verify(marketMapStockCategoryRepository, never()).deleteByCategoryIdIn(Mockito.anyList());
     }
 
     @Test

@@ -9,4 +9,6 @@ public interface MarketMapStockCategoryRepository extends JpaRepository<MarketMa
     List<MarketMapStockCategory> findByCategoryId(Long categoryId);
 
     List<MarketMapStockCategory> findByCategoryIdIn(List<Long> categoryIds);
+
+    void deleteByCategoryIdIn(List<Long> categoryIds);
 }

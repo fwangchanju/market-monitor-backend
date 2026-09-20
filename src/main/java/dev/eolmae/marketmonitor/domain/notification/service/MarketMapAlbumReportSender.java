@@ -13,6 +13,7 @@ import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -89,8 +90,8 @@ public class MarketMapAlbumReportSender {
     }
 
     private String mapPath(Market market, AverageMode averageMode, boolean sectorFilter) {
-        return RenderTarget.MARKET_MAP.path() + "?market=" + market.name()
-                + "&avgMode=" + averageMode.queryValue()
+        return RenderTarget.MARKET_MAP.path() + "/" + market.name().toLowerCase(Locale.ROOT)
+                + "?avgMode=" + averageMode.queryValue()
                 + "&sectorFilter=" + sectorFilter;
     }
 }

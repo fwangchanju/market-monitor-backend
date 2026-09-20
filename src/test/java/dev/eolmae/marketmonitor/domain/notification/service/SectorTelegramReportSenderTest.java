@@ -85,11 +85,11 @@ class SectorTelegramReportSenderTest {
                         MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(rankings);
         when(screenshotClient.capture(
-                        "/category-change-rate?market=KOSPI&beforeMinutes=15&avgMode=simple&sectorFilter=true",
+                        "/sector/kospi?beforeMinutes=15&avgMode=simple&sectorFilter=true",
                         "[data-captureid='category-change-rate-capture']"))
                 .thenReturn(List.of(kospiImage));
         when(screenshotClient.capture(
-                        "/category-change-rate?market=KOSDAQ&beforeMinutes=15&avgMode=simple&sectorFilter=true",
+                        "/sector/kosdaq?beforeMinutes=15&avgMode=simple&sectorFilter=true",
                         "[data-captureid='category-change-rate-capture']"))
                 .thenReturn(List.of(kosdaqImage));
         when(categoryRankingTextBuilder.buildSectorCaption(kospiSummary, BEFORE_MINUTES))
@@ -117,7 +117,7 @@ class SectorTelegramReportSenderTest {
                         MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(rankings);
         when(screenshotClient.capture(
-                        "/category-change-rate?market=KOSPI&beforeMinutes=15&avgMode=simple&sectorFilter=true",
+                        "/sector/kospi?beforeMinutes=15&avgMode=simple&sectorFilter=true",
                         "[data-captureid='category-change-rate-capture']"))
                 .thenReturn(List.of(kospiImage));
         when(categoryRankingTextBuilder.buildSectorCaption(kospiSummary, BEFORE_MINUTES))
@@ -141,7 +141,7 @@ class SectorTelegramReportSenderTest {
                         MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(List.of(kospiSummary));
         when(screenshotClient.capture(
-                        "/category-change-rate?market=KOSPI&beforeMinutes=15&avgMode=simple&sectorFilter=true",
+                        "/sector/kospi?beforeMinutes=15&avgMode=simple&sectorFilter=true",
                         "[data-captureid='category-change-rate-capture']"))
                 .thenReturn(List.of());
 
@@ -160,11 +160,11 @@ class SectorTelegramReportSenderTest {
                         MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(List.of(kospiSummary, kosdaqSummary));
         when(screenshotClient.capture(
-                        "/category-change-rate?market=KOSPI&beforeMinutes=15&avgMode=simple&sectorFilter=true",
+                        "/sector/kospi?beforeMinutes=15&avgMode=simple&sectorFilter=true",
                         "[data-captureid='category-change-rate-capture']"))
                 .thenReturn(List.of());
         when(screenshotClient.capture(
-                        "/category-change-rate?market=KOSDAQ&beforeMinutes=15&avgMode=simple&sectorFilter=true",
+                        "/sector/kosdaq?beforeMinutes=15&avgMode=simple&sectorFilter=true",
                         "[data-captureid='category-change-rate-capture']"))
                 .thenReturn(List.of(kosdaqImage));
         when(categoryRankingTextBuilder.buildSectorCaption(kosdaqSummary, BEFORE_MINUTES))
@@ -195,11 +195,11 @@ class SectorTelegramReportSenderTest {
                 .thenReturn(List.of(kospiFallback));
 
         when(screenshotClient.capture(
-                        "/category-change-rate?market=KOSPI&beforeMinutes=15&avgMode=simple&sectorFilter=true",
+                        "/sector/kospi?beforeMinutes=15&avgMode=simple&sectorFilter=true",
                         "[data-captureid='category-change-rate-capture']"))
                 .thenReturn(List.of(kospiImage));
         when(screenshotClient.capture(
-                        "/category-change-rate?market=KOSDAQ&beforeMinutes=15&avgMode=simple&sectorFilter=true",
+                        "/sector/kosdaq?beforeMinutes=15&avgMode=simple&sectorFilter=true",
                         "[data-captureid='category-change-rate-capture']"))
                 .thenReturn(List.of(kosdaqImage));
         when(categoryRankingTextBuilder.buildSectorFallbackCaption(kospiFallback))
@@ -234,7 +234,7 @@ class SectorTelegramReportSenderTest {
                 .thenReturn(List.of(kospiFallbackAlsoEmpty));
 
         when(screenshotClient.capture(
-                        "/category-change-rate?market=KOSDAQ&beforeMinutes=15&avgMode=simple&sectorFilter=true",
+                        "/sector/kosdaq?beforeMinutes=15&avgMode=simple&sectorFilter=true",
                         "[data-captureid='category-change-rate-capture']"))
                 .thenReturn(List.of(kosdaqImage));
         when(categoryRankingTextBuilder.buildSectorCaption(kosdaqDelta, BEFORE_MINUTES))
@@ -301,7 +301,7 @@ class SectorTelegramReportSenderTest {
                         MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.WEIGHTED, false))
                 .thenReturn(List.of(kospiSummary));
         when(screenshotClient.capture(
-                        "/category-change-rate?market=KOSPI&beforeMinutes=15&avgMode=weighted&sectorFilter=false",
+                        "/sector/kospi?beforeMinutes=15&avgMode=weighted&sectorFilter=false",
                         "[data-captureid='category-change-rate-capture']"))
                 .thenReturn(List.of(kospiImage));
         when(categoryRankingTextBuilder.buildSectorCaption(kospiSummary, BEFORE_MINUTES))

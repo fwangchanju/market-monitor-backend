@@ -22,7 +22,7 @@ public class MarketController {
 
     // ── 메인 대시보드 ─────────────────────────────────────────────────────
 
-    @GetMapping("/market-summary")
+    @GetMapping("/summary")
     public MarketSummaryResponse getMarketSummary() {
         return marketQueryService.getMarketSummary();
     }

@@ -6,10 +6,8 @@ import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryServic
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapScaleService;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketValueTierThresholdService;
 import dev.eolmae.marketmonitor.domain.stock.service.MarketMapExcludedStockService;
-import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateMarketRanking;
 import dev.eolmae.marketmonitor.domain.view.dto.ExcludedStockItem;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapResponse;
-import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
 import java.util.List;
@@ -22,7 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-@RequestMapping("/api/market-map")
+@RequestMapping("/api/map")
 @RestController
 @RequiredArgsConstructor
 public class MarketMapController {
@@ -43,12 +41,6 @@ public class MarketMapController {
     @GetMapping("/value-tiers")
     public List<MarketValueTierItem> getValueTiers() {
         return marketValueTierThresholdService.getValueTiers();
-    }
-
-    @GetMapping("/category-change-rates")
-    public SnapshotResponse<CategoryChangeRateMarketRanking> getCategoryChangeRates(
-            @RequestParam MarketQuery market, @RequestParam(defaultValue = "60") int beforeMinutes) {
-        return marketMapQueryService.getCategoryChangeRates(market, beforeMinutes);
     }
 
     @GetMapping("/scale")

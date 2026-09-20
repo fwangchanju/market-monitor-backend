@@ -1682,6 +1682,7 @@ QueryService가 끝내고 빌더는 포맷만"으로 정리해둔 경계).
 - 커스텀 테이블 이름 정리 (아래 「커스텀 테이블 이름을 `custom_*`으로 바꾼다」)
 - 둘 다 Flyway `V2`로 한 번에. `V1`을 고치는 게 아니라 새 파일을 추가하는 것이라
   `operations.md`의 checksum 불일치 절차는 해당 없다
+- **배포 전 CTAS 백업이 선행 조건이다.** 아래 「배포 전 필수 — CTAS 백업」. 지시서에 그대로 옮긴다
 
 ### 커스텀 테이블 이름을 `custom_*`으로 바꾼다
 
@@ -1732,8 +1733,49 @@ DROP TABLE market_map_category_change_rate_snapshot;
 `ALTER TABLE … RENAME CONSTRAINT`, `ALTER INDEX … RENAME`, `ALTER SEQUENCE … RENAME`으로 같이
 맞춘다. 전부 메타데이터 변경이다.
 
+**시퀀스에 `_seq1`이 붙은 것이 있다.** `V1`이 `GENERATED ALWAYS AS IDENTITY`로 시퀀스를 자동
+생성할 때 같은 이름이 이미 있어서 뒤에 `1`이 붙은 것으로, Flyway 도입 전 스키마의 잔재다. 어느
+쪽이 실제로 쓰이는지 확인한 뒤 고아를 지우고 쓰는 쪽을 정식 이름으로 바꾼다. 쓰는 쪽을 지우면
+다음 insert가 바로 실패하므로 확인을 생략하지 않는다.
+
+```sql
+-- 각 테이블의 id 컬럼이 실제로 쓰는 시퀀스
+SELECT c.relname AS table_name, pg_get_serial_sequence(c.relname, 'id') AS used_sequence
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relkind = 'r' AND n.nspname = 'public'
+  AND EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attname = 'id')
+ORDER BY 1;
+
+-- 어느 컬럼에도 안 붙은 고아 시퀀스
+SELECT s.relname FROM pg_class s
+WHERE s.relkind = 'S'
+  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = s.oid AND d.deptype IN ('a', 'i'));
+```
+
 조심할 것은 DB가 아니라 앱 쪽이다. 엔티티 `@Table(name=…)`과 마이그레이션이 같은 배포에 나가야
 한다. Flyway가 앱 기동 시 먼저 도니 같은 PR에 넣으면 자연히 맞는다.
+
+#### 배포 전 필수 — CTAS 백업 (사용자가 직접 실행)
+
+rename은 메타데이터 작업이라 데이터를 잃을 경로가 없지만, DROP 두 건과 시퀀스 정리가 같은
+마이그레이션에 들어가므로 **배포 전에 대상 테이블 전체를 CTAS로 복사해 둔다.** 운영 DB 접근은
+사용자만 하므로 사용자가 실행한다. 구현 세션은 PR 설명에 "배포 전 아래 백업이 선행 조건"이라고
+적고, 병합 요청 시 백업이 끝났는지 확인을 요청한다. 백업 없이 배포하지 않는다.
+
+```sql
+CREATE TABLE bak_market_map_category                     AS TABLE market_map_category;
+CREATE TABLE bak_market_map_stock_category               AS TABLE market_map_stock_category;
+CREATE TABLE bak_market_map_category_version             AS TABLE market_map_category_version;
+CREATE TABLE bak_market_map_scale_threshold              AS TABLE market_map_scale_threshold;
+CREATE TABLE bak_market_value_tier_threshold             AS TABLE market_value_tier_threshold;
+CREATE TABLE bak_market_map_excluded_stock               AS TABLE market_map_excluded_stock;
+CREATE TABLE bak_market_map_category_change_rate_snapshot AS TABLE market_map_category_change_rate_snapshot;
+```
+
+`CREATE TABLE … AS TABLE`은 데이터만 복사하고 제약·인덱스·identity는 안 가져온다. 되돌릴 일이
+생기면 `INSERT INTO … SELECT`로 부어 넣고 시퀀스를 `setval`로 맞춘다. 배포 뒤 며칠 두고 이상이
+없으면 `bak_*`를 지운다. 실행은
+`docker exec -it market-monitor-postgres psql -U market_monitor -d market_monitor_db`.
 
 ### 확인해야 할 것
 

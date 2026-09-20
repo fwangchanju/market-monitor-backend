@@ -17,54 +17,45 @@
 
 ## 구획 — 지금 무엇을 확정하고 무엇을 열어두는가
 
-시간외 등락률, 회원가입, 집계 테이블 제거가 한 덩어리로 얽혀 있어서 한 번에 결정하기 어렵다.
-**의존 관계로 잘라 구획을 나눈다. 지금 확정하는 것은 구획 1뿐이고, 구획 2의 내용은 아래 각
-항목에 적혀 있되 "미확정"이다.** 구획 1이 끝나기 전에는 구획 2를 다시 논의하지 않는다.
+집계 테이블 제거, 시간외 등락률, 회원가입이 한 덩어리로 얽혀 있어서 한 번에 결정하기 어렵다.
+**의존 관계로 잘라 구획을 나눈다.** 구획 1과 2는 확정이고, 구획 3의 내용은 아래 각 항목에 적혀
+있되 미확정이다. 앞 구획이 끝나기 전에는 뒤 구획을 다시 논의하지 않는다.
 
 | 구획 | 내용 | 무엇에 걸려 있나 |
 |---|---|---|
-| **0** | 렌더러 장애 / 스냅샷 실삭제 전환 | 아무것도 — 서로도 독립, 아무 때나 |
-| **1** | 시간외 등락률 + 마켓 지수 바 + 공휴일 판정 | 없음 ← **지금 하는 것** |
-| **2** | `userId` + 멀티테넌시 + 과거 날짜 조회 | 구획 0의 실삭제 전환 |
+| **0** | 렌더러 장애 / 스냅샷 실삭제 전환 | 아무것도. 서로도 독립, 아무 때나 |
+| **1** | 카테고리 집계 테이블 제거 + 섹터 페이지를 지도 응답 위에서 조립 + 종목 캐시 | 없음 ← **다음 작업** |
+| **2** | 시간외 등락률 + 마켓 지수 바 + 공휴일 판정 | 구획 1 |
+| **3** | `userId` + 멀티테넌시 + 과거 날짜 조회 | 구획 0의 실삭제 전환, 구획 1 |
 
-### 집계 테이블 제거는 결정 사항이 아니다 — 측정 구획을 없앴다
+요약 페이지 개편은 구획 1 이후 프론트만의 작업이라 표에 없다. 아래 「요약 페이지」를 본다.
 
-한때 "집계 테이블을 없앨지 측정해서 정하는" 구획을 맨 앞에 뒀다. **없앴다. 잘못된 구획이었다.**
+### 집계 테이블 제거를 맨 앞으로 당겼다
 
-- **제거는 멀티테넌시가 강제한다.** `category_id`가 사용자별이 되는 순간 집계 행도 쓰기 부하도
-  사용자 수만큼 곱해진다. 측정 결과가 어떻게 나오든 이 테이블을 사용자별로 유지하는 선택지는
-  없다. 측정이 답할 수 있는 질문이 아니었다
-- **"되돌릴 수 없다"를 과하게 잡았다.** 등락률이 바뀌는 구간은 15:40~20:00인데, 정리 배치
-  (`SnapshotRetentionScheduler`, 두 테이블 모두 10일)가 **장마감 시각이 아닌 행을 전부 지운다.**
-  즉 잘못된 값이 들어가도 10일 뒤 사라진다. 영구 보존되는 것은 종가 시각(15:30, 15:35)인데
-  그 구간은 키움 값 그대로라 애초에 안 바뀐다
+한때 집계 제거를 구획 2(멀티테넌시)에 묶어두고 시간외 등락률을 먼저 하기로 했다. 시간외 토글이
+"집계 없이 조립하는 화면"의 리허설이 된다는 논리였다. **뒤집었다.** 섹터·요약 페이지가 지도
+응답 위에서 조립하기로 하면서(아래 「카테고리 집계 테이블을 없앤다」) 집계 제거가 멀티테넌시와
+무관한 독립 작업이 됐고, 이걸 먼저 하면 시간외 등락률이 처음부터 단일 경로 위에 얹힌다. 시간외
+설계에 적혀 있던 "구획 2까지 두 경로가 공존한다"는 대가가 사라진다.
 
-측정이 필요해지는 시점은 따로 있다 — 구획 2에서 집계를 **실제로 없앨 때**, 캐시 없이 견디는지.
+측정은 배포 뒤 종목 캐시의 hit/miss와 `/api/map` 응답 시간 로그로 한다. 테이블을 지우는 것이
+아니라 호출부만 끊는 것이라(엔티티·DDL은 별도 PR) 되돌리기 쉽다.
 
-**그 측정을 구획 1이 대신 해준다.** 시간외 등락률은 집계 테이블을 건드리지 않고 조회 시점에
-계산하기로 했다(아래 「결정 1」). 시간외 토글을 켠 화면이 곧 "집계 없이 조립하는 화면"이라,
-구획 2의 가정을 트래픽 적은 15:40~20:00 구간에서 먼저 재보게 된다. 느려도 그 토글만 굼뜨고
-기존 화면은 그대로다.
-
-한때 여기에 "구획 1은 수집 시점 계산으로 바로 간다. 집계 테이블이 살아 있으므로 다른 선택지가
-없다"고 적어뒀다. **틀렸다.** 새 기능만 새 방식으로 만들고 기존 것은 구획 2에서 합류시키는
-선택지가 있었다.
-
-### 구획 1에 공휴일 판정을 넣는 이유
+### 구획 2에 공휴일 판정을 넣는 이유
 
 기술적 선행 조건은 아니다(기준가가 당일 15:35라 "직전 거래일"을 몰라도 된다). **사용자 결정**으로
 같이 진행한다. 둘 다 수집기 주변을 건드리는 작업이라 한 번에 보는 편이 낫다.
 
-### 구획 2에 과거 날짜 조회를 넣는 이유
+### 구획 3에 과거 날짜 조회를 넣는 이유
 
-**같은 조회 경로를 두 번 고치지 않기 위해서다.** 멀티테넌시는 `getCustomMarketMap`/
-`getCategoryChangeRates`에 "누구의 트리인가"를 넣고, 과거 날짜 조회는 같은 자리에 "언제인가"를
-넣는다. 시그니처와 캐시 키가 같이 바뀌므로 따로 하면 두 번 고친다.
+**같은 조회 경로를 두 번 고치지 않기 위해서다.** 멀티테넌시는 `/api/map`에 "누구의 트리인가"를
+넣고, 과거 날짜 조회는 같은 자리에 "언제인가"를 넣는다. 구획 1이 `snapshotTime` 파라미터를 이미
+만들어두므로 과거 날짜 조회는 그 시각을 "그날 종가 시각"으로 해석하는 한 겹이 더 붙는 것이다.
 
-### 구획 1과 2의 순서
+### 구획 2와 3의 순서
 
-**1이 먼저다.** 시간외 등락률이 건드리는 `sector_price_snapshot`과 수집기는 **사용자 독립
-영역**이라 멀티테넌시와 겹치는 코드가 거의 없다. 반대로 2를 먼저 하면 시간외 등락률을
+**2가 먼저다.** 시간외 등락률이 건드리는 `sector_price_snapshot`과 수집기는 **사용자 독립
+영역**이라 멀티테넌시와 겹치는 코드가 거의 없다. 반대로 3을 먼저 하면 시간외 등락률을
 멀티테넌시 위에서 써야 해서 일이 늘어난다.
 
 ---
@@ -139,7 +130,7 @@ Spring을 호출하는 구조라, 낯선 IP의 요청도 이미 앱까지 들어
 ```
 
 그래서 "화이트리스트를 없애면 서버가 부하를 받기 시작한다"가 아니라, **이미 받고 있고 요청당 비용만
-바뀐다.** 지금은 캐시 조회 하나인데, 그 뒤로는 `/api/market-map/custom`처럼 4,300행을 읽는 조회가
+바뀐다.** 지금은 캐시 조회 하나인데, 그 뒤로는 `/api/map`처럼 종목 행 수천 개를 읽는 조회가
 된다.
 
 그리고 게이트가 사라지는 것도 아니다 — IP 조회가 토큰 검증으로 바뀔 뿐이고 비용은 비슷하다.
@@ -525,16 +516,6 @@ KST 기준을 유지해야 하므로 `DateTimeProvider` 빈을 만들고
 - 엔티티별 `@EntityListeners` 부착 여부를 표로 검증
 - DB를 띄우는 통합 테스트 한 개라도 있어야 안전하다
 
-## `market_map_category_change_rate_snapshot`에 `snapshot_time` 인덱스 (검토 후 보류)
-
-이 테이블에 `snapshot_time` 단독 인덱스가 없다. UK가
-`(market_type, category_id, market_value_tier_id, snapshot_time)`이라 선두 컬럼이 아니어서,
-정리 배치가 매일 풀스캔한다.
-
-**왜 미뤘나**: 인덱스를 추가하려면 `V1__create_schema.sql`을 고쳐야 하고 그러면 운영 DB에서
-checksum 불일치 대응 절차를 밟아야 한다(`docs/operations.md`). 얻는 건 새벽 배치 속도뿐이라 지금은
-그 비용을 치르지 않는다. 배치가 실제로 오래 걸리는 게 보이면 그때 한다.
-
 ## 대량 insert 성능 개선 (검토 후 보류)
 
 `IndexContributionRankingCollector`가 종목당 `save()`를 호출해 5분마다 약 5,600번의 개별 INSERT가
@@ -823,7 +804,8 @@ GROUP BY d ORDER BY d;
    - `sector_price_snapshot`은 청크 삭제. `snapshot_time` 인덱스가 있어 청크 반복이 싸다.
      한 번에 5만 행씩, 0행이 나올 때까지 반복. 멱등이어야 한다
    - `market_map_category_change_rate_snapshot`은 `snapshot_time` 인덱스가 **없어서** 청크마다
-     풀스캔이 된다. 쪼개면 손해다 — 단일 문으로
+     풀스캔이 된다. 쪼개면 손해다 — 단일 문으로. 이 테이블은 「카테고리 집계 테이블을 없앤다」
+     PR 2에서 DROP되므로, 그게 먼저 나갔으면 이 항목은 건너뛴다
    - 끝나고 `VACUUM (ANALYZE)`. 대량 DELETE 후 공간이 회수되지 않는다
    - 실행은 `docker exec -it market-monitor-postgres psql -U market_monitor -d market_monitor_db`
    - **보존 조건을 배치와 똑같이 써야 한다.** "15:35가 아닌 것"으로 지우면 안 된다 — 8/28처럼
@@ -861,24 +843,6 @@ QueryDSL이 만드는 쿼리가 결정하는데 이 프로젝트에 DB 테스트
 
 보존 정책을 바꿀 때(30일을 60일로 등) 같은 검증이 다시 필요해지는데, 그때는 세 줄짜리 플래그를
 다시 넣으면 된다.
-
----
-
-## 랭킹 규칙이 프론트와 백엔드에 따로 있다
-
-"대분류(부모 없는 카테고리)만 고른다, 기본 제외 구간을 뺀다, TOP3를 자른다"는 규칙이 두 곳에
-각각 구현되어 있다. 화면은 프론트가, 텔레그램 텍스트는 백엔드
-(`CategoryRankingTextBuilder`, 5단계 이후로는 `domain/view`)가 계산한다.
-
-텔레그램은 프론트가 그린 이미지와 백엔드가 만든 텍스트를 한 메시지로 붙여 보낸다. 두 규칙이
-어긋나면 같은 메시지 안에서 이미지와 텍스트가 다른 순위를 말하게 된다. 지금은 맞춰져 있지만
-유지가 사람 손에 달려 있고, 한쪽만 고치면 조용히 갈라진다. 코드에도 "화면도 같은 기준으로
-매기므로 텍스트도 맞춘다"는 주석으로 그 사실이 적혀 있다.
-
-해소하려면 백엔드가 랭킹을 확정해서 내려주고 프론트는 그리기만 해야 한다. 프론트 레포 변경과
-배포가 함께 필요해서 미뤘다.
-
-프론트엔드 레포 정비를 시작할 때 같이 본다.
 
 ---
 
@@ -935,76 +899,6 @@ QueryDSL이 만드는 쿼리가 결정하는데 이 프로젝트에 DB 테스트
 
 `market-monitor-frontend` 레포만 바꾼다. 지금 동작에는 영향이 없어 서두를 이유가 없지만, 두는
 만큼 "이 키는 왜 있나"를 매번 다시 읽게 된다.
----
-
-## 텔레그램 경로가 before를 조회하고 버린다
-
-`CategoryRankingTextBuilder`가 만드는 캡션은 `item.now()`만 쓴다. 그런데 그 값을 만들어주는
-`MarketMapQueryService.getTopCategoryRankings`는 `findRankingForMarkets`를 타고, 거기서 before
-시각 조회가 무조건 한 번 더 돈다.
-
-```java
-// MarketMapCategoryChangeRateSnapshotService.findRankingForMarkets
-Map<Market, Map<Long, List<CategoryTierBreakdown>>> nowByMarket =
-        findTierBreakdownsByCategoryId(markets, snapshotTime);
-Map<Market, Map<Long, List<CategoryTierBreakdown>>> beforeByMarket =
-        findTierBreakdownsByCategoryId(markets, beforeTime);   // 텍스트는 이걸 안 쓴다
-```
-
-`findTierBreakdownsByCategoryId` 한 번이 리포지토리 호출 두 건이다 —
-`marketValueTierThresholdRepository.findAll()`과
-`findByMarketTypeInAndSnapshotTime(markets, snapshotTime)`. 뒤쪽은 카테고리 × 구간 × 마켓 수만큼
-행이 나온다.
-
-「섹터 "변화율" 그래프에 마켓 지수 바를 넣는다」가 들어가면 여기에 `market_overview_snapshot`
-before 조회가 한 건 더 붙는다. 그쪽은 스냅샷 시각당 두 행짜리라 작지만, 버리는 조회가 늘어나는
-방향인 것은 같다.
-
-### 규모
-
-발송 한 번에 `getTopCategoryRankings`를 한 번 부르는데, 맵 포함 tick은 마켓별로 나뉘어 두 번이다.
-
-```
-WITH_MAP     7회 × 2 = 14
-SECTOR_ONLY  42회 × 1 = 42
-             하루 56회
-```
-
-하루 56번 조회하고 버린다. 장애로 이어질 규모는 아니다.
-
-### 구조 — 시각 하나짜리 조립을 만들고 화면이 그걸 두 번 쓴다
-
-시각 하나로 조회하는 부분(`findTierBreakdownsByCategoryId`)은 이미 갈라져 있다. 갈라야 하는 것은
-그 위에서 now/before를 짝짓는 **조립 층**이다.
-
-```
-findTierBreakdownsByCategoryId(markets, 시각)      ← 공통. 지금도 public이다
-  ├─ 텍스트  시각 한 번 → CategoryChangeRateItem.withoutBefore
-  └─ 화면    시각 두 번(now, before) → 짝지어 CategoryChangeRateItem
-```
-
-`CategoryChangeRateItem.withoutBefore` 팩터리가 이미 있어서 텍스트 쪽 조립에 그대로 쓴다. 지수
-등락률도 같은 모양으로 갈린다 — 텍스트는 now 하나, 화면은 `MarketIndexChangeRate(now, before)`.
-
-**갈라야 하는 것은 "시각을 몇 개 조회하느냐"뿐이다.** 카테고리 이름·depth를 붙이는 것, 대분류만
-고르는 것, 기본 제외 구간을 빼는 것, TOP3를 자르는 것은 **한 곳에 그대로 둔다.** 5단계 5-3이
-그걸 한 곳으로 모으느라 한 작업이라, 여기서 되쪼개면 같은 규칙이 다시 두 벌이 된다. 그때
-접었던 선택지로 돌아가는 것이다.
-
-### 선행 조건 — 지수 before 작업 이후
-
-지수 before가 `getCategoryChangeRates`의 조회 구성을 한 번 더 바꾼다. 그게 끝난 뒤에 해야 무엇을
-몇 갈래로 가를지가 확정된다. 같은 파일을 동시에 건드리지 않는 이유도 있다.
-
-### 왜 지금 안 하나
-
-얻는 것이 하루 56번의 작은 조회다. 반면 5-3이 통합한 경로를 손대는 작업이라, 잘못하면 랭킹 규칙이
-다시 두 벌이 된다. 지금은 그 위험이 이득보다 크다.
-
-성능보다 **의미가 드러난다**는 쪽이 실은 더 큰 이유가 된다. 지금은 `toCategoryRankingSummary`를
-읽어도 before가 필요한지 아닌지 알 수 없다. 타입이 "이 경로는 now만 쓴다"를 말해주면 그 확인이
-필요 없어진다. 그래서 성능 때문이 아니라 구조를 정리할 때 함께 하면 된다.
-
 ---
 
 ## 시간외 구간 등락률
@@ -1297,19 +1191,13 @@ suffix가 붙는다. KRX와 NXT 중 유리한 쪽 호가를 알아서 물어다 
 없다"(`existsByMarketTypeAndSnapshotTime` 가드)는 문제를 안고 있었는데, 아무것도 안 쓰면 그 문제
 자체가 없다.
 
-#### 구획 2의 리허설이 된다
+#### 집계 제거가 먼저 가므로 단일 경로 위에 얹힌다
 
-시간외 토글을 켜면 섹터 페이지가 집계 테이블 대신 종목 행을 직접 읽는다. 그것이 정확히 구획 2가
-갈 길이다. 아래 「멀티테넌시 — 카테고리 집계 테이블을 없앤다」에 이렇게 적어뒀다.
-
-> **배포 전에 재야 한다.** 위는 코드를 읽고 세운 논증이지 측정이 아니다.
-
-시간외를 이 방식으로 만들면 **그 측정이 공짜로 된다.** 그것도 15:40~20:00이라는 트래픽 적은
-구간에서다. 느려도 시간외 토글만 굼뜨고 기존 화면은 그대로다. 구획 2에서 전일 대비를 옮길 때는
-이미 답을 알고 시작한다.
-
-대가는 하나다 — **구획 2까지 두 경로가 공존한다.** 전일 대비는 미리 계산한 값을 읽고, 시간외는
-조회 시점에 계산한다. 구획 2에서 하나로 합쳐진다.
+한때 여기에 "시간외 토글이 집계 제거의 리허설이 되고, 그때까지 전일 대비는 집계를 읽고 시간외는
+조회 시점에 계산하는 두 경로가 공존한다"고 적어뒀다. 집계 테이블 제거를 구획 1로 당기면서(맨 앞
+「구획」, 아래 「카테고리 집계 테이블을 없앤다」) 그 대가가 없어졌다. 시간외 등락률이 들어올
+시점에는 지도·섹터·요약·텔레그램이 전부 종목 행에서 조회 시점에 조립하고 있으므로, 시간외는 그
+조립에 들어가는 종목 등락률 하나를 바꾸는 일이 된다.
 
 ### 결정 2 — 15:35 **이전**은 손대지 않는다
 
@@ -1621,62 +1509,302 @@ Redis로 가면 매 조회마다 수천 건을 직렬화/역직렬화한다. 종
 
 ---
 
-## 멀티테넌시 — 카테고리 집계 테이블을 없앤다
+## 카테고리 집계 테이블을 없앤다 — 지도·섹터·요약이 한 응답을 쓴다
 
-회원가입을 도입하면 커스텀 영역(`market_map_category`, `market_map_stock_category`,
-`market_value_tier_threshold`)에 `userId`가 붙는다. 그 순간 두 가지가 터진다.
+`market_map_category_change_rate_snapshot`은 섹터 페이지를 가볍게 하려고 만든 테이블이다. 수집
+tick마다 마켓별로 커스텀 트리를 빌드해서 카테고리 × 시가총액 구간별 등락률 원시합을 저장하고,
+섹터 페이지와 텔레그램 캡션이 그걸 읽는다. **없앤다.** 지도·섹터·요약 페이지가 전부 `/api/map`
+응답 하나를 받아 프론트에서 조립하고, 텔레그램 캡션은 백엔드에서 같은 트리 빌더로 계산한다.
 
-### 터지는 것 1 — 집계 테이블이 사용자 수만큼 곱해진다
+### 왜 없애나
 
-`market_map_category_change_rate_snapshot`의 UK는
-`(market_type, category_id, market_value_tier_id, snapshot_time)`이다. **`category_id`가 이미
-사용자별이 되므로 행이 그대로 사용자 수만큼 늘어난다.**
+단일 사용자를 전제로 만든 최적화다. 사용자별 커스텀 분류가 들어오면 `category_id`가 사용자별이
+되어 집계 행과 tick당 쓰기 부하가 사용자 수만큼 곱해진다. 수집기는 누가 볼지 모르니 전원 몫을
+매 tick 계산해 저장해야 하고, 그중 대부분은 아무도 안 본다.
+
+집계 테이블이 폭발하는 이유는 **사용자 독립적인 측정값**(등락률, 시총)을 **사용자별 매핑**
+(카테고리)으로 미리 묶어뒀기 때문이다. 둘을 분리하면 사용자별로 저장할 것이 남지 않는다.
+
+| | 성격 | 크기 |
+|---|---|---|
+| `sector_price_snapshot` | 사용자 독립 | 2,740행 × tick. 지금 그대로 |
+| 종목→카테고리 매핑, 구간 경계 | 사용자별 | 수십~수천 행, 거의 안 바뀜 |
+| 집계 | 위 둘의 곱 | **저장하지 않는다** |
+
+지도 페이지는 이미 그 시각 종목 행을 전부 읽어(`findPriceByStockCode`) 트리를 만들고 있고
+문제된 적이 없다. 섹터 페이지가 읽는 시각은 now/before 둘뿐이라 지도가 하는 일을 두 번 하면
+같은 값이 나온다.
+
+### 결정 1 — 섹터 페이지는 지도 응답을 두 번 받아 프론트에서 조립한다
+
+백엔드가 카테고리별 합을 내려주는 전용 조회(지금의 `GET /api/sector`)를 남기는 안과 비교했다.
+전용 조회를 남기면 프론트를 덜 고치지만, 요약 페이지가 결정타다.
 
 ```
-카테고리 × 구간 × 마켓 × 49 tick × 사용자 수
+요약 페이지 우측 그래프  =  카테고리별 평균 등락률
+요약 페이지 좌측 박스     =  카테고리별 평균 등락률 (헤더 값, 톱픽 판정)
+지도 페이지 헤더          =  카테고리별 평균 등락률
 ```
 
-행 수보다 나쁜 것은 **쓰기 쪽**이다. 수집 tick마다 `captureCategoryChangeRateSnapshots`가 트리를
-빌드하는데, 그걸 사용자 수만큼 반복해야 한다. 5분 격자 안에서 4,300종목 트리를 N번 만든다.
-**사용자가 늘수록 수집 시간이 늘고, 어느 지점에서 5분 격자를 깨뜨린다.** 그리고 그중 대부분은
-아무도 그 화면을 안 본 사용자 몫이다.
+셋이 같은 값이고 요약·지도는 지도 응답(종목 포함)에서 프론트가 계산한다. 그 계산 유틸은 어차피
+만들어야 하고, 섹터 페이지는 그 유틸을 두 시각에 적용한 것일 뿐이다. 전용 조회를 남기면 같은
+규칙을 백엔드에 한 벌 더 두고 엔드포인트도 하나 더 유지한다. 시간외 등락률·멀티테넌시·기본 모드가
+들어올 때도 `/api/map` 한 곳만 고치면 세 페이지가 따라온다.
 
-### 터지는 것 2 — 가입할 때 2,700행을 만들어야 한다
+```
+GET /api/map?market&isCustom[&snapshotTime]
+                 │
+                 ├─ 지도 페이지   최신 1회
+                 ├─ 요약 페이지   최신 1회
+                 ├─ 섹터 페이지   최신 1회 + (최신 snapshotTime − beforeMinutes) 1회
+                 └─ 텔레그램 캡션 백엔드에서 같은 트리 빌더로
+```
+
+- `snapshotTime`이 없으면 최신, 있으면 그 시각에 **정확히 일치**하는 스냅샷. 없으면 빈 응답이고
+  가까운 시각으로 대체하지 않는다. 지금 섹터 페이지의 before 규칙("before 시각에 스냅샷이 없으면
+  그 카테고리는 before 없음")이 그대로 유지된다
+- 섹터 페이지는 순차 2회다. 첫 응답의 `snapshotTime`을 보고 before 시각을 정한다. 프론트가 "지금
+  시각을 5분 격자로 내림 − beforeMinutes"로 추측해서 병렬로 보내는 안은 수집이 늦거나 구멍이 나면
+  어긋나므로 택하지 않았다. 60초 재조회에서는 같은 tick이면 before 키가 이미 react-query 캐시에
+  있고, tick이 바뀌어도 before(t)는 15분 전의 now(t)였던 것이라 대부분 있다. 더 걸리는 건 첫 진입
+  한 번이다
+- 기본 모드(`isCustom=false`)는 지도가 이미 지원하므로 섹터도 공짜로 따라온다. 계속 미뤄왔던
+  일이다. 기본 모드 노드는 `categoryId`가 전부 0이라 프론트 키를 `categoryName`으로 잡는다
+  (커스텀 트리는 이름이 DB UK로 유일, 기본 모드는 group-by 결과라 유일)
+- 대가는 섹터 페이지 페이로드가 카테고리 수십 행에서 종목 2,740개 × 2로 커지는 것 하나다. 단일
+  사용자에선 무시할 수준이고, 나중에 문제가 되면 카테고리 합만 내려주는 경량 응답을 위에 얹으면
+  된다. 이 결정을 되돌리는 것이 아니다
+
+### 결정 2 — `tierBreakdown`은 지도 응답에서도 뺀다
+
+지도 응답의 `MarketMapCategoryNode.tierBreakdown`도 이 테이블에서 온다. 카테고리별로 구간마다
+`Σ(등락률×시총)`, `Σ시총`, `Σ등락률`, 종목 수를 미리 더한 것인데, 같은 응답에 종목 하나하나가
+`changeRate`·`totalMarketValue`·`marketValueTier`를 달고 전부 실려 있다. 프론트가 자손 종목을
+모아 구간으로 거르고 더하면 같은 숫자가 나온다. 실제로 그 코드가 이미 있다.
+`MarketMapCategorySection`의 `localWeightedAvgChangeRate`/`localSimpleAvgChangeRate`가 폴백으로
+그 계산을 한다. 백엔드가 미리 더해 보낼 이유가 없다.
+
+덤으로 어긋남 하나가 사라진다. `tierBreakdown`은 수집 시점 값이라 어드민이 종목을 다른
+카테고리로 옮기면 다음 tick까지 items(현재 매핑)와 `tierBreakdown`(옛 매핑)이 다른 카테고리를
+가리킨다.
+
+프론트 `useFilteredMarketMapTree.filterNodes`가 `combineTierBreakdowns(node.tierBreakdown)`으로
+채우던 평균을 items에서 계산하도록 바꾼다. **같은 PR이어야 한다.** 따로 하면 그 사이 업종 톱픽이
+그 값을 못 받아 전부 빠진다.
+
+### 결정 3 — 종목 캐시 한 층. 수집기가 넣고, 없으면 읽어서 넣는다
+
+비싼 건 그 시각의 종목 행 2,740개를 DB에서 읽는 것 하나다. 그건 사용자와 무관하다. 키움에서 온
+값이라 모두에게 같다. 카테고리별 덧셈은 메모리에서 밀리초다.
+
+```
+키     (market, snapshotTime)
+값     가공 전 가격 행 — 종목코드·현재가·등락률·시각
+적재   수집기가 저장 트랜잭션이 커밋된 뒤 넣는다 (run("지수기여도랭킹")이 성공을 반환한 다음)
+폴백   읽을 때 없으면 DB에서 읽어 넣는다. 재시작 직후와 TTL 만료 뒤만 탄다
+TTL    2시간, expireAfterWrite
+구현   CacheService<T> + @Cacheable, Caffeine
+```
+
+- 키는 마켓 단위다. `ALL_STOCK`은 둘을 이어붙여 쓴다. 올스탁 키를 따로 두면 같은 행이 두 벌
+  들어간다
+- 최대 크기는 2시간 안의 tick 24개 × 2,740행 ≈ 66,000행, 행당 100바이트 안팎이라 7MB 안쪽.
+  누가 무엇을 보든 이 위로 안 올라간다. 사용자 수와 곱해지는 건 없다
+- 시총·구간 라벨·제외 종목 필터는 읽을 때 붙인다. 캐시에는 순수 가격 행만 둔다. 그래야 어드민이
+  구간 경계나 제외 목록을 바꿔도 캐시를 안 비워도 된다
+- 과거 시각의 값은 안 변하므로 무효화가 없다. TTL은 정확성이 아니라 메모리 때문이다.
+  beforeMinutes 최대가 60이라 1시간이면 충분한데, 15:30 종가 항목은 저녁까지 불리므로 2시간으로
+  잡았다. 만료된 뒤 부르면 폴백으로 한 번 읽어 다시 들어온다
+- 커밋 뒤에 넣는 이유: 트랜잭션 안에서 넣으면 롤백됐을 때 DB에 없는 시각이 캐시에 남는다.
+  마켓별로 따로 넣으니 한 마켓만 실패한 tick은 그 마켓만 빠지고, `findLatestCommonSnapshotTime`이
+  DB 기준이라 라이브 조회가 그 시각을 부르지도 않는다
+- 사용자별 결과 캐시 `(userId, market, snapshotTime, isCustom)`는 지금 안 둔다. 단일 사용자에서는
+  트리 편집마다 비우는 코드만 늘고 얻는 게 없다. 구획 3에서 `userId`와 같이 붙인다
+- Redis로 옮기는 건 인스턴스가 둘 이상이거나 재시작에도 캐시가 살아야 할 때다. 지금은 컨테이너
+  하나라 Caffeine이 빠르다. `CacheManager` 구현만 갈아끼우면 되도록 위 패턴을 지킨다
+
+### 결정 4 — 텔레그램은 백엔드에서 같은 트리 빌더로 계산한다
+
+캡션 셋(`getTopCategoryRankings`, `getTopCategoryRankingsByChangeRate`,
+`getMergedTopCategoryRanking`)이 전부 이 테이블을 읽는다. 발송기와 `CategoryRankingTextBuilder`는
+`MarketMapQueryService`만 의존하고 리포지토리를 안 보므로, 그 세 메서드 내부만 트리 items에서
+합치는 방식으로 바꾸면 발송기와 텍스트 빌더는 안 바뀐다(PR #109 리뷰에서 "랭킹 확정은
+QueryService가 끝내고 빌더는 포맷만"으로 정리해둔 경계).
+
+`ALL_STOCK`은 트리를 한 번 빌드하고 items를 `StockInfo.marketType`으로 나눠 (마켓, 카테고리,
+구간)별로 합친다. 마켓마다 따로 빌드하면 now/before에 4번이다.
+
+"카테고리 아래 종목을 모아 구간으로 거르고 더한다"는 규칙이 프론트(세 페이지)와 백엔드(캡션)에
+한 벌씩 남는다. 한때 「랭킹 규칙이 프론트와 백엔드에 따로 있다」를 백로그에 두고 백엔드가 확정해
+내려주는 쪽으로 풀려 했는데, 페이지들이 종목 단위 응답을 받기로 하면서 그 방향이 닫혔다. 규칙이
+20줄짜리 덧셈 하나라 두 벌을 감수한다.
+
+### 수집기와 발송 게이트
+
+`CollectionScheduler.captureCategoryChangeRateSnapshots`와 `lastChangeRateSuccess`를 지운다.
+발송 게이트는 `lastIndexContributionSuccess` 하나가 된다. 섹터 발송은 이미 그 값으로 실패 알림과
+갈리므로 `sectorImageAvailable`이 항상 true가 되고, 맵 발송은 `lastIndexContributionSuccess`가
+그대로 캡션 여부가 된다. 두 발송기의 `send(dataTime, sectorImageAvailable)` 인자를 뺀다. "맵
+이미지는 등락률 스냅샷과 무관하니 가두지 않는다"는 주석과 `getMergedTopCategoryRanking`의 "이
+결과로 캡처 마켓을 정하면 안 된다" 경고도 근거가 사라지므로 같이 정리한다.
+
+카테고리 버전 복원 직후 "스냅샷 행이 없어진 categoryId를 가리킬 수 있어 다음 tick까지 뺀다"던
+`decorateRanking`의 처리도 조회 시점 계산이면 문제 자체가 없다.
+
+### PR 경계
+
+한 번에 다 하면 놓친다. 셋으로 나눈다.
+
+**PR 1 백엔드**
+- 수집기 저장 제거, `lastChangeRateSuccess` 제거, 발송기 인자 제거
+- `/api/map`에 `snapshotTime` 파라미터
+- 종목 캐시 (수집기 적재 + 읽기 폴백)
+- 텔레그램 세 메서드를 트리 기반으로. 원시합 계산은 `collectSnapshots` + `computeRawSums`를 저장
+  없이 새 클래스로 옮긴다
+- `MarketMapCategoryNode.tierBreakdown`, `CategoryTierBreakdown`, `getCategoryChangeRates`,
+  `GET /api/sector`(PR #116에서 방금 분리한 `SectorController`) 제거
+- `SnapshotRetentionScheduler`에서 이 테이블 단계 제거
+- `MarketMapCategoryChangeRateSnapshotService`는 저장·조회·정리 메서드만 남은 채 호출부 없이 둔다
+
+**PR 1 프론트**
+- 섹터 페이지를 `useMarketMap` 두 번으로. `useCategoryChangeRates`·`combineTierBreakdowns` 제거
+- 카테고리 평균 유틸을 공용으로 끌어올려 `filterNodes`·업종 톱픽·섹터 그래프가 같이 쓴다
+- 기본 모드 키를 `categoryName`으로
+
+프론트 PR 1은 요약 페이지 개편과 같은 시기에 한다(사용자 결정). 두 작업이 같은 유틸을 만든다.
+백엔드와 프론트 PR 1은 같이 배포해야 한다. 백엔드만 나가면 섹터 페이지의 `/api/sector`가
+404다. 순서는 프론트 먼저. 두 번 조회하는 코드는 `snapshotTime`을 모르는 옛 백엔드에서도 최신을
+두 번 받아 동작은 한다.
+
+**PR 2** (따로, 나중에)
+- `MarketMapCategoryChangeRateSnapshotService`·엔티티·리포지토리·QueryDSL 구현체·보존 선정 테스트
+  삭제
+- 커스텀 테이블 이름 정리 (아래 「커스텀 테이블 이름을 `custom_*`으로 바꾼다」)
+- 둘 다 Flyway `V2`로 한 번에. `V1`을 고치는 게 아니라 새 파일을 추가하는 것이라
+  `operations.md`의 checksum 불일치 절차는 해당 없다
+
+### 커스텀 테이블 이름을 `custom_*`으로 바꾼다
+
+사용자가 커스텀하는 테이블은 여섯인데 접두사가 `market_map_`이다. 로그인 뒤 `userId`가 붙을
+대상이 "지도의 설정"이 아니라 "사용자의 분류"이고, 그 분류를 지도·섹터·요약이 다 쓴다. 지도만
+가리키는 이름이 안 맞는다. `category`도 화면과 API에서 부르는 이름인 `sector`로 맞춘다
+(위 「`/api/admin/` 을 `/api/custom/` 으로 바꾼다」와 같은 판단).
+
+| 지금 | 바뀐 뒤 | 무엇을 커스텀하나 |
+|---|---|---|
+| `market_map_category` | `custom_sector` | 섹터 트리(대·중·소분류). `is_excluded`가 섹터 제외 |
+| `market_map_stock_category` | `custom_stock_sector` | 종목 → 섹터 배정, 별칭 |
+| `market_map_category_version` | `custom_sector_version` | 트리 버전 저장·복원 |
+| `market_map_scale_threshold` | `custom_scale_threshold` | 등락률 범례바 색 구간 |
+| `market_value_tier_threshold` | `custom_value_tier_threshold` | 시가총액 구간 경계. 접두사만 맞춘다 |
+| `market_map_excluded_stock` | **삭제** | 아래 |
+| `market_map_category_change_rate_snapshot` | **삭제** | 이 절의 집계 테이블 |
+
+`market_map_excluded_stock`은 죽은 테이블이다. 등록·해제·목록·전체삭제 API는 있는데 지도 트리를
+만드는 경로(`filterCandidates`, `buildCategoryTree`)가 이 테이블을 안 본다. 프론트도
+`api/marketMap.ts`에 호출 함수만 있고 어느 페이지도 안 부른다. 실제로 동작하는 섹터 제외는
+`market_map_category.is_excluded`다(우클릭 "이 섹터 제외" → `excluded-categories/{id}`). 테이블과
+API, 엔티티, 프론트 함수를 같이 지운다.
+
+엔티티·컨트롤러·서비스·DTO·패키지(`domain/marketmap`)·프론트 파일명(`MarketMapAdminPage`,
+`useMarketMapAdmin` 등)도 `category` → `sector`, `marketMap` → `custom`으로 따라간다.
+`MarketMapController`는 지도·요약·섹터를 다 받치므로 그때 같이 이름을 정한다. 프론트 라우트는
+PR #59에서 이미 `/admin/sector`, `/admin/stock`으로 갔다.
+
+**rename은 삭제 후 재생성이 아니다.** PostgreSQL의 `ALTER TABLE … RENAME TO`는 카탈로그의 이름만
+바꾸는 메타데이터 작업이라 데이터를 옮기지 않고 행 수와 무관하게 즉시 끝난다. 인덱스·제약·FK·
+시퀀스는 테이블을 OID로 참조해서 이름을 바꿔도 그대로 붙어 있다. DDL이 트랜잭션 안에서 돌고
+Flyway가 마이그레이션 하나를 한 트랜잭션으로 실행하므로 중간에 실패하면 전체가 롤백된다.
+되돌리는 것도 `RENAME` 한 번이라 CTAS 백업은 필요 없다. 배포 전 `pg_dump` 한 번이면 된다.
+
+```sql
+ALTER TABLE market_map_category            RENAME TO custom_sector;
+ALTER TABLE market_map_stock_category      RENAME TO custom_stock_sector;
+ALTER TABLE market_map_category_version    RENAME TO custom_sector_version;
+ALTER TABLE market_map_scale_threshold     RENAME TO custom_scale_threshold;
+ALTER TABLE market_value_tier_threshold    RENAME TO custom_value_tier_threshold;
+DROP TABLE market_map_excluded_stock;
+DROP TABLE market_map_category_change_rate_snapshot;
+```
+
+제약·인덱스·시퀀스 이름(`pk_market_map_category`, `uk_market_map_category_name`,
+`market_map_category_id_seq` 등)은 안 바꿔도 동작하지만 옛 이름이 남아 헷갈리니
+`ALTER TABLE … RENAME CONSTRAINT`, `ALTER INDEX … RENAME`, `ALTER SEQUENCE … RENAME`으로 같이
+맞춘다. 전부 메타데이터 변경이다.
+
+조심할 것은 DB가 아니라 앱 쪽이다. 엔티티 `@Table(name=…)`과 마이그레이션이 같은 배포에 나가야
+한다. Flyway가 앱 기동 시 먼저 도니 같은 PR에 넣으면 자연히 맞는다.
+
+### 확인해야 할 것
+
+- 렌더러가 섹터 페이지를 캡처할 때 페이지 로드 대기 시간. 첫 요청이 캐시 miss면 DB를 두 번 읽는다
+- 텔레그램 08:10 첫 발송. before가 없어 `getTopCategoryRankingsByChangeRate` 폴백을 타는 경로가
+  그대로 살아야 한다
+- 배포 뒤 종목 캐시 hit/miss와 `/api/map` 응답 시간 로그. 한때 "배포 전에 지도·섹터 응답 시간을
+  잰다"고 적었는데, 테이블을 지우는 게 아니라 호출부만 끊는 것이라 되돌리기 쉬워 배포 뒤 측정으로
+  바꿨다
+
+### 검토했고 택하지 않은 안
+
+**A. 기본 트리만 집계하고 커스텀한 사용자는 실시간.** 경로가 둘로 갈려 같은 화면이 미묘하게 다른
+값을 내는 버그가 생긴다.
+
+**B. 집계 테이블에 `userId`를 붙이고 감수.** 쓰기 쪽이 사용자 수에 비례해 커지는 구조를 남긴다.
+
+**C. materialized view / 야간 배치 재계산.** 같은 곱셈을 시점만 미룬다. 장중 갱신도 못 한다.
+
+**D. 백엔드가 카테고리별 합을 내려주는 섹터 전용 조회를 유지.** 위 「결정 1」. 요약 페이지까지
+지도 응답을 쓰기로 하면서 닫혔다.
+
+**E. 요청 시점에만 캐시 적재(수집기 워밍 없이).** 수집기가 방금 저장한 행을 이미 들고 있어 넣는
+비용이 거의 없고, 사용자 무관 데이터라 사용자 수와 곱해지지 않는다. 첫 요청 miss와 tick 경계
+동시 miss가 같이 사라진다. 다만 재시작 뒤를 위해 읽기 폴백은 남긴다.
+
+---
+
+## 요약 페이지 — 지도 응답 위에 그린다
+
+지금 요약 페이지(`MarketSummaryPage`)는 `/api/summary`로 시장 개요·투자자 매매·프로그램 매매
+등을 받아 섹션 여러 개를 쌓는다. 이걸 지도 응답 하나로 그리는 두 구획 레이아웃으로 바꾼다.
+
+```
+┌────────────────────────────┬──────────────────┐
+│ 6                          │ 4                │
+│ 지도 페이지와 같은 트리맵    │ 섹터 페이지의     │
+│ 종목 박스 없이 카테고리 박스만│ 등락률 그래프     │
+│ 지정한 depth까지            │ (변화율은 나중에) │
+│ 업종 톱픽 강조 동일          │                  │
+│ 높이 100%                   │ 높이 100%         │
+└────────────────────────────┴──────────────────┘
+```
+
+- 좌측은 지도 페이지 트리맵과 같은 크기·형태로, `MarketMapBox`(종목) 없이 `MarketMapCategorySection`
+  만으로 구성한다. 어느 depth까지 보여줄지는 설정(업종 분류 레벨)을 따른다
+- 톱픽 카테고리는 지도와 같이 강조하고, 박스 안에 어느 섹터인지·몇 % 바뀌었는지 크게 표시하는
+  것은 프론트 세부라 그때 정한다
+- 우측은 섹터 페이지의 "현재" 그래프. 변화율(before) 그래프는 당장 넣지 않는다
+- 백엔드 변경은 없다. `/api/map` 최신 1회로 좌우 둘 다 그린다. 우측 그래프의 카테고리별 평균은
+  좌측 헤더에 찍는 값과 같은 유틸에서 나온다
+
+기존 `/api/summary` 섹션들(투자자 매매, 프로그램 매매, 지수 기여도 등)을 어디로 보낼지는 안
+정했다. 이 페이지에서 빼는 것인지 아래로 내리는 것인지 착수할 때 정한다.
+
+구획 1 프론트 PR과 같은 시기에 한다. 섹터 페이지를 지도 응답 위로 옮기는 작업과 같은 유틸을
+만들기 때문이다.
+
+---
+
+## 멀티테넌시 — `userId`와 sparse override
+
+회원가입을 도입하면 커스텀 테이블 다섯(위 「커스텀 테이블 이름을 `custom_*`으로 바꾼다」의
+표)에 `userId`가 붙는다. 집계 테이블이 사용자 수만큼 곱해지는 문제는 위 「카테고리 집계 테이블을
+없앤다」로 먼저 풀었다. 남는 건 가입 비용이다.
+
+### 터지는 것 — 가입할 때 2,700행을 만들어야 한다
 
 `market_map_stock_category`는 지금 **전 종목 미러**다. `MarketMapCategoryService.syncStockCategories`가
 `StockInfoSyncedEvent`를 받아 신규 종목마다 행을 만든다. 사용자별이 되면 가입 시점에 2,700행을
 한 번에 만들어야 하고, 신규 상장이 있을 때마다 전 사용자에게 뿌려야 한다.
-
-### 결론 — 집계 테이블을 없애고 조회 시점에 계산한다
-
-**근거는 "이미 그러고 있다"는 것이다.** 지도 페이지(`buildCustomMarketMap`)는 그 시각 종목 행을
-전부 읽어서(`findPriceByStockCode`, 약 4,300행) 트리를 만든다. 집계 테이블은 "섹터 페이지가
-무거워지지 않게" 만든 것인데, **지도 페이지는 그 무거운 경로를 매번 타고 있고 문제가 된 적이 없다.**
-
-그리고 섹터 페이지가 읽는 시각은 **2개(now, before)뿐이다.** 시계열이 아니다
-(`findRankingForMarkets`, 엔드포인트는 `/category-change-rates` 하나). 지도가 하는 일을 두 번 하고
-그 위에 group-by 한 번이면 같은 값이 나온다.
-
-> **배포 전에 재야 한다.** 위는 코드를 읽고 세운 논증이지 측정이 아니다. 테이블을 지우는 것은
-> 되돌리기 어려우므로, `getCustomMarketMap`과 `getCategoryChangeRates`의 실제 응답 시간을 먼저
-> 비교한다. 지도 쪽이 이미 느리면 이 논증은 "섹터도 같이 느려진다"가 된다.
-
-### 미리 계산하지 않는 것의 진짜 이득
-
-집계 테이블이 폭발하는 이유는 **사용자 독립적인 측정값**(등락률, 시총)을 **사용자별 매핑**(카테고리)으로
-미리 묶어뒀기 때문이다. 둘을 분리하면 사용자별로 저장할 것이 남지 않는다.
-
-| | 성격 | 크기 |
-|---|---|---|
-| `sector_price_snapshot` | 사용자 독립 | 4,300행 × 49 tick — 지금 그대로 |
-| 종목→카테고리 매핑, 구간 경계 | 사용자별 | 수십~수천 행, 거의 안 바뀜 |
-| 집계 | 위 둘의 곱 | **저장하지 않는다** |
-
-집계가 필요하면 **(userId, snapshotTime) 키로 메모리 캐시**에 둔다. 그러면 **아무도 안 보는
-사용자의 집계는 계산되지 않는다.** 지금 구조는 아무도 안 보는 사용자 몫도 하루 49번 계산해서
-저장한다. 사용자 수에 비례하던 비용이 **실제 조회 수**에 비례하게 바뀐다.
-
-텔레그램 발송은 트리 하나(시스템 기본 또는 소유자 것)만 쓰므로 부하가 지금과 같다.
 
 ### 가입 비용 — 미러 대신 sparse override
 
@@ -1720,68 +1848,14 @@ Map<String, Long> resolveCategoryByStockCode(Long userId)
 
 대가: "이 종목이 어느 카테고리인가"를 DB만 보고 알 수 없다. 관리 쿼리가 불편해진다.
 
-### 검토했고 택하지 않은 안
-
-**A. 기본 트리만 집계하고 커스텀한 사용자는 실시간.** 경로가 둘로 갈려 같은 화면이 미묘하게 다른
-값을 내는 버그가 생긴다. 지금 「결정 1」에서 피하려는 것과 같은 종류다.
-
-**B. 집계 테이블에 `userId`를 붙이고 감수.** 위 「터지는 것 1」 그대로다. 쓰기 쪽이 사용자 수에
-비례해 커지는 구조를 남긴다.
-
-**C. materialized view / 야간 배치 재계산.** 같은 곱셈을 시점만 미룬다. 장중 갱신도 못 한다.
-
-### 텔레그램은 이 범위에 들어오지 않는다
-
-텔레그램 캡션 셋도 전부 이 집계 테이블을 읽는다.
-
-```
-섹터 평상시   getTopCategoryRankings             ┐
-섹터 08:10    getTopCategoryRankingsByChangeRate ├→ market_map_category_change_rate_snapshot
-맵 3건        getMergedTopCategoryRanking        ┘
-```
-
-**그런데 전부 간접적으로 읽는다.** 발송기 셋의 의존성에 리포지토리가 하나도 없다.
-
-| | 의존 |
-|---|---|
-| `SectorTelegramReportSender` | `MarketMapQueryService` + 화면·텔레그램 클라이언트 |
-| `MarketMapAlbumReportSender` | 같음 |
-| `CategoryRankingTextBuilder` | **없음.** DTO만 받아 문자열로 만든다 |
-
-그래서 바뀌는 것은 **`MarketMapQueryService`의 그 세 메서드 내부**뿐이다. `CategoryRankingSummary`와
-`List<TopCategoryItem>`을 돌려주는 계약이 그대로면 **발송기도 텍스트 빌더도 한 줄도 안 바뀐다.**
-(PR #109 리뷰에서 "랭킹 확정은 QueryService가 끝내고 빌더는 포맷만"으로 정리해둔 경계가 여기서
-값을 한다.)
-
-### 부하는 오히려 준다 — 성격이 바뀔 뿐이다
-
-집계 테이블이 없어지면 **그것을 만드는 일도 같이 없어진다.**
-
-```
-지금      수집 tick마다 마켓별 트리 빌드 + 저장 — 하루 145 tick × 2 마켓 ≈ 290회
-구획 2    텔레그램 101회 + 실제 화면 조회 수만큼만 계산
-```
-
-텔레그램은 tick당 `ALL_STOCK`으로 한 번만 부르고 두 마켓을 함께 받으므로 계산도 한 번이다.
-
-다만 **무거운 계산의 자리가 옮겨간다.** 지금은 수집 tick 안이고, 그 뒤엔 발송·조회 시점이다. 발송은
-어차피 수집 직후 같은 호출 안에서 순차 실행되니(`CollectionScheduler`) 같은 자리지만, **화면 조회는
-사용자 요청 시간에 직접 얹힌다.** 위 「배포 전에 재야 한다」가 재려는 것이 이것이다.
-
 ### 순서 (미확정)
 
-1. 응답 시간 측정 — 지도 페이지 대 섹터 페이지
-2. 집계 테이블 제거, 섹터 페이지를 조회 시점 계산으로
-3. `market_map_stock_category`를 sparse override로
-4. 세 테이블에 `userId` 추가
-5. 과거 날짜 조회 — 3·4와 같은 조회 경로를 건드리므로 함께
-
-> 시간외 등락률은 **구획 1에서 수집 시점 계산으로 먼저 나간다.** 한때 "집계를 먼저 없애면 조회 시점
-> 계산이 되어 되돌릴 수 있다"는 이유로 순서를 뒤집을지 검토했는데, 정리 배치가 15:40 이후 행을
-> 10일 뒤 지우므로 되돌릴 수 없는 범위가 작다고 보고 그대로 두기로 했다. 맨 앞 「구획」을 본다.
+1. `market_map_stock_category`를 sparse override로
+2. 세 테이블에 `userId` 추가
+3. 사용자별 결과 캐시 `(userId, market, snapshotTime, isCustom)`. 위 「결정 3」에서 미뤄둔 것
+4. 과거 날짜 조회. 2·3과 같은 조회 경로를 건드리므로 함께
 
 ---
-
 ## 과거 날짜 조회 (달력)
 
 상단 스냅샷 시각 옆에 달력 아이콘을 이미 붙여뒀다(`MarketMapIcons.CalendarIcon`,
@@ -1819,12 +1893,9 @@ Map<String, Long> resolveCategoryByStockCode(Long userId)
 
 ### 백엔드 변경 범위
 
-`GET /api/market-map`이 지금 `market`과 `isCustom`만 받는다. **날짜 파라미터 자체가 없다.**
-`MarketMapQueryService.getDefaultMarketMap`/`getCustomMarketMap`도 `findLatestCommonSnapshotTime`으로
-"최신"만 집는다. 날짜를 받아 그 날짜의 종가 시각으로 해석하는 경로를 새로 낸다.
-
-`/market-map/category-change-rates`는 이미 시각을 인자로 받으므로(`findRankingForMarkets`) 그쪽은
-가볍다.
+구획 1이 `GET /api/map`에 `snapshotTime`을 붙이면 그 위에 "날짜 → 그날 종가 시각" 해석 한 겹만
+더하면 된다. 날짜를 받아 위 조회 규칙으로 시각을 고르고 그 시각으로 같은 경로를 탄다. 섹터·요약
+페이지도 같은 `/api/map`을 쓰므로 세 페이지가 한 번에 과거 날짜를 지원한다.
 
 ### 선행 조건
 

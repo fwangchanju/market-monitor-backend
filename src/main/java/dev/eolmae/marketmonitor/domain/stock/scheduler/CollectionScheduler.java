@@ -8,10 +8,9 @@ import dev.eolmae.marketmonitor.common.util.KstClock;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryChangeRateSnapshotService;
 import dev.eolmae.marketmonitor.domain.notification.listener.EscalationPublisher;
 import dev.eolmae.marketmonitor.domain.notification.schedule.TelegramSendSchedule;
-import dev.eolmae.marketmonitor.domain.notification.service.MarketMapAlbumReportSender;
 import dev.eolmae.marketmonitor.domain.notification.service.MarketMapTelegramReportSender;
-import dev.eolmae.marketmonitor.domain.notification.service.SectorTelegramReportSender;
 import dev.eolmae.marketmonitor.domain.notification.service.TelegramCollectionFailureNotifier;
+import dev.eolmae.marketmonitor.domain.notification.service.TelegramReportDispatcher;
 import dev.eolmae.marketmonitor.domain.stock.collector.HoldingsSyncService;
 import dev.eolmae.marketmonitor.domain.stock.collector.IndexContributionRankingCollector;
 import dev.eolmae.marketmonitor.domain.stock.collector.IntradayInvestorRankingCollector;
@@ -53,8 +52,7 @@ public class CollectionScheduler {
     private final MarketMapQueryService marketMapQueryService;
     private final MarketMapCategoryChangeRateSnapshotService marketMapCategoryChangeRateSnapshotService;
     private final MarketMapTelegramReportSender marketMapTelegramReportSender;
-    private final SectorTelegramReportSender sectorTelegramReportSender;
-    private final MarketMapAlbumReportSender marketMapAlbumReportSender;
+    private final TelegramReportDispatcher telegramReportDispatcher;
     private final TelegramCollectionFailureNotifier telegramCollectionFailureNotifier;
     private final TelegramSendSchedule telegramSendSchedule;
     private final EscalationPublisher escalationPublisher;
@@ -112,9 +110,8 @@ public class CollectionScheduler {
             if (!lastIndexContributionSuccess) {
                 run("데이터수집실패알림", () -> telegramCollectionFailureNotifier.notify(dataTime));
             } else {
-                boolean sectorImageAvailable = lastChangeRateSuccess;
                 // 마켓별로 섹터 이미지 1장 + 캡션 1개씩 각각 발송.
-                run("섹터텔레그램발송", () -> sectorTelegramReportSender.send(dataTime, sectorImageAvailable));
+                run("섹터텔레그램발송", () -> telegramReportDispatcher.sendSector(dataTime, lastChangeRateSuccess));
             }
         }
 
@@ -122,8 +119,7 @@ public class CollectionScheduler {
         // 카테고리 등락률 스냅샷과 무관해서 lastIndexContributionSuccess로 가두지 않는다 — 실패해도
         // 맵은 그대로 보내고, 캡션(카테고리 등락률 기반)만 lastChangeRateSuccess에 따라 붙이거나 뺀다.
         if (telegramSendSchedule.dueForMap(snapshotTime, shouldCollect)) {
-            boolean sectorImageAvailable = lastChangeRateSuccess;
-            run("맵텔레그램발송", () -> marketMapAlbumReportSender.send(dataTime, sectorImageAvailable));
+            run("맵텔레그램발송", () -> telegramReportDispatcher.sendMap(dataTime, lastChangeRateSuccess));
         }
     }
 

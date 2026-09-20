@@ -6,12 +6,10 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.retry.annotation.EnableRetry;
 import org.springframework.scheduling.annotation.EnableAsync;
-import org.springframework.scheduling.annotation.EnableScheduling;
 
 @EnableAsync
 @EnableRetry
 @EnableCaching
-@EnableScheduling
 @SpringBootApplication
 @ConfigurationPropertiesScan
 public class MarketMonitorApplication {

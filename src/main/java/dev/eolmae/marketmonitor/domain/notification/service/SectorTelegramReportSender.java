@@ -125,7 +125,7 @@ public class SectorTelegramReportSender {
     }
 
     private String sectorPath(Market market, int beforeMinutes, AverageMode averageMode, boolean sectorFilter) {
-        return RenderTarget.CATEGORY_CHANGE_RATE.path() + "/" + RenderTarget.marketSegment(market.name())
+        return RenderTarget.CATEGORY_CHANGE_RATE.path() + "/" + RenderTarget.marketSegment(market)
                 + "?beforeMinutes=" + beforeMinutes
                 + "&avgMode=" + averageMode.queryValue()
                 + "&sectorFilter=" + sectorFilter;

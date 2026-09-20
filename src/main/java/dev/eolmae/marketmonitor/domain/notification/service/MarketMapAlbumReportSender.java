@@ -61,7 +61,10 @@ public class MarketMapAlbumReportSender {
      */
     public void sendMapSinglePage(LocalDateTime dataTime, MarketQuery query, boolean sectorAvailable) {
         List<byte[]> images = screenshotClient.capture(
-                mapPath(query, telegramProperties.averageMode(), telegramProperties.sectorFilter()),
+                mapPath(
+                        RenderTarget.marketSegment(query),
+                        telegramProperties.averageMode(),
+                        telegramProperties.sectorFilter()),
                 RenderTarget.MARKET_MAP.selector());
         if (images.isEmpty()) {
             throw new EscalateException(ErrorCode.SCREENSHOT_CAPTURE_FAILED);
@@ -89,10 +92,11 @@ public class MarketMapAlbumReportSender {
 
     private List<byte[]> capture(List<Market> markets, AverageMode averageMode, boolean sectorFilter) {
         return markets.stream()
-                .flatMap(
-                        market -> screenshotClient
-                                .capture(mapPath(market, averageMode, sectorFilter), RenderTarget.MARKET_MAP.selector())
-                                .stream())
+                .flatMap(market -> screenshotClient
+                        .capture(
+                                mapPath(RenderTarget.marketSegment(market), averageMode, sectorFilter),
+                                RenderTarget.MARKET_MAP.selector())
+                        .stream())
                 .toList();
     }
 
@@ -105,14 +109,8 @@ public class MarketMapAlbumReportSender {
         telegramClient.sendMediaGroup(telegramProperties.chatId(), images, caption);
     }
 
-    private String mapPath(Market market, AverageMode averageMode, boolean sectorFilter) {
-        return RenderTarget.MARKET_MAP.path() + "/" + RenderTarget.marketSegment(market.name())
-                + "?avgMode=" + averageMode.queryValue()
-                + "&sectorFilter=" + sectorFilter;
-    }
-
-    private String mapPath(MarketQuery query, AverageMode averageMode, boolean sectorFilter) {
-        return RenderTarget.MARKET_MAP.path() + "/" + RenderTarget.marketSegment(query.name())
+    private String mapPath(String marketSegment, AverageMode averageMode, boolean sectorFilter) {
+        return RenderTarget.MARKET_MAP.path() + "/" + marketSegment
                 + "?avgMode=" + averageMode.queryValue()
                 + "&sectorFilter=" + sectorFilter;
     }

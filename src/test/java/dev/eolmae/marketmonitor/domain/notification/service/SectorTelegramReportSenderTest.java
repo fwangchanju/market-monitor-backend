@@ -264,7 +264,8 @@ class SectorTelegramReportSenderTest {
                         MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(List.of(kospiFallback, kosdaqFallback));
 
-        when(screenshotClient.capture(Mockito.contains("/sector/kospi"), Mockito.any())).thenReturn(List.of(kospiImage));
+        when(screenshotClient.capture(Mockito.contains("/sector/kospi"), Mockito.any()))
+                .thenReturn(List.of(kospiImage));
         when(screenshotClient.capture(Mockito.contains("/sector/kosdaq"), Mockito.any()))
                 .thenReturn(List.of(kosdaqImage));
 

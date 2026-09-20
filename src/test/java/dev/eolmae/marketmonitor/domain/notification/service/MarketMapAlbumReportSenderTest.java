@@ -24,8 +24,8 @@ import org.mockito.Mockito;
 class MarketMapAlbumReportSenderTest {
 
     private static final List<LocalTime> MAP_SEND_TIMES = List.of(LocalTime.of(8, 15));
-    private static final String KOSPI_MAP_PATH = "/market-map?market=KOSPI&avgMode=simple&sectorFilter=true";
-    private static final String KOSDAQ_MAP_PATH = "/market-map?market=KOSDAQ&avgMode=simple&sectorFilter=true";
+    private static final String KOSPI_MAP_PATH = "/map/kospi?avgMode=simple&sectorFilter=true";
+    private static final String KOSDAQ_MAP_PATH = "/map/kosdaq?avgMode=simple&sectorFilter=true";
     private static final String MAP_SELECTOR = "[data-captureid='market-map-capture']";
 
     private final ScreenshotClient screenshotClient = Mockito.mock(ScreenshotClient.class);
@@ -122,8 +122,8 @@ class MarketMapAlbumReportSenderTest {
                 weightedProperties,
                 categoryRankingTextBuilder,
                 marketMapQueryService);
-        String kospiWeightedPath = "/market-map?market=KOSPI&avgMode=weighted&sectorFilter=false";
-        String kosdaqWeightedPath = "/market-map?market=KOSDAQ&avgMode=weighted&sectorFilter=false";
+        String kospiWeightedPath = "/map/kospi?avgMode=weighted&sectorFilter=false";
+        String kosdaqWeightedPath = "/map/kosdaq?avgMode=weighted&sectorFilter=false";
         when(screenshotClient.capture(kospiWeightedPath, MAP_SELECTOR)).thenReturn(List.of(kospiImage));
         when(screenshotClient.capture(kosdaqWeightedPath, MAP_SELECTOR)).thenReturn(List.of(kosdaqImage));
         when(marketMapQueryService.getMergedTopCategoryRanking(

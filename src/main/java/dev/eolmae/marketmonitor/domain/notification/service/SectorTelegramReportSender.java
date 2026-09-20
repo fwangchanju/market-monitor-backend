@@ -13,6 +13,7 @@ import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -125,9 +126,8 @@ public class SectorTelegramReportSender {
     }
 
     private String sectorPath(Market market, int beforeMinutes, AverageMode averageMode, boolean sectorFilter) {
-        return RenderTarget.CATEGORY_CHANGE_RATE.path()
-                + "?market=" + market.name()
-                + "&beforeMinutes=" + beforeMinutes
+        return RenderTarget.CATEGORY_CHANGE_RATE.path() + "/" + market.name().toLowerCase(Locale.ROOT)
+                + "?beforeMinutes=" + beforeMinutes
                 + "&avgMode=" + averageMode.queryValue()
                 + "&sectorFilter=" + sectorFilter;
     }

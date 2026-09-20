@@ -50,17 +50,34 @@ public class MarketMapAlbumReportSender {
             throw new EscalateException(ErrorCode.SCREENSHOT_CAPTURE_FAILED);
         }
 
-        sendImages(images, buildCaption(dataTime, sectorAvailable));
+        sendImages(images, buildCaption(MAP_MARKETS, dataTime, sectorAvailable));
         log.info("맵 리포트 발송 완료: 이미지={}장", images.size());
     }
 
+    /**
+     * 수동 테스트 전용 — 스케줄러는 부르지 않는다. {@code query} 하나만 {@code /map/{세그먼트}} 한
+     * 페이지로 캡처해서 한 장으로 보낸다({@code ALL_STOCK}이면 {@code /map/allstock}). sendImages는
+     * 이미지가 한 장이면 이미 sendPhoto로 내려가므로 발송 쪽은 send()와 그대로 같이 쓴다.
+     */
+    public void sendMapSinglePage(LocalDateTime dataTime, MarketQuery query, boolean sectorAvailable) {
+        List<byte[]> images = screenshotClient.capture(
+                mapPath(query, telegramProperties.averageMode(), telegramProperties.sectorFilter()),
+                RenderTarget.MARKET_MAP.selector());
+        if (images.isEmpty()) {
+            throw new EscalateException(ErrorCode.SCREENSHOT_CAPTURE_FAILED);
+        }
+
+        sendImages(images, buildCaption(query, dataTime, sectorAvailable));
+        log.info("맵 한 페이지 리포트 발송 완료: 이미지={}장", images.size());
+    }
+
     /** 캡션을 못 만들면 null — TelegramClient가 null/공백 캡션을 붙이지 않는다. */
-    private String buildCaption(LocalDateTime dataTime, boolean sectorAvailable) {
+    private String buildCaption(MarketQuery query, LocalDateTime dataTime, boolean sectorAvailable) {
         if (!sectorAvailable) {
             return null;
         }
         List<TopCategoryItem> topCategories = marketMapQueryService.getMergedTopCategoryRanking(
-                MAP_MARKETS, dataTime, telegramProperties.averageMode(), telegramProperties.sectorFilter());
+                query, dataTime, telegramProperties.averageMode(), telegramProperties.sectorFilter());
         // sectorAvailable이 true면 그 시각 스냅샷이 있으니 보통은 안 비지만, 비면 헤더만 덜렁 남는다.
         // 이미지는 이미 찍었으므로 캡션만 버리고 보낸다.
         if (topCategories.isEmpty()) {
@@ -90,6 +107,12 @@ public class MarketMapAlbumReportSender {
 
     private String mapPath(Market market, AverageMode averageMode, boolean sectorFilter) {
         return RenderTarget.MARKET_MAP.path() + "/" + RenderTarget.marketSegment(market.name())
+                + "?avgMode=" + averageMode.queryValue()
+                + "&sectorFilter=" + sectorFilter;
+    }
+
+    private String mapPath(MarketQuery query, AverageMode averageMode, boolean sectorFilter) {
+        return RenderTarget.MARKET_MAP.path() + "/" + RenderTarget.marketSegment(query.name())
                 + "?avgMode=" + averageMode.queryValue()
                 + "&sectorFilter=" + sectorFilter;
     }

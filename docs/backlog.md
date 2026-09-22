@@ -433,6 +433,17 @@ market-summary-capture        → summary-capture
 
 같이 지울 것 — `App.tsx`의 `PageNumberStyle`에 박힌 `/category-change-rate` 조건.
 
+### 같이 정리할 것 — `useGlobalSettings`가 내보내는 `setMarket`
+
+소비처가 없는데 반환 목록에 남아 있다. 죽은 것보다 나쁜 점은 **불러도 동작하지 않는다**는 것이다.
+그 setter는 `useRouteAwareMarket`의 저장값 setter인데 화면의 `market`은 `쿼리 ?? 경로 ?? 저장값`으로
+매 렌더 다시 계산된다. 경로가 마켓을 정하는 `/map/*`·`/sector/*`에서는 저장값을 써봐야 덮이고,
+훅 안의 effect가 곧바로 되돌린다. 세그먼트가 없는 경로에서만 먹는다.
+
+지금은 아무도 안 불러서 문제가 없지만, 나중에 마켓 드롭다운을 여기에 물리면 **지도·섹터에서만 조용히
+안 먹는다.** 반환 목록에서 빼거나, 이름이 하는 일을 말하게 바꾸거나(`setStoredMarket`), `SubNavBar`
+처럼 경로 이동을 하게 만든다.
+
 ---
 
 ## 에스컬레이션 알림을 슬랙 등 팀 채널로 이전

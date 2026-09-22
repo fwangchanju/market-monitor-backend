@@ -404,6 +404,37 @@ item마다 snapshotTime을 들고 있는 현재 구조는 불필요하다. 리�
 
 ---
 
+## 옛 프론트 라우트 제거 + 캡처 ID 이름 맞추기
+
+프론트에 옛 라우트가 새 라우트와 공존한다. 백엔드도 프론트도 더는 안 쓰고, **백엔드를 PR #116
+이전으로 되돌릴 때를 대비해서만** 남겨뒀다.
+
+```
+/market-map            /category-change-rate       /market-summary
+   → /map/*               → /sector/*                 → /summary
+```
+
+**며칠 안에 지운다**(사용자 결정). 지우는 날 **캡처 ID도 같이** 새 어휘로 맞춘다.
+
+```
+market-map-capture            → map-capture
+category-change-rate-capture  → sector-capture
+market-summary-capture        → summary-capture
+```
+
+### 캡처 ID는 두 레포가 문자열로 맞춘 계약이다 ★
+
+프론트 `utils/captureIds.ts`의 값과 백엔드 `RenderTarget`의 `captureId`가 같아야 한다. **한쪽만
+바꾸면 `waitForSelector`가 15초 타임아웃으로 죽고**, 로그에는 "요소를 못 찾았다"만 남아 원인 추적이
+오래 걸린다(2026-09-21 장애가 그 모양이었다).
+
+배포가 따로라(프론트는 nginx 이미지, 백엔드는 application) 동시에 못 나간다. **프론트가 한 릴리즈
+동안 옛 속성과 새 속성을 같이 달고**, 백엔드가 새 이름으로 넘어간 뒤 옛 속성을 뗀다.
+
+같이 지울 것 — `App.tsx`의 `PageNumberStyle`에 박힌 `/category-change-rate` 조건.
+
+---
+
 ## 에스컬레이션 알림을 슬랙 등 팀 채널로 이전
 
 현재 `EscalateException` 발생 시 개발자 텔레그램(`DEVELOPER_CHAT_ID`)으로 직접 보내는 구조인데,

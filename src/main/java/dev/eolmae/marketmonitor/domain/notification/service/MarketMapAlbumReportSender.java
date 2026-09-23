@@ -35,22 +35,19 @@ public class MarketMapAlbumReportSender {
     private final CategoryRankingTextBuilder categoryRankingTextBuilder;
     private final MarketMapQueryService marketMapQueryService;
 
-    /**
-     * sectorAvailable이 false여도 맵은 보낸다 — 맵 이미지는 카테고리 등락률 스냅샷과 무관하다. 다만
-     * 캡션(카테고리 등락률 기반)은 못 만드므로 캡션 없이 이미지만 보낸다.
-     */
-    public void send(LocalDateTime dataTime, boolean sectorAvailable) {
+    public void send(LocalDateTime dataTime) {
         // 캡처 대상은 항상 두 마켓 고정이다. SectorTelegramReportSender처럼 랭킹 조회 결과로 마켓을
-        // 고르면 안 된다 — 섹터 페이지는 그 랭킹이 곧 화면이라 같은 소스지만, 맵 페이지는
-        // sector_price_snapshot으로 그려져서 등락률 수집만 실패한 tick에도 멀쩡히 나온다. 그때 조회
-        // 결과를 따르면 캡처를 한 장도 안 한 채 "캡처 실패"로 에스컬레이션한다.
+        // 고르면 안 된다 — 맵과 캡션이 같은 가격 행(sector_price_snapshot)을 쓰더라도, 한 마켓만 그
+        // 시각 가격 행이 없으면 병합 랭킹(getMergedTopCategoryRanking)은 "하나라도 비면 빈 목록"
+        // 규칙에 걸려 통째로 빈다. 맵은 나머지 마켓만으로도 그려지므로, 그 조회 결과를 캡처 대상으로
+        // 따르면 캡처를 한 장도 안 한 채 "캡처 실패"로 에스컬레이션한다.
         List<byte[]> images =
                 capture(MAP_MARKETS.toMarkets(), telegramProperties.averageMode(), telegramProperties.sectorFilter());
         if (images.isEmpty()) {
             throw new EscalateException(ErrorCode.SCREENSHOT_CAPTURE_FAILED);
         }
 
-        sendImages(images, buildCaption(MAP_MARKETS, dataTime, sectorAvailable));
+        sendImages(images, buildCaption(MAP_MARKETS, dataTime));
         log.info("맵 리포트 발송 완료: 이미지={}장", images.size());
     }
 
@@ -59,7 +56,7 @@ public class MarketMapAlbumReportSender {
      * 페이지로 캡처해서 한 장으로 보낸다({@code ALL_STOCK}이면 {@code /map/allstock}). sendImages는
      * 이미지가 한 장이면 이미 sendPhoto로 내려가므로 발송 쪽은 send()와 그대로 같이 쓴다.
      */
-    public void sendMapSinglePage(LocalDateTime dataTime, MarketQuery query, boolean sectorAvailable) {
+    public void sendMapSinglePage(LocalDateTime dataTime, MarketQuery query) {
         List<byte[]> images = screenshotClient.capture(
                 mapPath(
                         RenderTarget.marketSegment(query),
@@ -70,18 +67,15 @@ public class MarketMapAlbumReportSender {
             throw new EscalateException(ErrorCode.SCREENSHOT_CAPTURE_FAILED);
         }
 
-        sendImages(images, buildCaption(query, dataTime, sectorAvailable));
+        sendImages(images, buildCaption(query, dataTime));
         log.info("맵 한 페이지 리포트 발송 완료: 이미지={}장", images.size());
     }
 
     /** 캡션을 못 만들면 null — TelegramClient가 null/공백 캡션을 붙이지 않는다. */
-    private String buildCaption(MarketQuery query, LocalDateTime dataTime, boolean sectorAvailable) {
-        if (!sectorAvailable) {
-            return null;
-        }
+    private String buildCaption(MarketQuery query, LocalDateTime dataTime) {
         List<TopCategoryItem> topCategories = marketMapQueryService.getMergedTopCategoryRanking(
                 query, dataTime, telegramProperties.averageMode(), telegramProperties.sectorFilter());
-        // sectorAvailable이 true면 그 시각 스냅샷이 있으니 보통은 안 비지만, 비면 헤더만 덜렁 남는다.
+        // 그 시각 데이터가 없거나(수집 실패) 요청 마켓 중 하나라도 합산이 비면 헤더만 덜렁 남는다.
         // 이미지는 이미 찍었으므로 캡션만 버리고 보낸다.
         if (topCategories.isEmpty()) {
             log.warn("{} 시각 병합 카테고리 랭킹이 비어 있어 맵 캡션 없이 발송", dataTime);

@@ -54,21 +54,12 @@ class SectorTelegramReportSenderTest {
     private final BigDecimal indexChangeRate = BigDecimal.valueOf(1.23);
 
     @Test
-    void send_섹터_스냅샷이_없으면_캡처도_발송도_하지_않는다() {
-        sender.send(dataTime, false);
-
-        verifyNoInteractions(marketMapQueryService);
-        verifyNoInteractions(screenshotClient);
-        verifyNoInteractions(telegramClient);
-    }
-
-    @Test
     void send_랭킹_결과가_통째로_비면_캡처도_발송도_하지_않는다() {
         when(marketMapQueryService.getTopCategoryRankings(
                         MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(List.of());
 
-        sender.send(dataTime, true);
+        sender.send(dataTime);
 
         verifyNoInteractions(screenshotClient);
         verifyNoInteractions(telegramClient);
@@ -97,7 +88,7 @@ class SectorTelegramReportSenderTest {
         when(categoryRankingTextBuilder.buildSectorCaption(kosdaqSummary, BEFORE_MINUTES))
                 .thenReturn("[#코스닥 15분 전 대비]\n...");
 
-        sender.send(dataTime, true);
+        sender.send(dataTime);
 
         verify(telegramClient, never()).sendMediaGroup(Mockito.any(), Mockito.any(), Mockito.any());
         ArgumentCaptor<byte[]> imageCaptor = ArgumentCaptor.forClass(byte[].class);
@@ -123,7 +114,7 @@ class SectorTelegramReportSenderTest {
         when(categoryRankingTextBuilder.buildSectorCaption(kospiSummary, BEFORE_MINUTES))
                 .thenReturn("[#코스피 15분 전 대비]\n...");
 
-        sender.send(dataTime, true);
+        sender.send(dataTime);
 
         verify(screenshotClient, never()).capture(Mockito.contains("KOSDAQ"), Mockito.any());
         verify(telegramClient)
@@ -145,7 +136,7 @@ class SectorTelegramReportSenderTest {
                         "[data-captureid='category-change-rate-capture']"))
                 .thenReturn(List.of());
 
-        assertThatThrownBy(() -> sender.send(dataTime, true)).isInstanceOf(EscalateException.class);
+        assertThatThrownBy(() -> sender.send(dataTime)).isInstanceOf(EscalateException.class);
 
         verifyNoInteractions(telegramClient);
     }
@@ -170,7 +161,7 @@ class SectorTelegramReportSenderTest {
         when(categoryRankingTextBuilder.buildSectorCaption(kosdaqSummary, BEFORE_MINUTES))
                 .thenReturn("[#코스닥 15분 전 대비]\n...");
 
-        sender.send(dataTime, true);
+        sender.send(dataTime);
 
         verify(telegramClient)
                 .sendPhoto(Mockito.eq("chat-id"), Mockito.eq(kosdaqImage), Mockito.eq("[#코스닥 15분 전 대비]\n..."));
@@ -207,7 +198,7 @@ class SectorTelegramReportSenderTest {
         when(categoryRankingTextBuilder.buildSectorCaption(kosdaqDelta, BEFORE_MINUTES))
                 .thenReturn("[#코스닥 15분 전 대비]\n...");
 
-        sender.send(dataTime, true);
+        sender.send(dataTime);
 
         verify(telegramClient)
                 .sendPhoto(Mockito.eq("chat-id"), Mockito.eq(kospiImage), Mockito.eq("[#코스피 섹터 등락률]\n..."));
@@ -240,7 +231,7 @@ class SectorTelegramReportSenderTest {
         when(categoryRankingTextBuilder.buildSectorCaption(kosdaqDelta, BEFORE_MINUTES))
                 .thenReturn("[#코스닥 15분 전 대비]\n...");
 
-        sender.send(dataTime, true);
+        sender.send(dataTime);
 
         verify(screenshotClient, never()).capture(Mockito.contains("KOSPI"), Mockito.any());
         verify(telegramClient, Mockito.times(1)).sendPhoto(Mockito.any(), Mockito.any(), Mockito.any());
@@ -269,7 +260,7 @@ class SectorTelegramReportSenderTest {
         when(screenshotClient.capture(Mockito.contains("/sector/kosdaq"), Mockito.any()))
                 .thenReturn(List.of(kosdaqImage));
 
-        sender.send(dataTime, true);
+        sender.send(dataTime);
 
         verify(marketMapQueryService, Mockito.times(1))
                 .getTopCategoryRankingsByChangeRate(
@@ -308,7 +299,7 @@ class SectorTelegramReportSenderTest {
         when(categoryRankingTextBuilder.buildSectorCaption(kospiSummary, BEFORE_MINUTES))
                 .thenReturn("[#코스피 15분 전 대비]\n...");
 
-        weightedSender.send(dataTime, true);
+        weightedSender.send(dataTime);
 
         verify(telegramClient)
                 .sendPhoto(Mockito.eq("chat-id"), Mockito.eq(kospiImage), Mockito.eq("[#코스피 15분 전 대비]\n..."));

@@ -21,6 +21,7 @@ import dev.eolmae.marketmonitor.domain.stock.enums.StockMarketCode;
 import dev.eolmae.marketmonitor.domain.stock.repository.IndexContributionRankingSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketOverviewSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.SectorPriceSnapshotRepository;
+import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceCacheService;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import java.math.BigDecimal;
@@ -55,6 +56,7 @@ public class IndexContributionRankingCollector {
     private final MarketOverviewSnapshotRepository marketOverviewSnapshotRepository;
     private final SectorPriceSnapshotRepository sectorPriceSnapshotRepository;
     private final IndexContributionRankingSnapshotRepository indexContributionRankingSnapshotRepository;
+    private final SectorPriceCacheService sectorPriceCacheService;
     private final TransactionTemplate transactionTemplate;
 
     // 마켓별로 독립된 트랜잭션. 하나 실패하면 그대로 예외를 던져서(catch 안 함) 이후 마켓은 시도하지 않고,
@@ -64,6 +66,20 @@ public class IndexContributionRankingCollector {
 
         for (Market market : Market.values()) {
             transactionTemplate.executeWithoutResult(status -> collectForMarket(market, stockInfoCache, snapshotTime));
+            warmSectorPriceCache(market, snapshotTime);
+        }
+    }
+
+    // 결정 5의 캐시 적재(워밍) — 마켓 트랜잭션이 커밋된 직후, 그 마켓에 대해 캐시 메서드를 한 번 불러
+    // DB에서 다시 읽어 캐시에 채운다. collectSectorPrice의 API 응답을 직접 넣지 않는 이유는, 그 메서드가
+    // 행이 이미 있으면 저장을 건너뛰면서도 API 응답은 그대로 돌려주기 때문이다(응답과 DB가 다를 수 있음).
+    // 적재는 성능 최적화지 정확성 조건이 아니라, 실패해도 수집 자체를 실패로 만들면 안 된다 — 읽을 때
+    // 캐시에 없으면 DB에서 그냥 읽는다.
+    private void warmSectorPriceCache(Market market, LocalDateTime snapshotTime) {
+        try {
+            sectorPriceCacheService.getCache(market, snapshotTime);
+        } catch (Exception e) {
+            log.warn("섹터 가격 캐시 적재 실패: market={}, snapshotTime={}", market, snapshotTime, e);
         }
     }
 

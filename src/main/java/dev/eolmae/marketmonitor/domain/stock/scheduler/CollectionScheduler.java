@@ -1,11 +1,9 @@
 package dev.eolmae.marketmonitor.domain.stock.scheduler;
 
-import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.enums.Zone;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.common.util.KstClock;
-import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryChangeRateSnapshotService;
 import dev.eolmae.marketmonitor.domain.notification.listener.EscalationPublisher;
 import dev.eolmae.marketmonitor.domain.notification.schedule.TelegramSendSchedule;
 import dev.eolmae.marketmonitor.domain.notification.service.MarketMapTelegramReportSender;
@@ -20,15 +18,12 @@ import dev.eolmae.marketmonitor.domain.stock.collector.ProgramTradeIntradayColle
 import dev.eolmae.marketmonitor.domain.stock.collector.SectorInvestorNetBuyCollector;
 import dev.eolmae.marketmonitor.domain.stock.collector.ShortSellingTrendCollector;
 import dev.eolmae.marketmonitor.domain.stock.collector.StockInfoCollector;
-import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
-import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -49,8 +44,6 @@ public class CollectionScheduler {
     private final IndexContributionRankingCollector indexContributionRankingCollector;
     private final ShortSellingTrendCollector shortSellingTrendCollector;
     private final StockInfoCollector stockInfoCollector;
-    private final MarketMapQueryService marketMapQueryService;
-    private final MarketMapCategoryChangeRateSnapshotService marketMapCategoryChangeRateSnapshotService;
     private final MarketMapTelegramReportSender marketMapTelegramReportSender;
     private final TelegramReportDispatcher telegramReportDispatcher;
     private final TelegramCollectionFailureNotifier telegramCollectionFailureNotifier;
@@ -66,7 +59,6 @@ public class CollectionScheduler {
     // 결과를 발송 판정(장 마감 이후 발송 시각)까지 들고 가기 위한 상태 — 로컬 변수로는 호출이 끝나면
     // 사라져서 그 다음 호출(발송 시각)이 진짜 마지막 수집 결과를 알 수 없다.
     private volatile boolean lastIndexContributionSuccess = true;
-    private volatile boolean lastChangeRateSuccess = true;
 
     /**
      * 장중 시장 데이터 수집: 평일 collect.start-hour~end-hour, interval-minutes 간격.
@@ -95,9 +87,6 @@ public class CollectionScheduler {
             lastIndexContributionSuccess =
                     run("지수기여도랭킹", () -> indexContributionRankingCollector.collect(snapshotTime));
 
-            lastChangeRateSuccess = lastIndexContributionSuccess
-                    && run("카테고리등락률스냅샷", () -> captureCategoryChangeRateSnapshots(snapshotTime));
-
             log.info("장중 시장 데이터 수집 완료: snapshotTime={}", snapshotTime);
         }
 
@@ -111,15 +100,17 @@ public class CollectionScheduler {
                 run("데이터수집실패알림", () -> telegramCollectionFailureNotifier.notify(dataTime));
             } else {
                 // 마켓별로 섹터 이미지 1장 + 캡션 1개씩 각각 발송.
-                run("섹터텔레그램발송", () -> telegramReportDispatcher.sendSector(dataTime, lastChangeRateSuccess));
+                run("섹터텔레그램발송", () -> telegramReportDispatcher.sendSector(dataTime));
             }
         }
 
         // 맵 발송은 섹터와 별개 시각(telegram.map-send-times)에, 별개 판정으로 돈다. 맵 이미지는
-        // 카테고리 등락률 스냅샷과 무관해서 lastIndexContributionSuccess로 가두지 않는다 — 실패해도
-        // 맵은 그대로 보내고, 캡션(카테고리 등락률 기반)만 lastChangeRateSuccess에 따라 붙이거나 뺀다.
+        // sector_price_snapshot(IndexContributionRankingCollector.collectSectorPrice가 씀)으로
+        // 그려지므로, 수집이 실패해도 맵 페이지는 최신 공통 시각으로 그대로 그려진다 — 그래서
+        // lastIndexContributionSuccess로 가두지 않는다. 캡션은 그 시각 랭킹이 비면 자연히
+        // 빠진다(MarketMapAlbumReportSender.buildCaption).
         if (telegramSendSchedule.dueForMap(snapshotTime, shouldCollect)) {
-            run("맵텔레그램발송", () -> telegramReportDispatcher.sendMap(dataTime, lastChangeRateSuccess));
+            run("맵텔레그램발송", () -> telegramReportDispatcher.sendMap(dataTime));
         }
     }
 
@@ -179,13 +170,6 @@ public class CollectionScheduler {
         run("종목정보", stockInfoCollector::sync);
 
         log.info("종목 정보 동기화 완료");
-    }
-
-    private void captureCategoryChangeRateSnapshots(LocalDateTime snapshotTime) {
-        for (Market market : Market.values()) {
-            List<MarketMapCategoryNode> tree = marketMapQueryService.getCustomMarketMapTree(market, snapshotTime);
-            marketMapCategoryChangeRateSnapshotService.captureSnapshot(market, snapshotTime, tree);
-        }
     }
 
     // TODO(#38): 실제 공휴일 판정 로직 추가 예정 — 지금은 항상 false. 미구현 상태라 date를 아직 쓰지 않는다.

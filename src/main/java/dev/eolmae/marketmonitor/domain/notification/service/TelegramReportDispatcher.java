@@ -15,21 +15,21 @@ public class TelegramReportDispatcher {
     private final SectorTelegramReportSender sectorTelegramReportSender;
     private final MarketMapAlbumReportSender marketMapAlbumReportSender;
 
-    public void sendSector(LocalDateTime dataTime, boolean sectorAvailable) {
-        sectorTelegramReportSender.send(dataTime, sectorAvailable);
+    public void sendSector(LocalDateTime dataTime) {
+        sectorTelegramReportSender.send(dataTime);
     }
 
-    public void sendMap(LocalDateTime dataTime, boolean sectorAvailable) {
-        marketMapAlbumReportSender.send(dataTime, sectorAvailable);
+    public void sendMap(LocalDateTime dataTime) {
+        marketMapAlbumReportSender.send(dataTime);
     }
 
     // 섹터 → 맵 순. 스케줄러가 둘 다 due일 때와 같은 순서다.
-    public void sendAll(LocalDateTime dataTime, boolean sectorAvailable) {
-        sendSector(dataTime, sectorAvailable);
-        sendMap(dataTime, sectorAvailable);
+    public void sendAll(LocalDateTime dataTime) {
+        sendSector(dataTime);
+        sendMap(dataTime);
     }
 
-    public void sendMapSinglePage(LocalDateTime dataTime, MarketQuery query, boolean sectorAvailable) {
-        marketMapAlbumReportSender.sendMapSinglePage(dataTime, query, sectorAvailable);
+    public void sendMapSinglePage(LocalDateTime dataTime, MarketQuery query) {
+        marketMapAlbumReportSender.sendMapSinglePage(dataTime, query);
     }
 }

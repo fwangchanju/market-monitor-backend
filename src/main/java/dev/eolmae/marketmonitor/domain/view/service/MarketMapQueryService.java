@@ -7,13 +7,14 @@ import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapStockCategory;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketValueTierThreshold;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapStockCategoryRepository;
-import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryChangeRateSnapshotService;
+import dev.eolmae.marketmonitor.domain.marketmap.service.CategoryTierAggregationService;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketValueTierThresholdService;
 import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
-import dev.eolmae.marketmonitor.domain.stock.entity.SectorPriceSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketMapExcludedStockRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketOverviewSnapshotRepository;
+import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceCacheService;
+import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceCacheService.CachedStockPrice;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceSnapshotService;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateItem;
@@ -39,6 +40,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -60,26 +62,26 @@ public class MarketMapQueryService {
 
     private final StockInfoCacheService stockInfoCacheService;
     private final SectorPriceSnapshotService sectorPriceSnapshotService;
+    private final SectorPriceCacheService sectorPriceCacheService;
     private final MarketMapExcludedStockRepository marketMapExcludedStockRepository;
     private final MarketMapCategoryRepository marketMapCategoryRepository;
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository;
-    private final MarketMapCategoryChangeRateSnapshotService marketMapCategoryChangeRateSnapshotService;
+    private final CategoryTierAggregationService categoryTierAggregationService;
     private final MarketValueTierThresholdService marketValueTierThresholdService;
     private final MarketOverviewSnapshotRepository marketOverviewSnapshotRepository;
 
-    /** 기본 마켓맵: stock_info 카테고리 그대로(override 없이) 기준, 자식 없는 1뎁스 노드로 감싸서 반환 (getCustomMarketMap과 응답 모양 통일) */
-    public MarketMapResponse getDefaultMarketMap(MarketQuery marketQuery) {
+    /** 기본 마켓맵: stock_info 카테고리 그대로(override 없이) 기준, 자식 없는 1뎁스 노드로 감싸서 반환
+     * (getCustomMarketMap과 응답 모양 통일). snapshotTime이 없으면 최신, 있으면 그 시각 그대로(결정 4). */
+    public MarketMapResponse getDefaultMarketMap(MarketQuery marketQuery, LocalDateTime snapshotTime) {
         List<Market> markets = marketQuery.toMarkets();
-        return sectorPriceSnapshotService
-                .findLatestCommonSnapshotTime(markets)
-                .map(latestSnapshotTime -> buildDefaultMarketMap(markets, latestSnapshotTime))
+        return resolveSnapshotTime(markets, snapshotTime)
+                .map(resolvedSnapshotTime -> buildDefaultMarketMap(markets, resolvedSnapshotTime))
                 .orElseGet(MarketMapResponse::empty);
     }
 
     private MarketMapResponse buildDefaultMarketMap(List<Market> markets, LocalDateTime latestSnapshotTime) {
         List<StockInfo> candidates = filterCandidates(markets);
-        Map<String, SectorPriceSnapshot> priceMap =
-                sectorPriceSnapshotService.findPriceByStockCode(markets, latestSnapshotTime);
+        Map<String, CachedStockPrice> priceMap = findPriceByStockCode(markets, latestSnapshotTime);
         List<MarketValueTierThreshold> sortedTiers = marketValueTierThresholdService.findAllSortedAscending();
 
         Map<String, List<MarketMapItem>> grouped = candidates.stream()
@@ -104,55 +106,45 @@ public class MarketMapQueryService {
         return new MarketMapResponse(latestSnapshotTime, nodes, findSingleMarketOverview(markets, latestSnapshotTime));
     }
 
-    /** 커스텀 마켓맵: 어드민이 구성한 카테고리 트리 기준. 트리에 배정 안 된 종목은 stock_info 카테고리로 묶은 노드를 같은 레벨에 섞어서 반환 */
-    public MarketMapResponse getCustomMarketMap(MarketQuery marketQuery) {
+    /** 커스텀 마켓맵: 어드민이 구성한 카테고리 트리 기준. 트리에 배정 안 된 종목은 stock_info 카테고리로
+     * 묶은 노드를 같은 레벨에 섞어서 반환. snapshotTime이 없으면 최신, 있으면 그 시각 그대로(결정 4). */
+    public MarketMapResponse getCustomMarketMap(MarketQuery marketQuery, LocalDateTime snapshotTime) {
         List<Market> markets = marketQuery.toMarkets();
-        return sectorPriceSnapshotService
-                .findLatestCommonSnapshotTime(markets)
-                .map(latestSnapshotTime -> buildCustomMarketMap(markets, latestSnapshotTime))
+        return resolveSnapshotTime(markets, snapshotTime)
+                .map(resolvedSnapshotTime -> buildCustomMarketMap(markets, resolvedSnapshotTime))
                 .orElseGet(MarketMapResponse::empty);
     }
 
+    /** snapshotTime이 없으면 지금처럼 markets 전부가 공통으로 가진 최신 시각을 쓴다(그 정의상 이미
+     * 전부에 있는 시각이다). 있으면 그 시각을 그대로 쓰되, markets 전부에 정확히 그 시각이 있을 때만
+     * 유효하다 — 하나라도 없으면 빈 응답이다. 가까운 시각으로 대체하지 않는다(결정 4). */
+    private Optional<LocalDateTime> resolveSnapshotTime(List<Market> markets, LocalDateTime snapshotTime) {
+        if (snapshotTime == null) {
+            return sectorPriceSnapshotService.findLatestCommonSnapshotTime(markets);
+        }
+        boolean allMarketsHaveSnapshot =
+                markets.stream().allMatch(market -> sectorPriceSnapshotService.existsSnapshot(market, snapshotTime));
+        return allMarketsHaveSnapshot ? Optional.of(snapshotTime) : Optional.empty();
+    }
+
+    // tierBreakdown은 항상 빈 배열이다 — 저장된 집계 테이블을 더 이상 읽지 않는다. 프론트 zod 스키마가
+    // 이 필드를 필수로 잡고 있어 필드 자체는 남기되 빈 배열을 싣는다(결정 3). 기본 마켓맵이 이미 이
+    // 모양으로 응답해왔으므로, 옛 프론트는 그 경우 종목에서 직접 평균을 계산하는 폴백을 이미 탄다.
     private MarketMapResponse buildCustomMarketMap(List<Market> markets, LocalDateTime latestSnapshotTime) {
-        // 등락률 데코레이션(tierBreakdown)은 카테고리별로 하나만 붙으므로, All Stocks처럼 markets가
-        // 여러 개여도 마켓별로 나눌 필요 없이 그대로 합쳐서 조회한다.
-        Map<Long, List<CategoryTierBreakdown>> tierBreakdownByCategoryId =
-                marketMapCategoryChangeRateSnapshotService
-                        .findTierBreakdownsByCategoryId(markets, latestSnapshotTime)
-                        .values()
-                        .stream()
-                        .flatMap(byCategoryId -> byCategoryId.entrySet().stream())
-                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (a, b) -> {
-                            List<CategoryTierBreakdown> merged = new ArrayList<>(a);
-                            merged.addAll(b);
-                            return merged;
-                        }));
-        List<MarketMapCategoryNode> tree = buildCategoryTree(markets, latestSnapshotTime, tierBreakdownByCategoryId);
+        List<MarketMapCategoryNode> tree = buildCategoryTree(markets, latestSnapshotTime);
         return new MarketMapResponse(latestSnapshotTime, tree, findSingleMarketOverview(markets, latestSnapshotTime));
     }
 
     /**
-     * 마켓맵 카테고리별 등락률 랭킹(섹터 페이지) — markets 전부가 공통으로 가진 최신 시각을 구한 뒤
-     * 시각 인자 변형에 위임한다.
-     */
-    public SnapshotResponse<CategoryChangeRateMarketRanking> getCategoryChangeRates(
-            MarketQuery marketQuery, int beforeMinutes) {
-        return marketMapCategoryChangeRateSnapshotService
-                .findLatestCommonSnapshotTime(marketQuery.toMarkets())
-                .map(snapshotTime -> getCategoryChangeRates(marketQuery, snapshotTime, beforeMinutes))
-                .orElseGet(SnapshotResponse::empty);
-    }
-
-    /**
-     * 스냅샷 시각을 인자로 받는 변형 — 텔레그램 발송 경로처럼 이미 확정된 dataTime을 그대로 써야 하는
-     * 호출부(getTopCategoryRankings)용. 그 시각에 지수 스냅샷이 없으면(부분 실패로 아예 없는 경우)
-     * 조용히 비워서 내려준다 — 다른 시점 값으로 대체하지 않는다.
+     * 마켓맵 카테고리별 등락률 랭킹 — 텔레그램 발송 경로처럼 이미 확정된 dataTime을 그대로
+     * 써야 하는 호출부(getTopCategoryRankings)용이라 시각을 인자로 받는다. 그 시각에 지수 스냅샷이
+     * 없으면(부분 실패로 아예 없는 경우) 조용히 비워서 내려준다 — 다른 시점 값으로 대체하지 않는다.
      */
     public SnapshotResponse<CategoryChangeRateMarketRanking> getCategoryChangeRates(
             MarketQuery marketQuery, LocalDateTime snapshotTime, int beforeMinutes) {
         List<Market> markets = marketQuery.toMarkets();
         SnapshotResponse<CategoryChangeRateMarketRanking> ranking =
-                marketMapCategoryChangeRateSnapshotService.findRankingForMarkets(markets, snapshotTime, beforeMinutes);
+                buildRankingForMarkets(markets, snapshotTime, beforeMinutes);
 
         Map<Market, BigDecimal> nowIndexChangeRateByMarket =
                 toChangeRateByMarket(findOverviewsBySnapshotTime(snapshotTime));
@@ -168,6 +160,47 @@ public class MarketMapQueryService {
                         .toList());
     }
 
+    /**
+     * markets가 정확히 snapshotTime 시각에 가진 카테고리별 현재/직전(beforeMinutes분 전) 등락률 랭킹 —
+     * 마켓마다 그 시각의 커스텀 트리를 빌드해 합산한다(결정 1). 합산 결과(카테고리별 구간 원시 합계)가
+     * 빈 마켓은 결과 목록에서 아예 빠진다 — 트리 자체가 비어 있지 않아도(카테고리 노드는 있는데 가격
+     * 행이 없어 종목이 0개) 합산 결과는 빌 수 있으므로, 트리가 아니라 합산 결과의 비어 있음으로
+     * 판단한다. beforeMinutes 시각에 정확히 일치하는 카테고리가 없으면(장 시작 직후, 수집 gap 등) 해당
+     * 카테고리는 before 없이 내려준다 — 가장 가까운 다른 시점 데이터로 조용히 대체하지 않는다.
+     */
+    private SnapshotResponse<CategoryChangeRateMarketRanking> buildRankingForMarkets(
+            List<Market> markets, LocalDateTime snapshotTime, int beforeMinutes) {
+        LocalDateTime beforeTime = snapshotTime.minusMinutes(beforeMinutes);
+        List<CategoryChangeRateMarketRanking> rankings = markets.stream()
+                .map(market -> toMarketRanking(market, snapshotTime, beforeTime))
+                .filter(Objects::nonNull)
+                .toList();
+        return new SnapshotResponse<>(snapshotTime, rankings);
+    }
+
+    private CategoryChangeRateMarketRanking toMarketRanking(
+            Market market, LocalDateTime snapshotTime, LocalDateTime beforeTime) {
+        Map<Long, List<CategoryTierBreakdown>> now =
+                categoryTierAggregationService.aggregateByCategory(getCustomMarketMapTree(market, snapshotTime));
+        if (now.isEmpty()) {
+            return null;
+        }
+        Map<Long, List<CategoryTierBreakdown>> before =
+                categoryTierAggregationService.aggregateByCategory(getCustomMarketMapTree(market, beforeTime));
+        List<CategoryChangeRateItem> items = now.entrySet().stream()
+                .map(entry -> toItem(entry.getKey(), entry.getValue(), before.get(entry.getKey())))
+                .toList();
+        return new CategoryChangeRateMarketRanking(market, items);
+    }
+
+    private CategoryChangeRateItem toItem(
+            Long categoryId, List<CategoryTierBreakdown> now, List<CategoryTierBreakdown> before) {
+        if (before == null) {
+            return CategoryChangeRateItem.withoutBefore(categoryId, now);
+        }
+        return CategoryChangeRateItem.withBefore(categoryId, now, before);
+    }
+
     private Map<Market, BigDecimal> toChangeRateByMarket(Map<Market, MarketOverviewSnapshot> overviewsByMarket) {
         return overviewsByMarket.entrySet().stream()
                 .collect(Collectors.toMap(
@@ -179,9 +212,9 @@ public class MarketMapQueryService {
             Map<Market, BigDecimal> nowIndexChangeRateByMarket,
             Map<Market, BigDecimal> beforeIndexChangeRateByMarket,
             Map<Long, MarketMapCategory> categoryById) {
-        // 카테고리 버전 복원(MarketMapCategoryTreeService.restore) 직후에는 스냅샷 row가 이미 없어진
-        // categoryId를 가리킬 수 있다 — 다음 수집 tick까지 그 항목만 결과에서 뺀다. 잘못된 depth를
-        // 채워 넣지 않는다(대분류 판정에 영향을 준다).
+        // categoryId는 항상 buildCategoryTree가 그 시각 현재 카테고리 테이블을 순회하며 만든 것이라
+        // categoryById에 없는 id가 나올 수 없다 — 방어적으로 걸러둔다. 잘못된 depth를 채워 넣지 않는다
+        // (대분류 판정에 영향을 준다).
         List<CategoryChangeRateItem> items = marketRanking.items().stream()
                 .filter(item -> categoryById.containsKey(item.categoryId()))
                 .map(item -> decorateWithCategory(item, categoryById))
@@ -266,25 +299,32 @@ public class MarketMapQueryService {
      * (카테고리별 breakdown을 합친 뒤 한 번만 나눈다 — 이미 나뉜 평균끼리 다시 평균내면 틀린다)이지만,
      * 화면 트리 없이 랭킹만 필요해서 별도로 조립한다.
      *
-     * <p>캡션 전용이다. 이 결과로 "어느 마켓을 캡처할지"를 정하면 안 된다 — 맵 페이지는
-     * sector_price_snapshot으로 그려지는데 여기는 카테고리 등락률 스냅샷을 보므로, 등락률 수집만
-     * 실패한 tick에서는 맵이 멀쩡히 그려지는데도 빈 목록이 나온다. 그 시각 스냅샷이 통째로 없으면
-     * 빈 목록을 돌려주므로, 호출부가 캡션을 붙일지 말지 판단한다.
+     * <p>캡션 전용이다. 이 결과로 "어느 마켓을 캡처할지"를 정하면 안 된다 — 맵과 캡션이 같은 가격
+     * 행(sector_price_snapshot)을 쓰더라도, 한 마켓만 그 시각 가격 행이 없으면 이 메서드는 "하나라도
+     * 비면 빈 목록" 규칙에 걸려 통째로 비는 반면 맵은 나머지 마켓만으로도 그려진다. 그 시각 가격 행이
+     * 통째로 없거나 요청 마켓 중 하나라도 합산이 비면 빈 목록을 돌려주므로, 호출부가 캡션을 붙일지
+     * 말지 판단한다.
      */
     public List<TopCategoryItem> getMergedTopCategoryRanking(
             MarketQuery marketQuery, LocalDateTime snapshotTime, AverageMode averageMode, boolean sectorFilter) {
         List<Market> markets = marketQuery.toMarkets();
-        Map<Long, List<CategoryTierBreakdown>> mergedByCategoryId =
-                marketMapCategoryChangeRateSnapshotService
-                        .findTierBreakdownsByCategoryId(markets, snapshotTime)
-                        .values()
-                        .stream()
-                        .flatMap(byCategoryId -> byCategoryId.entrySet().stream())
-                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (a, b) -> {
-                            List<CategoryTierBreakdown> merged = new ArrayList<>(a);
-                            merged.addAll(b);
-                            return merged;
-                        }));
+        List<Map<Long, List<CategoryTierBreakdown>>> breakdownsByMarket = markets.stream()
+                .map(market -> categoryTierAggregationService.aggregateByCategory(
+                        getCustomMarketMapTree(market, snapshotTime)))
+                .toList();
+        // 결정 2 — 요청한 마켓 중 하나라도 합산 결과가 비면 빈 목록을 돌려준다. 한 마켓만 수집에
+        // 실패해도 나머지 마켓만으로 TOP2를 뽑으면, 지도 이미지는 markets 전체 기준인데 캡션은 일부
+        // 마켓 기준이 되어 틀린 캡션이 조용히 나간다.
+        if (breakdownsByMarket.stream().anyMatch(Map::isEmpty)) {
+            return List.of();
+        }
+        Map<Long, List<CategoryTierBreakdown>> mergedByCategoryId = breakdownsByMarket.stream()
+                .flatMap(byCategoryId -> byCategoryId.entrySet().stream())
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (a, b) -> {
+                    List<CategoryTierBreakdown> merged = new ArrayList<>(a);
+                    merged.addAll(b);
+                    return merged;
+                }));
 
         Map<Long, MarketMapCategory> categoryById = findCategoryById();
         Set<Long> excludedTierIds = excludedTierIds();
@@ -402,7 +442,7 @@ public class MarketMapQueryService {
         if (included.isEmpty()) {
             return null;
         }
-        SnapshotAverages averages = marketMapCategoryChangeRateSnapshotService.combine(included);
+        SnapshotAverages averages = categoryTierAggregationService.combine(included);
         return switch (averageMode) {
             case WEIGHTED -> averages.weightedAvgChangeRate();
             case SIMPLE -> averages.simpleAvgChangeRate();
@@ -425,11 +465,11 @@ public class MarketMapQueryService {
     }
 
     /**
-     * 카테고리 등락률 스냅샷 캡처(CollectionScheduler)용 원본 트리. 변화율 데코레이션은 필요 없어서(어차피
-     * 안 쓰임) buildCategoryTree만 노출한다. snapshotTime은 호출부(지수기여도 수집 직후)가 이미 들고 있는
-     * 값을 그대로 받는다 — "최신 시각"을 다시 조회하면, 이번 사이클에 특정 market 수집이 실패했을 때 예전
-     * 시각 데이터를 지금 시각 라벨로 잘못 저장하게 된다. 대신 정확히 이 snapshotTime에 데이터가 없으면 빈
-     * 트리를 반환해서 호출부가 스킵하도록 한다.
+     * 텔레그램 랭킹 조회(toMarketRanking·getMergedTopCategoryRanking)가 그 시각 카테고리별 합산을 만들
+     * 때 쓰는 원본 트리. 변화율 데코레이션은 필요 없어서(어차피 안 쓰임) buildCategoryTree만 노출한다.
+     * snapshotTime은 호출부가 이미 들고 있는 값을 그대로 받는다 — "최신 시각"을 다시 조회하면, 특정
+     * market 수집이 실패했을 때 예전 시각 데이터를 지금 시각인 것처럼 섞어 쓰게 된다. 대신 정확히 이
+     * snapshotTime에 데이터가 없으면 빈 트리를 반환해서 호출부가 그 마켓을 결과에서 빼도록 한다.
      */
     public List<MarketMapCategoryNode> getCustomMarketMapTree(Market market, LocalDateTime snapshotTime) {
         if (sectorPriceSnapshotService.notExistsSnapshot(market, snapshotTime)) {
@@ -456,8 +496,7 @@ public class MarketMapQueryService {
                     .add(category);
         }
         Map<String, MarketMapStockCategory> stockCategoryMap = findStockCategoryMap();
-        Map<String, SectorPriceSnapshot> priceMap =
-                sectorPriceSnapshotService.findPriceByStockCode(markets, latestSnapshotTime);
+        Map<String, CachedStockPrice> priceMap = findPriceByStockCode(markets, latestSnapshotTime);
         List<MarketValueTierThreshold> sortedTiers = marketValueTierThresholdService.findAllSortedAscending();
 
         Map<Long, List<MarketMapItem>> itemsByCategoryId = candidates.stream()
@@ -503,6 +542,15 @@ public class MarketMapQueryService {
                 items);
     }
 
+    /** 마켓별로 SectorPriceCacheService(결정 5)를 불러 합친다. 캐시 키가 (마켓, 시각) 하나 단위라 마켓이
+     * 여럿이면 각각 불러야 한다. merge 함수 없는 toMap — findPriceByStockCode와 같다. 마켓 간에 종목코드가
+     * 겹칠 수 없으므로(겹치면 데이터 오류) 조용히 덮어쓰지 않고 예외로 드러난다. */
+    private Map<String, CachedStockPrice> findPriceByStockCode(List<Market> markets, LocalDateTime snapshotTime) {
+        return markets.stream()
+                .flatMap(market -> sectorPriceCacheService.getCache(market, snapshotTime).entrySet().stream())
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
     private List<StockInfo> filterCandidates(List<Market> markets) {
         return stockInfoCacheService.getCache().values().stream()
                 .filter(stockInfo -> markets.contains(stockInfo.getMarketType()))
@@ -524,26 +572,26 @@ public class MarketMapQueryService {
 
     /** 기본 마켓맵용: alias 없음(커스텀 트리 전용 개념) */
     private MarketMapItem toMarketMapItem(
-            StockInfo stockInfo, SectorPriceSnapshot priceSnapshot, List<MarketValueTierThreshold> sortedTiers) {
-        return toMarketMapItem(stockInfo, priceSnapshot, (String) null, sortedTiers);
+            StockInfo stockInfo, CachedStockPrice cachedPrice, List<MarketValueTierThreshold> sortedTiers) {
+        return toMarketMapItem(stockInfo, cachedPrice, (String) null, sortedTiers);
     }
 
     /** 커스텀 마켓맵용: market_map_stock_category에 배정된 alias(없으면 null)를 같이 실어 보낸다 */
     private MarketMapItem toMarketMapItem(
             StockInfo stockInfo,
-            SectorPriceSnapshot priceSnapshot,
+            CachedStockPrice cachedPrice,
             Map<String, MarketMapStockCategory> stockCategoryMap,
             List<MarketValueTierThreshold> sortedTiers) {
-        return toMarketMapItem(stockInfo, priceSnapshot, resolveAlias(stockInfo, stockCategoryMap), sortedTiers);
+        return toMarketMapItem(stockInfo, cachedPrice, resolveAlias(stockInfo, stockCategoryMap), sortedTiers);
     }
 
     private MarketMapItem toMarketMapItem(
             StockInfo stockInfo,
-            SectorPriceSnapshot priceSnapshot,
+            CachedStockPrice cachedPrice,
             String alias,
             List<MarketValueTierThreshold> sortedTiers) {
-        BigDecimal currentPrice = priceSnapshot.getCurrentPrice();
-        BigDecimal changeRate = priceSnapshot.getChangeRate();
+        BigDecimal currentPrice = cachedPrice.currentPrice();
+        BigDecimal changeRate = cachedPrice.changeRate();
         BigDecimal totalMarketValue = currentPrice.multiply(BigDecimal.valueOf(stockInfo.getListCount()));
 
         return new MarketMapItem(
@@ -555,7 +603,7 @@ public class MarketMapQueryService {
                 totalMarketValue,
                 marketValueTierThresholdService.resolveTier(sortedTiers, totalMarketValue),
                 changeRate,
-                priceSnapshot.getSnapshotTime());
+                cachedPrice.snapshotTime());
     }
 
     /** 배정된 alias가 있으면 그 값, 없거나 빈 문자열이면 null */

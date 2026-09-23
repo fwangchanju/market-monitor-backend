@@ -1,5 +1,7 @@
 package dev.eolmae.marketmonitor.domain.marketmap.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.util.KstClock;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryTierBreakdown;
@@ -55,10 +57,14 @@ import org.springframework.boot.test.context.SpringBootTest;
  *
  * 확인할 것
  * <ol>
- *   <li>콘솔에 찍힌 [불일치] 줄이 하나도 없어야 한다. 있으면 시각·마켓·카테고리·구간·옛 값·새 값을
- *       PR에 그대로 붙인다
- *   <li>끝의 [6절 비교 요약] 줄 — 캡처없음 수가 비정상적으로 크면(수집이 계속 실패 중이라는 뜻) 먼저
- *       그 원인을 확인한다
+ *   <li>BUILD SUCCESSFUL이어야 한다 — comparedCount(비교한 (시각, 마켓) 수)가 1 이상이고
+ *       mismatchCount(불일치 수)가 0이라는 뜻이다. comparedCount가 0이면(주말·공휴일에 돌린 경우,
+ *       다음 날 07:00 전에 돌린 경우, 이 PR이 배포된 뒤 저장이 멈춰 옛 값이 과거 날짜에만 남은
+ *       경우) assert 메시지가 그 이유를 알려준다
+ *   <li>실패하면 콘솔에 찍힌 [불일치] 줄(시각·마켓·카테고리·구간·필드별 옛 값·새 값)을 PR에 그대로
+ *       붙인다
+ *   <li>끝의 [6절 비교 요약] 줄 — 캡처없음 수가 비정상적으로 크면(수집이 계속 실패 중이라는 뜻) 통과
+ *       여부와 무관하게 먼저 그 원인을 확인한다
  *   <li>불일치가 있으면, market_map_stock_category·market_map_category·market_value_tier_threshold의
  *       updated_at으로 그 tick 이후 편집이 있었는지 확인한다 — 있으면 그 시각과 근거를 PR에 적고,
  *       설명되지 않는 불일치가 하나라도 남으면 병합하지 않는다
@@ -124,6 +130,14 @@ class CategoryTierAggregationComparisonManualTest {
         mismatchLines.forEach(System.out::println);
         System.out.printf(
                 "[6절 비교 요약] 비교=%d 일치=%d 불일치=%d 캡처없음=%d%n", comparedCount, matchCount, mismatchCount, noCaptureCount);
+
+        // 콘솔 출력만으로는 결과를 놓치기 쉽다(-i 로그가 길다) — BUILD 성공/실패로 드러나게 한다.
+        // comparedCount가 0인 채 조용히 통과하는 경우(주말·공휴일, 다음 날 07:00 전, 이 PR 배포 뒤라
+        // 저장이 멈춰 옛 값이 과거 날짜에만 남은 경우)를 특히 걸러야 한다.
+        assertThat(comparedCount)
+                .as("비교한 (시각, 마켓)이 없다 — 같은 거래일 07:00 이후, 이 PR 배포 전에 돌려야 한다")
+                .isPositive();
+        assertThat(mismatchCount).as("불일치 %d건 — 위 [불일치] 줄 참고", mismatchCount).isZero();
     }
 
     /** latest부터 collect.interval-minutes씩 뒤로 가며 TICK_COUNT개를 만들되, 오늘 07:00 이전은 뺀다 —

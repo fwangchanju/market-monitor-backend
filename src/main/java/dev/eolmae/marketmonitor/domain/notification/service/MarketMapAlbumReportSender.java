@@ -37,9 +37,10 @@ public class MarketMapAlbumReportSender {
 
     public void send(LocalDateTime dataTime) {
         // 캡처 대상은 항상 두 마켓 고정이다. SectorTelegramReportSender처럼 랭킹 조회 결과로 마켓을
-        // 고르면 안 된다 — 섹터 페이지는 그 랭킹이 곧 화면이라 같은 소스지만, 맵 페이지는
-        // sector_price_snapshot으로 그려져서 등락률 수집만 실패한 tick에도 멀쩡히 나온다. 그때 조회
-        // 결과를 따르면 캡처를 한 장도 안 한 채 "캡처 실패"로 에스컬레이션한다.
+        // 고르면 안 된다 — 맵과 캡션이 같은 가격 행(sector_price_snapshot)을 쓰더라도, 한 마켓만 그
+        // 시각 가격 행이 없으면 병합 랭킹(getMergedTopCategoryRanking)은 "하나라도 비면 빈 목록"
+        // 규칙에 걸려 통째로 빈다. 맵은 나머지 마켓만으로도 그려지므로, 그 조회 결과를 캡처 대상으로
+        // 따르면 캡처를 한 장도 안 한 채 "캡처 실패"로 에스컬레이션한다.
         List<byte[]> images =
                 capture(MAP_MARKETS.toMarkets(), telegramProperties.averageMode(), telegramProperties.sectorFilter());
         if (images.isEmpty()) {

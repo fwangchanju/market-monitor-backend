@@ -136,7 +136,7 @@ public class MarketMapQueryService {
     }
 
     /**
-     * 마켓맵 카테고리별 등락률 랭킹(섹터 페이지) — 텔레그램 발송 경로처럼 이미 확정된 dataTime을 그대로
+     * 마켓맵 카테고리별 등락률 랭킹 — 텔레그램 발송 경로처럼 이미 확정된 dataTime을 그대로
      * 써야 하는 호출부(getTopCategoryRankings)용이라 시각을 인자로 받는다. 그 시각에 지수 스냅샷이
      * 없으면(부분 실패로 아예 없는 경우) 조용히 비워서 내려준다 — 다른 시점 값으로 대체하지 않는다.
      */
@@ -299,10 +299,11 @@ public class MarketMapQueryService {
      * (카테고리별 breakdown을 합친 뒤 한 번만 나눈다 — 이미 나뉜 평균끼리 다시 평균내면 틀린다)이지만,
      * 화면 트리 없이 랭킹만 필요해서 별도로 조립한다.
      *
-     * <p>캡션 전용이다. 이 결과로 "어느 마켓을 캡처할지"를 정하면 안 된다 — 맵 페이지는
-     * sector_price_snapshot으로 그려지는데 여기는 그 시각 가격 행을 트리로 합산하므로, 등락률 수집만
-     * 실패한 tick에서는 맵이 멀쩡히 그려지는데도 빈 목록이 나온다. 그 시각 가격 행이 통째로 없거나
-     * 요청 마켓 중 하나라도 합산이 비면 빈 목록을 돌려주므로, 호출부가 캡션을 붙일지 말지 판단한다.
+     * <p>캡션 전용이다. 이 결과로 "어느 마켓을 캡처할지"를 정하면 안 된다 — 맵과 캡션이 같은 가격
+     * 행(sector_price_snapshot)을 쓰더라도, 한 마켓만 그 시각 가격 행이 없으면 이 메서드는 "하나라도
+     * 비면 빈 목록" 규칙에 걸려 통째로 비는 반면 맵은 나머지 마켓만으로도 그려진다. 그 시각 가격 행이
+     * 통째로 없거나 요청 마켓 중 하나라도 합산이 비면 빈 목록을 돌려주므로, 호출부가 캡션을 붙일지
+     * 말지 판단한다.
      */
     public List<TopCategoryItem> getMergedTopCategoryRanking(
             MarketQuery marketQuery, LocalDateTime snapshotTime, AverageMode averageMode, boolean sectorFilter) {

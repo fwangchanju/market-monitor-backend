@@ -105,8 +105,10 @@ public class CollectionScheduler {
         }
 
         // 맵 발송은 섹터와 별개 시각(telegram.map-send-times)에, 별개 판정으로 돈다. 맵 이미지는
-        // 지수기여도 수집과 무관해서 lastIndexContributionSuccess로 가두지 않는다 — 실패해도 맵은
-        // 그대로 보내고, 캡션은 랭킹이 비면 자연히 빠진다(MarketMapAlbumReportSender.buildCaption).
+        // sector_price_snapshot(IndexContributionRankingCollector.collectSectorPrice가 씀)으로
+        // 그려지므로, 수집이 실패해도 맵 페이지는 최신 공통 시각으로 그대로 그려진다 — 그래서
+        // lastIndexContributionSuccess로 가두지 않는다. 캡션은 그 시각 랭킹이 비면 자연히
+        // 빠진다(MarketMapAlbumReportSender.buildCaption).
         if (telegramSendSchedule.dueForMap(snapshotTime, shouldCollect)) {
             run("맵텔레그램발송", () -> telegramReportDispatcher.sendMap(dataTime));
         }

@@ -50,7 +50,7 @@ class MarketMapAlbumReportSenderTest {
         rankingReturns(topCategories);
         when(categoryRankingTextBuilder.buildMapCaption(topCategories)).thenReturn("[#코스피 / #코스닥 섹터 등락률]\n...");
 
-        sender.send(dataTime, true);
+        sender.send(dataTime);
 
         verify(telegramClient, never()).sendPhoto(Mockito.any(), Mockito.any(), Mockito.any());
         verify(telegramClient).sendMediaGroup("chat-id", List.of(kospiImage, kosdaqImage), "[#코스피 / #코스닥 섹터 등락률]\n...");
@@ -63,7 +63,7 @@ class MarketMapAlbumReportSenderTest {
         rankingReturns(topCategories);
         when(categoryRankingTextBuilder.buildMapCaption(topCategories)).thenReturn("[#코스피 / #코스닥 섹터 등락률]\n...");
 
-        sender.send(dataTime, true);
+        sender.send(dataTime);
 
         verify(telegramClient, never()).sendMediaGroup(Mockito.any(), Mockito.any(), Mockito.any());
         verify(telegramClient).sendPhoto("chat-id", kospiImage, "[#코스피 / #코스닥 섹터 등락률]\n...");
@@ -74,29 +74,15 @@ class MarketMapAlbumReportSenderTest {
         when(screenshotClient.capture(KOSPI_MAP_PATH, MAP_SELECTOR)).thenReturn(List.of());
         when(screenshotClient.capture(KOSDAQ_MAP_PATH, MAP_SELECTOR)).thenReturn(List.of());
 
-        assertThatThrownBy(() -> sender.send(dataTime, true)).isInstanceOf(EscalateException.class);
+        assertThatThrownBy(() -> sender.send(dataTime)).isInstanceOf(EscalateException.class);
 
         verifyNoInteractions(telegramClient);
     }
 
-    // 카테고리 등락률 수집이 실패해도(sectorAvailable=false) 맵 이미지는 그와 무관하므로 그대로 보낸다.
-    // 다만 캡션(카테고리 등락률 기반)은 못 만드므로 캡션 없이 보낸다.
-    @Test
-    void send_sectorAvailable이_false면_캡션_없이_이미지만_보낸다() {
-        captureReturns(KOSPI_MAP_PATH, kospiImage);
-        captureReturns(KOSDAQ_MAP_PATH, kosdaqImage);
-
-        sender.send(dataTime, false);
-
-        verify(telegramClient).sendMediaGroup("chat-id", List.of(kospiImage, kosdaqImage), null);
-        verifyNoInteractions(categoryRankingTextBuilder);
-    }
-
     /**
      * 캡처 대상 마켓을 랭킹 조회 결과로 정하면 이 상황에서 한 장도 안 찍고 에스컬레이션한다 — 맵 페이지는
-     * sector_price_snapshot으로 그려져서 카테고리 등락률 스냅샷이 없어도 멀쩡히 나오기 때문이다.
-     * sectorAvailable은 그 수집의 성공 여부라 항상 같이 false가 되지만, 늦게 도는 tick 등으로 true인
-     * 채 조회만 빌 수도 있어 그쪽도 이미지는 그대로 보낸다.
+     * sector_price_snapshot으로 그려져서 등락률 수집만 실패해도 멀쩡히 나오기 때문이다. 그 시각 데이터가
+     * 없거나 요청 마켓 중 하나라도 합산이 비어 랭킹이 비는 경우, 이미지는 그대로 보내고 캡션만 뺀다.
      */
     @Test
     void send_병합_랭킹이_비어도_이미지는_보낸다() {
@@ -104,7 +90,7 @@ class MarketMapAlbumReportSenderTest {
         captureReturns(KOSDAQ_MAP_PATH, kosdaqImage);
         rankingReturns(List.of());
 
-        sender.send(dataTime, true);
+        sender.send(dataTime);
 
         verify(telegramClient).sendMediaGroup("chat-id", List.of(kospiImage, kosdaqImage), null);
         verify(categoryRankingTextBuilder, never()).buildMapCaption(Mockito.any());
@@ -131,7 +117,7 @@ class MarketMapAlbumReportSenderTest {
                 .thenReturn(topCategories);
         when(categoryRankingTextBuilder.buildMapCaption(topCategories)).thenReturn("[#코스피 / #코스닥 섹터 등락률]\n...");
 
-        weightedSender.send(dataTime, true);
+        weightedSender.send(dataTime);
 
         verify(telegramClient).sendMediaGroup("chat-id", List.of(kospiImage, kosdaqImage), "[#코스피 / #코스닥 섹터 등락률]\n...");
     }

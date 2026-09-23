@@ -73,22 +73,22 @@ class TelegramReportCycleManualTest {
 
     @Test
     void sendsSector() {
-        dispatcher.sendSector(findDataTime(), true);
+        dispatcher.sendSector(findDataTime());
     }
 
     @Test
     void sendsMap() {
-        dispatcher.sendMap(findDataTime(), true);
+        dispatcher.sendMap(findDataTime());
     }
 
     @Test
     void sendsAll() {
-        dispatcher.sendAll(findDataTime(), true);
+        dispatcher.sendAll(findDataTime());
     }
 
     @Test
     void sendsMapAllStockOnePage() {
-        dispatcher.sendMapSinglePage(findDataTime(), MarketQuery.ALL_STOCK, true);
+        dispatcher.sendMapSinglePage(findDataTime(), MarketQuery.ALL_STOCK);
     }
 
     // findLatestCommonSnapshotTime이 markets 전부가 공통으로 가진 최신 시각을 한 번에 구해주므로,

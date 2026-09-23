@@ -10,7 +10,6 @@ import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketValueTierThres
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateItem;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateMarketRanking;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryTierBreakdown;
-import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -27,16 +26,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 마켓맵 카테고리별(하위 카테고리 재귀 포함) × 시가총액 구간별 등락률 원시 합계(분자/분모) 스냅샷 저장.
- * 합산 자체는 CategoryTierAggregationService가 하고, 이 서비스는 그 결과를 엔티티로 바꿔 저장만 한다.
+ * 마켓맵 카테고리별(하위 카테고리 재귀 포함) × 시가총액 구간별 등락률 원시 합계(분자/분모)가 저장된
+ * 스냅샷 테이블의 조회·정리. 저장(캡처)은 더 이상 하지 않는다 — 조회 경로가 CategoryTierAggregationService로
+ * 트리를 직접 합산하는 쪽으로 바뀌었다. 이 테이블은 실데이터 비교 테스트가 옛 값을 읽는 데만 쓰인다.
  */
 @Slf4j
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
 public class MarketMapCategoryChangeRateSnapshotService {
-
-    private final CategoryTierAggregationService categoryTierAggregationService;
 
     // collect.*와 무관한 별개 상수 — "보존할 스냅샷 시각"의 윈도우다. KRX 정규장은 15:30에 닫히고 NXT
     // 애프터마켓은 15:40에 열려서 그 10분은 두 시장 다 닫혀 있어 가격이 안 바뀐다. 그 안에서 가장 늦은
@@ -48,28 +46,6 @@ public class MarketMapCategoryChangeRateSnapshotService {
 
     private final MarketMapCategoryChangeRateSnapshotRepository marketMapCategoryChangeRateSnapshotRepository;
     private final MarketValueTierThresholdRepository marketValueTierThresholdRepository;
-
-    @Transactional
-    public void captureSnapshot(Market market, LocalDateTime snapshotTime, List<MarketMapCategoryNode> tree) {
-        if (tree.isEmpty()) {
-            return;
-        }
-        Map<Long, List<CategoryTierBreakdown>> breakdownsByCategoryId =
-                categoryTierAggregationService.aggregateByCategory(tree);
-        List<MarketMapCategoryChangeRateSnapshot> snapshots = breakdownsByCategoryId.entrySet().stream()
-                .flatMap(entry -> entry.getValue().stream()
-                        .map(breakdown -> MarketMapCategoryChangeRateSnapshot.create(
-                                market,
-                                entry.getKey(),
-                                breakdown.tierId(),
-                                snapshotTime,
-                                breakdown.weightedSum(),
-                                breakdown.totalValue(),
-                                breakdown.simpleSum(),
-                                breakdown.itemCount())))
-                .toList();
-        marketMapCategoryChangeRateSnapshotRepository.saveAll(snapshots);
-    }
 
     /** markets 전부가 공통으로 가진 최신 스냅샷 시각 — 호출부(MarketMapQueryService)가 이 시각을 받아
      * 아래 findRankingForMarkets에 그대로 넘긴다. 시각이 없으면(수집 전, 공통 시각 부재) 비어 있다. */

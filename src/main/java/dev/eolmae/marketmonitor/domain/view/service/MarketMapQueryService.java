@@ -236,9 +236,9 @@ public class MarketMapQueryService {
             Map<Market, BigDecimal> nowIndexChangeRateByMarket,
             Map<Market, BigDecimal> beforeIndexChangeRateByMarket,
             Map<Long, MarketMapCategory> categoryById) {
-        // 카테고리 버전 복원(MarketMapCategoryTreeService.restore) 직후에는 스냅샷 row가 이미 없어진
-        // categoryId를 가리킬 수 있다 — 다음 수집 tick까지 그 항목만 결과에서 뺀다. 잘못된 depth를
-        // 채워 넣지 않는다(대분류 판정에 영향을 준다).
+        // categoryId는 항상 buildCategoryTree가 그 시각 현재 카테고리 테이블을 순회하며 만든 것이라
+        // categoryById에 없는 id가 나올 수 없다 — 방어적으로 걸러둔다. 잘못된 depth를 채워 넣지 않는다
+        // (대분류 판정에 영향을 준다).
         List<CategoryChangeRateItem> items = marketRanking.items().stream()
                 .filter(item -> categoryById.containsKey(item.categoryId()))
                 .map(item -> decorateWithCategory(item, categoryById))
@@ -324,9 +324,9 @@ public class MarketMapQueryService {
      * 화면 트리 없이 랭킹만 필요해서 별도로 조립한다.
      *
      * <p>캡션 전용이다. 이 결과로 "어느 마켓을 캡처할지"를 정하면 안 된다 — 맵 페이지는
-     * sector_price_snapshot으로 그려지는데 여기는 카테고리 등락률 스냅샷을 보므로, 등락률 수집만
-     * 실패한 tick에서는 맵이 멀쩡히 그려지는데도 빈 목록이 나온다. 그 시각 스냅샷이 통째로 없으면
-     * 빈 목록을 돌려주므로, 호출부가 캡션을 붙일지 말지 판단한다.
+     * sector_price_snapshot으로 그려지는데 여기는 그 시각 가격 행을 트리로 합산하므로, 등락률 수집만
+     * 실패한 tick에서는 맵이 멀쩡히 그려지는데도 빈 목록이 나온다. 그 시각 가격 행이 통째로 없거나
+     * 요청 마켓 중 하나라도 합산이 비면 빈 목록을 돌려주므로, 호출부가 캡션을 붙일지 말지 판단한다.
      */
     public List<TopCategoryItem> getMergedTopCategoryRanking(
             MarketQuery marketQuery, LocalDateTime snapshotTime, AverageMode averageMode, boolean sectorFilter) {
@@ -488,11 +488,11 @@ public class MarketMapQueryService {
     }
 
     /**
-     * 카테고리 등락률 스냅샷 캡처(CollectionScheduler)용 원본 트리. 변화율 데코레이션은 필요 없어서(어차피
-     * 안 쓰임) buildCategoryTree만 노출한다. snapshotTime은 호출부(지수기여도 수집 직후)가 이미 들고 있는
-     * 값을 그대로 받는다 — "최신 시각"을 다시 조회하면, 이번 사이클에 특정 market 수집이 실패했을 때 예전
-     * 시각 데이터를 지금 시각 라벨로 잘못 저장하게 된다. 대신 정확히 이 snapshotTime에 데이터가 없으면 빈
-     * 트리를 반환해서 호출부가 스킵하도록 한다.
+     * 텔레그램 랭킹 조회(toMarketRanking·getMergedTopCategoryRanking)가 그 시각 카테고리별 합산을 만들
+     * 때 쓰는 원본 트리. 변화율 데코레이션은 필요 없어서(어차피 안 쓰임) buildCategoryTree만 노출한다.
+     * snapshotTime은 호출부가 이미 들고 있는 값을 그대로 받는다 — "최신 시각"을 다시 조회하면, 특정
+     * market 수집이 실패했을 때 예전 시각 데이터를 지금 시각인 것처럼 섞어 쓰게 된다. 대신 정확히 이
+     * snapshotTime에 데이터가 없으면 빈 트리를 반환해서 호출부가 그 마켓을 결과에서 빼도록 한다.
      */
     public List<MarketMapCategoryNode> getCustomMarketMapTree(Market market, LocalDateTime snapshotTime) {
         if (sectorPriceSnapshotService.notExistsSnapshot(market, snapshotTime)) {

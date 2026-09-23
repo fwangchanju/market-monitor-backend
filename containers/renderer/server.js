@@ -16,6 +16,7 @@ const MAX_QUEUE_WAIT_MS = 30000
 const MAX_CONSECUTIVE_FAILURES = 3
 const RECYCLE_AFTER_CAPTURES = 200
 const SHUTDOWN_GRACE_MS = 5000
+const CAPTURE_READY_TIMEOUT_MS = 20000
 
 // 죽은 Chromium이 남긴 SingletonLock 등이 재시작 후에도 남아 있지 않도록, 기동 시 한 번 지운다 —
 // process.exit(1) + restart: always는 컨테이너 파일시스템을 보존하므로 이 정리가 없으면 다음
@@ -94,12 +95,12 @@ app.post('/capture', (req, res) => {
     },
     (err) => {
       if (err.isQueueTimeout) {
-        console.error('[renderer] 캡처 요청이 대기열에서 시간 초과:', err.message)
+        console.error('[renderer] 캡처 요청이 대기열에서 시간 초과:', path, err.message)
         res.status(503).json({ error: err.message })
         exitAfterResponse(res)
         return
       }
-      console.error('[renderer] 캡처 오류:', err.message)
+      console.error('[renderer] 캡처 오류:', path, err.message)
       res.status(500).json({ error: err.message })
       exitAfterResponse(res)
     },
@@ -118,7 +119,7 @@ async function handleCapture(path, selector) {
     await page.goto(BASE_URL + path, { waitUntil: 'networkidle', timeout: 30000 })
     // 프론트가 데이터 로딩을 마치고 캡처 대상 엘리먼트에 data-capture-ready="true"를 붙이면 그때 캡처한다
     // (고정 딜레이로 "다 그려졌겠지" 추측하던 방식 대체).
-    await page.waitForSelector(`${selector}[data-capture-ready="true"]`, { timeout: 15000 })
+    await page.waitForSelector(`${selector}[data-capture-ready="true"]`, { timeout: CAPTURE_READY_TIMEOUT_MS })
 
     const sections = await page.$$(selector)
     const images = []

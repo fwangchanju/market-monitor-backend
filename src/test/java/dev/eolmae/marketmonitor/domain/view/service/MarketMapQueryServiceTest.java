@@ -14,12 +14,12 @@ import dev.eolmae.marketmonitor.domain.marketmap.service.CategoryTierAggregation
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryChangeRateSnapshotService;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketValueTierThresholdService;
 import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
-import dev.eolmae.marketmonitor.domain.stock.entity.SectorPriceSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
-import dev.eolmae.marketmonitor.domain.stock.enums.ExchangeType;
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketMapExcludedStockRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketOverviewSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.SectorPriceSnapshotRepository;
+import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceCacheService;
+import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceCacheService.CachedStockPrice;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceSnapshotService;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateMarketRanking;
@@ -48,6 +48,7 @@ class MarketMapQueryServiceTest {
     private final StockInfoCacheService stockInfoCacheService = Mockito.mock(StockInfoCacheService.class);
     private final SectorPriceSnapshotRepository sectorPriceSnapshotRepository =
             Mockito.mock(SectorPriceSnapshotRepository.class);
+    private final SectorPriceCacheService sectorPriceCacheService = Mockito.mock(SectorPriceCacheService.class);
     private final MarketMapExcludedStockRepository marketMapExcludedStockRepository =
             Mockito.mock(MarketMapExcludedStockRepository.class);
     private final MarketMapCategoryRepository marketMapCategoryRepository =
@@ -74,6 +75,7 @@ class MarketMapQueryServiceTest {
     private final MarketMapQueryService service = new MarketMapQueryService(
             stockInfoCacheService,
             sectorPriceSnapshotService,
+            sectorPriceCacheService,
             marketMapExcludedStockRepository,
             marketMapCategoryRepository,
             marketMapStockCategoryRepository,
@@ -116,8 +118,8 @@ class MarketMapQueryServiceTest {
 
         when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
                 .thenReturn(Optional.of(snapshotTime));
-        when(sectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(List.of(Market.KOSPI), snapshotTime))
-                .thenReturn(List.of(
+        when(sectorPriceCacheService.getCache(Market.KOSPI, snapshotTime))
+                .thenReturn(Map.ofEntries(
                         priceSnapshot("005930", snapshotTime, BigDecimal.TEN),
                         priceSnapshot("000660", snapshotTime, BigDecimal.valueOf(20)),
                         priceSnapshot("009150", snapshotTime, BigDecimal.valueOf(5)),
@@ -170,8 +172,8 @@ class MarketMapQueryServiceTest {
 
         when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
                 .thenReturn(Optional.of(snapshotTime));
-        when(sectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(List.of(Market.KOSPI), snapshotTime))
-                .thenReturn(List.of(
+        when(sectorPriceCacheService.getCache(Market.KOSPI, snapshotTime))
+                .thenReturn(Map.ofEntries(
                         priceSnapshot("005930", snapshotTime, BigDecimal.TEN),
                         priceSnapshot("000660", snapshotTime, BigDecimal.valueOf(20)),
                         priceSnapshot("051910", snapshotTime, BigDecimal.ONE)));
@@ -220,8 +222,8 @@ class MarketMapQueryServiceTest {
 
         when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
                 .thenReturn(Optional.of(snapshotTime));
-        when(sectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(List.of(Market.KOSPI), snapshotTime))
-                .thenReturn(List.of(priceSnapshot("005930", snapshotTime, BigDecimal.TEN)));
+        when(sectorPriceCacheService.getCache(Market.KOSPI, snapshotTime))
+                .thenReturn(Map.ofEntries(priceSnapshot("005930", snapshotTime, BigDecimal.TEN)));
         when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
 
         MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI, null);
@@ -265,8 +267,8 @@ class MarketMapQueryServiceTest {
 
         when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
                 .thenReturn(Optional.of(snapshotTime));
-        when(sectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(List.of(Market.KOSPI), snapshotTime))
-                .thenReturn(List.of(
+        when(sectorPriceCacheService.getCache(Market.KOSPI, snapshotTime))
+                .thenReturn(Map.ofEntries(
                         priceSnapshot("009150", snapshotTime, BigDecimal.valueOf(5)),
                         priceSnapshot("005930", snapshotTime, BigDecimal.TEN)));
         when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
@@ -300,8 +302,8 @@ class MarketMapQueryServiceTest {
         when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
                 .thenReturn(Optional.of(snapshotTime));
         // 000660은 가격 스냅샷이 없다 — 수집 gap 등으로 그 시각에 데이터가 아예 없는 경우
-        when(sectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(List.of(Market.KOSPI), snapshotTime))
-                .thenReturn(List.of(priceSnapshot("005930", snapshotTime, BigDecimal.TEN)));
+        when(sectorPriceCacheService.getCache(Market.KOSPI, snapshotTime))
+                .thenReturn(Map.ofEntries(priceSnapshot("005930", snapshotTime, BigDecimal.TEN)));
         when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
 
         MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI, null);
@@ -322,8 +324,7 @@ class MarketMapQueryServiceTest {
         when(stockInfoCacheService.getCache()).thenReturn(Map.of());
         when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
                 .thenReturn(Optional.of(snapshotTime));
-        when(sectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(List.of(Market.KOSPI), snapshotTime))
-                .thenReturn(List.of());
+        // 가격 캐시는 스텁하지 않는다 — 스텁 없는 mock의 getCache는 기본값(빈 맵)을 그대로 돌려준다.
         when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
 
         MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI, null);
@@ -340,8 +341,6 @@ class MarketMapQueryServiceTest {
         when(stockInfoCacheService.getCache()).thenReturn(Map.of());
         when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
                 .thenReturn(Optional.of(snapshotTime));
-        when(sectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(List.of(Market.KOSPI), snapshotTime))
-                .thenReturn(List.of());
         when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime))
                 .thenReturn(List.of(marketOverviewSnapshot(Market.KOSPI, snapshotTime, BigDecimal.valueOf(1.23))));
 
@@ -362,8 +361,6 @@ class MarketMapQueryServiceTest {
         when(stockInfoCacheService.getCache()).thenReturn(Map.of());
         when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(markets))
                 .thenReturn(Optional.of(snapshotTime));
-        when(sectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(markets, snapshotTime))
-                .thenReturn(List.of());
 
         MarketMapResponse response = service.getCustomMarketMap(MarketQuery.ALL_STOCK, null);
 
@@ -380,8 +377,6 @@ class MarketMapQueryServiceTest {
         when(stockInfoCacheService.getCache()).thenReturn(Map.of());
         when(sectorPriceSnapshotRepository.existsByMarketTypeAndSnapshotTime(Market.KOSPI, requestedTime))
                 .thenReturn(true);
-        when(sectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(List.of(Market.KOSPI), requestedTime))
-                .thenReturn(List.of());
         when(marketOverviewSnapshotRepository.findBySnapshotTime(requestedTime)).thenReturn(List.of());
 
         MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI, requestedTime);
@@ -994,11 +989,11 @@ class MarketMapQueryServiceTest {
                         .collect(Collectors.toMap(StockInfo::getStockCode, Function.identity())));
     }
 
-    private void stubPrices(Market market, LocalDateTime time, SectorPriceSnapshot... snapshots) {
+    @SafeVarargs
+    private final void stubPrices(Market market, LocalDateTime time, Map.Entry<String, CachedStockPrice>... prices) {
         when(sectorPriceSnapshotRepository.existsByMarketTypeAndSnapshotTime(market, time))
                 .thenReturn(true);
-        when(sectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(List.of(market), time))
-                .thenReturn(List.of(snapshots));
+        when(sectorPriceCacheService.getCache(market, time)).thenReturn(Map.ofEntries(prices));
     }
 
     /** 트리 기반 랭킹 테스트용 종목 — listCount를 1로 고정해 price()의 totalMarketValue를 그대로
@@ -1007,10 +1002,11 @@ class MarketMapQueryServiceTest {
         return StockInfo.create(stockCode, stockCode, market, "0", null, 1L, BigDecimal.TEN);
     }
 
-    private SectorPriceSnapshot price(
+    /** market은 stubPrices가 이미 (market, time) 단위로 캐시를 스텁하는 키라 여기서는 안 쓴다 —
+     * 호출부를 그대로 두기 위해 시그니처만 유지한다. */
+    private Map.Entry<String, CachedStockPrice> price(
             String stockCode, Market market, LocalDateTime time, BigDecimal totalMarketValue, BigDecimal changeRate) {
-        return SectorPriceSnapshot.create(
-                market, time, stockCode, ExchangeType.KRX, stockCode, totalMarketValue, BigDecimal.ZERO, changeRate);
+        return Map.entry(stockCode, new CachedStockPrice(totalMarketValue, changeRate, time));
     }
 
     private MarketOverviewSnapshot marketOverviewSnapshot(
@@ -1049,15 +1045,8 @@ class MarketMapQueryServiceTest {
         return StockInfo.create(stockCode, stockName, Market.KOSPI, "0", categoryName, listCount, lastPrice);
     }
 
-    private SectorPriceSnapshot priceSnapshot(String stockCode, LocalDateTime snapshotTime, BigDecimal currentPrice) {
-        return SectorPriceSnapshot.create(
-                Market.KOSPI,
-                snapshotTime,
-                stockCode,
-                ExchangeType.KRX,
-                stockCode,
-                currentPrice,
-                BigDecimal.ZERO,
-                BigDecimal.ZERO);
+    private Map.Entry<String, CachedStockPrice> priceSnapshot(
+            String stockCode, LocalDateTime snapshotTime, BigDecimal currentPrice) {
+        return Map.entry(stockCode, new CachedStockPrice(currentPrice, BigDecimal.ZERO, snapshotTime));
     }
 }

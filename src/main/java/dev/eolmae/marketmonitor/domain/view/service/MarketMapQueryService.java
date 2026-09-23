@@ -11,10 +11,11 @@ import dev.eolmae.marketmonitor.domain.marketmap.service.CategoryTierAggregation
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryChangeRateSnapshotService;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketValueTierThresholdService;
 import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
-import dev.eolmae.marketmonitor.domain.stock.entity.SectorPriceSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketMapExcludedStockRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketOverviewSnapshotRepository;
+import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceCacheService;
+import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceCacheService.CachedStockPrice;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceSnapshotService;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateItem;
@@ -62,6 +63,7 @@ public class MarketMapQueryService {
 
     private final StockInfoCacheService stockInfoCacheService;
     private final SectorPriceSnapshotService sectorPriceSnapshotService;
+    private final SectorPriceCacheService sectorPriceCacheService;
     private final MarketMapExcludedStockRepository marketMapExcludedStockRepository;
     private final MarketMapCategoryRepository marketMapCategoryRepository;
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository;
@@ -81,8 +83,7 @@ public class MarketMapQueryService {
 
     private MarketMapResponse buildDefaultMarketMap(List<Market> markets, LocalDateTime latestSnapshotTime) {
         List<StockInfo> candidates = filterCandidates(markets);
-        Map<String, SectorPriceSnapshot> priceMap =
-                sectorPriceSnapshotService.findPriceByStockCode(markets, latestSnapshotTime);
+        Map<String, CachedStockPrice> priceMap = findPriceByStockCode(markets, latestSnapshotTime);
         List<MarketValueTierThreshold> sortedTiers = marketValueTierThresholdService.findAllSortedAscending();
 
         Map<String, List<MarketMapItem>> grouped = candidates.stream()
@@ -518,8 +519,7 @@ public class MarketMapQueryService {
                     .add(category);
         }
         Map<String, MarketMapStockCategory> stockCategoryMap = findStockCategoryMap();
-        Map<String, SectorPriceSnapshot> priceMap =
-                sectorPriceSnapshotService.findPriceByStockCode(markets, latestSnapshotTime);
+        Map<String, CachedStockPrice> priceMap = findPriceByStockCode(markets, latestSnapshotTime);
         List<MarketValueTierThreshold> sortedTiers = marketValueTierThresholdService.findAllSortedAscending();
 
         Map<Long, List<MarketMapItem>> itemsByCategoryId = candidates.stream()
@@ -565,6 +565,15 @@ public class MarketMapQueryService {
                 items);
     }
 
+    /** 마켓별로 SectorPriceCacheService(결정 5)를 불러 합친다. 캐시 키가 (마켓, 시각) 하나 단위라 마켓이
+     * 여럿이면 각각 불러야 한다. merge 함수 없는 toMap — findPriceByStockCode와 같다. 마켓 간에 종목코드가
+     * 겹칠 수 없으므로(겹치면 데이터 오류) 조용히 덮어쓰지 않고 예외로 드러난다. */
+    private Map<String, CachedStockPrice> findPriceByStockCode(List<Market> markets, LocalDateTime snapshotTime) {
+        return markets.stream()
+                .flatMap(market -> sectorPriceCacheService.getCache(market, snapshotTime).entrySet().stream())
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
     private List<StockInfo> filterCandidates(List<Market> markets) {
         return stockInfoCacheService.getCache().values().stream()
                 .filter(stockInfo -> markets.contains(stockInfo.getMarketType()))
@@ -586,26 +595,26 @@ public class MarketMapQueryService {
 
     /** 기본 마켓맵용: alias 없음(커스텀 트리 전용 개념) */
     private MarketMapItem toMarketMapItem(
-            StockInfo stockInfo, SectorPriceSnapshot priceSnapshot, List<MarketValueTierThreshold> sortedTiers) {
-        return toMarketMapItem(stockInfo, priceSnapshot, (String) null, sortedTiers);
+            StockInfo stockInfo, CachedStockPrice cachedPrice, List<MarketValueTierThreshold> sortedTiers) {
+        return toMarketMapItem(stockInfo, cachedPrice, (String) null, sortedTiers);
     }
 
     /** 커스텀 마켓맵용: market_map_stock_category에 배정된 alias(없으면 null)를 같이 실어 보낸다 */
     private MarketMapItem toMarketMapItem(
             StockInfo stockInfo,
-            SectorPriceSnapshot priceSnapshot,
+            CachedStockPrice cachedPrice,
             Map<String, MarketMapStockCategory> stockCategoryMap,
             List<MarketValueTierThreshold> sortedTiers) {
-        return toMarketMapItem(stockInfo, priceSnapshot, resolveAlias(stockInfo, stockCategoryMap), sortedTiers);
+        return toMarketMapItem(stockInfo, cachedPrice, resolveAlias(stockInfo, stockCategoryMap), sortedTiers);
     }
 
     private MarketMapItem toMarketMapItem(
             StockInfo stockInfo,
-            SectorPriceSnapshot priceSnapshot,
+            CachedStockPrice cachedPrice,
             String alias,
             List<MarketValueTierThreshold> sortedTiers) {
-        BigDecimal currentPrice = priceSnapshot.getCurrentPrice();
-        BigDecimal changeRate = priceSnapshot.getChangeRate();
+        BigDecimal currentPrice = cachedPrice.currentPrice();
+        BigDecimal changeRate = cachedPrice.changeRate();
         BigDecimal totalMarketValue = currentPrice.multiply(BigDecimal.valueOf(stockInfo.getListCount()));
 
         return new MarketMapItem(
@@ -617,7 +626,7 @@ public class MarketMapQueryService {
                 totalMarketValue,
                 marketValueTierThresholdService.resolveTier(sortedTiers, totalMarketValue),
                 changeRate,
-                priceSnapshot.getSnapshotTime());
+                cachedPrice.snapshotTime());
     }
 
     /** 배정된 alias가 있으면 그 값, 없거나 빈 문자열이면 null */

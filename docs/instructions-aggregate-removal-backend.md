@@ -228,9 +228,15 @@ GET /api/map?market=KOSPI&isCustom=true&snapshotTime=2026-09-22T10:05:00   그 �
 
 **`SectorPriceSnapshotService`의 기존 메서드는 바꾸지 않는다.** `findPriceByStockCode`,
 `findLatestPriceByStockCode`와 그걸 쓰는 `MarketMapStockCategoryService`는 그대로 둔다.
-`MarketMapQueryService.buildCategoryTree`만 새 빈을 마켓별로 불러 합친다. 값이 record로 바뀌므로
-`toMarketMapItem`이 `SectorPriceSnapshot` 대신 그 record를 받는다. 쓰는 필드는
-`getCurrentPrice`·`getChangeRate`·`getSnapshotTime` 셋뿐이다.
+
+- 새 빈은 `SectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(List.of(market), t)`를
+  부른다. 리포지토리 메서드는 새로 만들지 않는다
+- 종목코드 → 값으로 바꿀 때 **merge 함수 없는 `toMap`**을 쓴다(`findPriceByStockCode`와 같다). 중복
+  종목코드가 있으면 예외가 나야 한다. 마켓 여럿을 합칠 때도 조용히 덮어쓰지 않는다
+- `MarketMapQueryService`의 **커스텀(`buildCategoryTree`)과 기본(`buildDefaultMarketMap`) 둘 다** 새 빈을
+  마켓별로 불러 합친다. 둘 다 `toMarketMapItem`을 쓰기 때문이다
+- 값이 record로 바뀌므로 `toMarketMapItem`이 `SectorPriceSnapshot` 대신 그 record를 받는다. 쓰는
+  필드는 `getCurrentPrice`·`getChangeRate`·`getSnapshotTime` 셋뿐이다
 
 **전용 매니저를 둔다.** 기본 `CacheManager`(`ApplicationConfig.CACHE_MANAGER`)는 TTL이 없고
 `STOCK_INFO`·`WATCH_STOCK`이 쓴다. 여기에 `setCaffeine`으로 TTL을 걸면 그 둘까지 2시간 뒤 만료된다.
@@ -293,6 +299,7 @@ tick 10:05  코스피 수집 성공, 코스닥 수집 실패
 
 | 커밋 | 지울 필드 |
 |---|---|
+| 1 | 옛 서비스의 `SCALE` 상수 — `combine`만 쓰므로 `combine`과 함께 옮긴다. 남기면 `UnusedVariable` |
 | 5 | `CollectionScheduler.marketMapQueryService` (쓰는 곳이 캡처 한 줄뿐) |
 | 5 | `CollectionScheduler.marketMapCategoryChangeRateSnapshotService` |
 | 5 | `SnapshotRetentionScheduler.marketMapCategoryChangeRateSnapshotService` |
@@ -318,6 +325,10 @@ tick 10:05  코스피 수집 성공, 코스닥 수집 실패
   `captureSnapshot`만 지우고, 조회·정리 메서드(`findTierBreakdownsByCategoryId`,
   `findRankingForMarkets`, 정리 메서드)는 호출부 없는 채로 남긴다. 6절 비교 테스트가 옛 값을 읽는
   데 쓴다. PR 2에서 지운다
+- **`MarketMapCategoryService`의 `marketMapCategoryChangeRateSnapshotRepository.deleteByCategoryIdIn(...)`
+  호출을 지우지 않는다.** 1절의 "전부 끊는다"의 예외다. 집계 테이블이 카테고리에 FK
+  (`fk_market_map_category_change_rate_snapshot_category`)를 걸고 있어서, 이걸 지우면 과거 행이 있는
+  카테고리의 삭제가 FK 위반으로 실패한다. 테이블과 함께 PR 2에서 지운다
 - **`MarketMapCategoryNode.tierBreakdown` 필드를 지우지 않는다** (결정 3)
 - **프론트를 건드리지 않는다.** 프론트 PR 1은 따로 있다
 - **요약 페이지 개편은 이번 범위가 아니다** (사용자 결정)
@@ -350,8 +361,15 @@ when(marketMapCategoryChangeRateSnapshotService.combine(Mockito.anyList()))
         .thenAnswer(invocation -> combine(invocation.getArgument(0)));
 ```
 
-결정 1·2대로 하면 이 스텁들이 부를 대상이 없어진다. **기대값은 그대로 두고, 같은 합계가 새 경로로
-흘러 들어오게 테스트 입력만 바꾼다.**
+결정 1·2대로 하면 이 스텁들이 부를 대상이 없어진다. **기대값은 그대로 두고, 그 기대값이 나오도록
+테스트 입력만 바꾼다.** 픽스처의 합계(weightedSum·totalValue·itemCount)까지 같을 필요는 없다. 아래
+셋은 원래 합계를 종목 행으로 만들 수 없거나 입력을 늘려야 한다 — 이것 때문에 멈추지 않는다.
+
+| 테스트 | 왜 | 어떻게 |
+|---|---|---|
+| `getTopCategoryRankings_자식_카테고리는_랭킹에서_제외된다` | 부모 합계가 자식 종목을 포함한다(`collectItems`). 부모 +5%·자식 +90%를 동시에 만들 수 없다 | 기대값이 이름만 보므로 자식이 부모보다 높기만 하면 된다 |
+| `getTopCategoryRankings_기본_제외_구간은_평균_계산에서_빠진다` | 구간은 시가총액으로 정해진다. 픽스처처럼 두 구간의 totalValue가 같으려면 종목 수가 달라야 한다 | 예: 대형 1종목(시총 10,000, +10%), 소형 여러 종목(합계 10,000, 각 −50%). 기대값 `10` 그대로 |
+| `getMergedTopCategoryRanking_섹터_제외를_켜면_isExcluded_카테고리가_빠진다` | 코스피만 스텁한다. 결정 2의 "하나라도 비면 빈 목록" 규칙에 걸려 결과가 빈다 | 코스닥 종목 하나를 '화학'에 더한다(+5%). 병합 뒤에도 화학은 +5%라 순위·기대값이 그대로다. **입력에 마켓을 더하는 것이 허용되는 유일한 테스트다** |
 
 #### 합산 클래스는 mock 하지 말고 진짜를 쓴다
 
@@ -366,10 +384,17 @@ when(marketMapCategoryChangeRateSnapshotService.combine(Mockito.anyList()))
 | `existsByMarketTypeAndSnapshotTime(market, t)` → `true` | **지금 한 번도 스텁되지 않는다.** Mockito 기본값 `false`라 `notExistsSnapshot`이 참이 되어 모든 트리가 비고, 모든 마켓이 빠지고, 테스트가 전부 빈 결과로 실패한다. 숫자가 달라진 게 아니라 스텁이 빠진 것이다 |
 | before 없음 케이스는 before 시각만 `false` | "before 없음"이 자연히 재현된다 |
 | 가격 행 조회 — **now와 before에 다른 행** | 같으면 델타가 전부 0이 된다 |
-| `stockInfoCacheService.getCache()` | 종목 시가총액이 없어 구간을 못 정한다 |
-| `marketMapStockCategoryRepository.findAll()` | 종목이 카테고리에 안 붙는다 |
+| `stockInfoCacheService.getCache()` | 빈 맵이라 후보 종목이 0개가 된다 |
+| `marketMapStockCategoryRepository.findAll()` — **가격 행이 있는 후보 종목은 전부 배정** | 배정이 없는 종목이 하나라도 있으면 `stockCategoryMap.get(...).getCategoryId()`에서 NPE |
 | `marketMapCategoryRepository.findAll()` | 카테고리 노드가 없다 |
 | `MarketValueTierThresholdService` — **진짜 객체**(리포지토리만 mock) | mock이면 `resolveTier`가 `null`을 돌려 NPE. 이 서비스는 의존성이 리포지토리 하나라 진짜를 쓸 수 있다 |
+| 구간 리포지토리의 `findAll()`과 `findAllByOrderByThresholdValueAsc()` — **둘 다, 같은 목록으로** | 합산 클래스는 `findAll()`(라벨 → id), 서비스는 정렬 조회를 쓴다. 비면 `resolveTier`의 `getFirst()`가 예외 |
+
+- 구간 스텁은 **클래스 공통 셋업**에 둔다. 진짜 구간 서비스로 바뀌면 `getCustomMarketMap_*`·
+  `getDefaultMarketMap_*` 테스트도 구간이 필요하다. 이 테스트들의 입력이 바뀌는 것은 괜찮다
+- 엔티티에 id setter가 없으므로 구간 id는 `ReflectionTestUtils`로 넣는다
+- 지금 `when(marketValueTierThresholdService.getValueTiers())`로 주던 기본 제외 구간은 진짜 객체에
+  스텁할 수 없다. 구간 엔티티의 `isExcludedByDefault` 값으로 표현한다
 
 - 가격 행은 **시각으로 구분되게** 스텁한다. 호출 순서에 기대는 방식(`thenReturn(a).thenReturn(b)`)은
   코드가 before를 먼저 빌드하도록 바뀌면 조용히 뒤집힌다
@@ -381,9 +406,9 @@ when(marketMapCategoryChangeRateSnapshotService.combine(Mockito.anyList()))
 - 테스트 클래스 끝의 `combine` 재현 메서드(`thenAnswer`가 쓰던 것)는 지운다. 진짜 합산 클래스가
   그 계산을 한다
 
-**기대값을 "새 코드가 내는 값"으로 고쳐서 통과시키면 이 PR의 회귀망이 사라진다.** 어떤 테스트가
-기대값을 바꿔야만 통과한다면, 또는 기존 기대값을 만드는 입력을 도저히 만들 수 없다면, **멈추고
-보고한다.** 어느 테스트가 왜 그런지 PR 설명에 적고, 기대값은 건드리지 않는다.
+**기대값을 "새 코드가 내는 값"으로 고쳐서 통과시키면 이 PR의 회귀망이 사라진다.** 위 표의 셋 말고
+어떤 테스트가 기대값을 바꿔야만 통과한다면, 또는 기대값이 나오는 입력을 도저히 만들 수 없다면,
+**멈추고 보고한다.** 어느 테스트가 왜 그런지 PR 설명에 적고, 기대값은 건드리지 않는다.
 
 새 합산 클래스에는 **따로 테스트를 둔다.** 트리를 넣었을 때 카테고리·구간별 합계가 맞는지 —
 하위 카테고리 재귀 포함, 여러 구간, 가중·산술 둘 다, 빈 카테고리. 지금 `collectSnapshots`에 직접
@@ -398,7 +423,7 @@ when(marketMapCategoryChangeRateSnapshotService.combine(Mockito.anyList()))
 | `getCategoryChangeRates_스냅샷의_categoryId가_카테고리_테이블에_없으면_그_항목만_빠진다` | 2 | 카테고리 버전 복원 직후 저장된 행이 없어진 id를 가리키는 경우였다. 트리 기반에선 id가 항상 현재 카테고리 테이블에서 오므로 그 상황이 생기지 않는다 |
 | `getCategoryChangeRates_랭킹_스냅샷이_없으면_빈_응답을_그대로_반환한다` | 6 | 2인자 전용이다. `verifyNoInteractions(marketOverviewSnapshotRepository)`를 검증하는데, 3인자는 시각을 받으므로 이 조건이 성립하지 않아 옮길 수 없다. 2인자와 함께 지운다 |
 | `SectorTelegramReportSenderTest`의 `send(dataTime, false)` 테스트 | 5 | 분기 자체가 사라진다 |
-| `MarketMapAlbumReportSenderTest`의 `send(dataTime, false)` 테스트 | 5 | 분기 자체가 사라진다. **대신** "한 마켓만 합산이 있으면 캡션 없이 보낸다"(결정 6의 구멍)를 보는 테스트로 바꾼다 |
+| `MarketMapAlbumReportSenderTest`의 `send_sectorAvailable이_false면_캡션_없이_이미지만_보낸다` | 5 | 분기 자체가 사라진다. 대체 테스트는 두지 않는다 — 발송기 테스트는 `MarketMapQueryService`를 mock하므로 "한 마켓만 합산 있음"을 표현할 수 없고, 빈 랭킹의 경우는 `send_병합_랭킹이_비어도_이미지는_보낸다`가 이미 본다. 결정 6의 구멍은 완료 기준 11의 `MarketMapQueryService` 테스트가 지킨다 |
 
 ### 5-3. `getCategoryChangeRates_*` 테스트 셋은 지우지 말고 3인자로 옮겨라 ★
 
@@ -414,6 +439,10 @@ getCategoryChangeRates_before_시각에_지수_스냅샷이_없으면_index_befo
 **2번 커밋에서 3인자(`getCategoryChangeRates(MarketQuery, LocalDateTime, int)`)를 부르도록 옮긴다.**
 2인자는 최신 시각을 스스로 조회했지만 3인자는 시각을 인자로 받으므로, 테스트가 쓰던 시각을 직접
 넘긴다. 입력은 5-1과 같은 방식으로 새 경로에 맞추고, 기대값은 그대로다.
+
+지금 픽스처의 `withoutBefore(1L, List.of())`(구간이 없는 항목)는 새 경로에선 생길 수 없다. 결과가
+`hasSize(1)`로 나오려면 마켓마다 종목이 하나 이상 있어야 한다. 테스트 헬퍼 `stockInfo`·`priceSnapshot`은
+지금 KOSPI·등락률 0으로 고정돼 있으니 마켓·등락률·시총을 받도록 늘린다.
 
 ### 5-4. 지수 등락률을 빠뜨리지 마라 ★
 
@@ -440,9 +469,13 @@ getCategoryChangeRates_before_시각에_지수_스냅샷이_없으면_index_befo
 객체에선 아무 일도 안 일어난다. `SchedulingConfigTest`처럼 `ApplicationContextRunner`로 작은 컨텍스트를
 띄워서 본다 — `@EnableCaching`, 전용 매니저, 새 캐시 빈, 리포지토리 mock.
 
+**전용 매니저는 `ApplicationConfig`가 아니라 새 `@Configuration`에 둔다.** `ApplicationConfig`에는
+`jpaQueryFactory(EntityManager)` 빈이 있어 작은 컨텍스트에 올리면 기동이 실패한다.
+
 - 같은 키로 두 번 부르면 리포지토리가 한 번만 불린다
 - 빈 결과면 두 번 부를 때 리포지토리가 두 번 불린다
-- 기본 매니저의 `STOCK_INFO`에 TTL이 생기지 않았다 (기본 매니저를 안 건드렸는지)
+- 기본 매니저에 TTL이 생기지 않았다 — 컨텍스트 없이 `new ApplicationConfig().cacheManager()`에서
+  `STOCK_INFO` 캐시를 꺼내 `CaffeineCache.getNativeCache().policy().expireAfterWrite()`가 비어 있는지 본다
 
 ### 5-6. 캐시 적재가 실패해도 수집은 성공이다
 
@@ -450,7 +483,9 @@ getCategoryChangeRates_before_시각에_지수_스냅샷이_없으면_index_befo
 수집을 실패로 만들면 안 된다** — `CollectionScheduler.run()`이 예외를 `false`로 바꾸므로
 `lastIndexContributionSuccess`가 거짓이 되고, 텔레그램 대신 실패 알림이 나간다.
 
-테스트로 확인한다 — 캐시 빈이 예외를 던져도 `collect`가 정상 종료하고 나머지 마켓도 처리된다.
+테스트로 확인한다 — 캐시 빈이 예외를 던져도 `collect`가 정상 종료하고 나머지 마켓도 적재를 시도한다.
+`IndexContributionRankingCollector` 테스트는 지금 없으니 새로 만든다. `TransactionTemplate`을 mock하면
+`collectForMarket`은 돌지 않고 적재 루프만 검증할 수 있다. 그걸로 충분하다.
 
 ### 5-7. 트리 빌드가 늘어난다
 
@@ -469,8 +504,10 @@ getCategoryChangeRates_before_시각에_지수_스냅샷이_없으면_index_befo
 - **before가 현재 배정으로 다시 계산된다.** 지금은 15분 전에 저장된 합계(그때의 카테고리 배정)를
   읽는다. 바뀐 뒤엔 15분 전 가격 행을 **지금의** 배정으로 더한다. 그 사이 사용자가 종목 배정을 바꿨다면
   before 값이 달라진다. 배정이 바뀐 직후 한 tick만 해당한다
-- **부분 실패 다음 tick.** 10:05에 코스닥 수집만 실패하면 10:20 tick의 before(10:05)에 코스닥이 없다.
-  코스피는 델타가 있고 코스닥 카테고리는 before 없음으로 빠진다. 지금도 저장 행이 없어 같은 결과다
+- **부분 실패 다음 tick의 섹터 캡션이 나아진다.** 10:05에 코스닥 수집만 실패하면 지금은 캡처 자체가
+  돌지 않아(`lastIndexContributionSuccess`가 거짓) 코스피 합계도 저장되지 않는다. 그래서 10:20 tick은
+  두 마켓 다 before가 없어 TOP2가 빈다. 바뀐 뒤엔 코스피 가격 행이 있으므로 코스피는 델타가 나오고
+  코스닥만 빠진다
 - **옛 프론트의 헤더 평균이 조금 다를 수 있다.** `tierBreakdown`이 비면 옛 프론트는 종목에서 평균을
   계산하는데, 섹터 필터로 제외된 하위 카테고리와 시가총액 0인 종목을 빼고 계산한다. 저장된 합계는
   둘 다 포함했다. 섹터 필터를 켠 사용자에게만 보이고, 프론트 PR 1이 나가면 사라진다
@@ -494,7 +531,10 @@ getCategoryChangeRates_before_시각에_지수_스냅샷이_없으면_index_befo
 - `SectorTelegramReportSender.send`의 첫 주석
 - `decorateRanking` 위 주석 중 저장된 스냅샷을 전제로 한 문장
 - `getCustomMarketMapTree`의 Javadoc 중 "수집기가 집계 스냅샷을 저장할 때 쓴다"는 취지의 문장
-- 테스트 안에서 "저장된 스냅샷"을 전제로 한 주석
+- `buildCustomMarketMap`의 `tierBreakdown` 관련 주석
+- `MarketMapAlbumReportSender`의 `send` 안 인라인 주석 중 `sectorAvailable`을 전제로 한 것
+- `SnapshotRetentionScheduler`의 클래스 Javadoc (정리 대상 테이블이 둘이라고 적은 부분)
+- 테스트 안에서 "저장된 스냅샷"·`sectorAvailable`을 전제로 한 주석
 
 주석을 새 동작에 맞게 고치거나, 근거가 없어졌으면 지운다.
 
@@ -511,25 +551,46 @@ getCategoryChangeRates_before_시각에_지수_스냅샷이_없으면_index_befo
 비교할 옛 값이 DB에 있다.
 
 ```
-대상     최근 tick 12개 안팎 × KOSPI, KOSDAQ
+대상     최근 tick 12개 × KOSPI, KOSDAQ
+         시작: 옛 서비스 findLatestCommonSnapshotTime(List.of(KOSPI, KOSDAQ))
+         거기서 collect.interval-minutes(5분)씩 11번 뒤로 간다. 리포지토리 메서드는 추가하지 않는다
+         단, 오늘 07:00 이전 tick은 넣지 않는다 (아래 이유)
 옛 값    MarketMapCategoryChangeRateSnapshotService.findTierBreakdownsByCategoryId(List.of(market), t)
 새 값    새 합산 클래스( MarketMapQueryService.getCustomMarketMapTree(market, t) )
 비교     카테고리 id 집합이 같다
-         카테고리마다 구간별 (tierId, weightedSum, totalValue, simpleSum, itemCount) 가 같다
+         카테고리마다 구간을 tierId로 짝지어 (weightedSum, totalValue, simpleSum, itemCount) 가 같다
+         — 목록 순서로 짝짓지 않는다. 옛 값은 DB 행 순서, 새 값은 HashMap 순서다
          BigDecimal 은 compareTo 로 비교한다 (equals 는 scale 까지 본다)
 ```
 
-- `@Tag("manual")` 테스트로 만든다. 일반 `test`에서 빠지고 `./gradlew manualTest --tests "*.<클래스명>" -i`로
-  돈다. `scheduling.enabled=false`로 띄워 수집기가 돌지 않게 한다
-- **읽기만 한다.** 저장·삭제를 부르지 않는다. 운영 DB에서 돈다
-- **불일치를 전부 출력한다.** 처음 하나에서 멈추지 않는다. 시각·마켓·카테고리·구간·옛 값·새 값
-- 끝에 요약 한 줄 — 비교한 (시각, 마켓) 수, 일치 수, 불일치 수
+**07:00 이전 tick을 빼는 이유.** 종목정보가 매일 07:00에 동기화된다. 상장주식수가 바뀐 종목은
+시가총액·가중합·구간이 달라진다. 어제 tick을 오늘 종목정보로 다시 계산하면 코드가 맞아도 불일치가
+난다. **테스트는 장중이나 장 마감 뒤 같은 날에 돌린다.**
 
-**실행은 구현자가 하지 않는다.** 운영 DB가 있는 서버에서 사용자가 돌린다. PR 설명에 실행 명령을 적어
-둔다. 결과는 사용자가 PR에 붙인다.
+**옛 값이 통째로 없는 (시각, 마켓)은 불일치로 세지 않는다.** 한 마켓이라도 수집에 실패한 tick은
+캡처가 아예 돌지 않아 두 마켓 모두 옛 값이 없다. 새 경로는 성공한 마켓의 가격 행으로 합계를 낸다.
+이런 경우는 "캡처 없음"으로 따로 세어 출력한다.
+
+- `@Tag("manual")` 테스트로 만든다. 일반 `test`에서 빠지고 `./gradlew manualTest --tests "*.<클래스명>" -i`로
+  돈다
+- `@SpringBootTest(properties = {"scheduling.enabled=false", "spring.flyway.enabled=false"})`로 띄운다.
+  수집기가 돌지 않게, 그리고 운영 DB에 마이그레이션이 돌지 않게 한다
+- **읽기만 한다.** 저장·삭제를 부르지 않는다
+- **불일치를 전부 출력한다.** 처음 하나에서 멈추지 않는다. 시각·마켓·카테고리·구간·옛 값·새 값
+- 끝에 요약 한 줄 — 비교한 (시각, 마켓) 수, 일치 수, 불일치 수, 캡처 없음 수
+
+**실행은 구현자가 하지 않는다.** 운영 DB가 있는 서버에서 사용자가 돌린다. 실행 명령은
+`TelegramReportCycleManualTest`의 Javadoc에 있는 docker 명령(`eclipse-temurin:21`, `--network host`,
+`SPRING_PROFILES_ACTIVE=prod`, `DB_URL`, env 파일)을 따른다. **다만 그 명령은 `git checkout main`을 한다.
+이 테스트는 병합 전이므로 PR 브랜치를 checkout하도록 바꿔서** 새 테스트 클래스의 Javadoc과 PR 설명에
+적는다. 결과는 사용자가 PR에 붙인다.
 
 - 전부 일치해야 병합한다
-- 불일치가 5-8의 "배정이 바뀐 직후" 한 가지로 설명되면 괜찮다. 그 시각과 바뀐 배정을 같이 적는다
+- 불일치가 아래 중 하나로 설명되면 괜찮다. 그 시각과 근거를 같이 적는다
+  - 그 tick **이후에** 종목 배정·카테고리 구조(부모 이동)·시가총액 구간 경계를 편집했다.
+    `market_map_stock_category`·`market_map_category`·`market_value_tier_threshold`의 `updated_at`으로
+    확인한다. 이 경우 편집 시각 이전의 tick은 전부 불일치할 수 있다. 배정 해제는 행이 지워져
+    `updated_at`이 남지 않으니 사용자에게 확인한다
 - **설명되지 않는 불일치가 하나라도 있으면 병합하지 않는다**
 
 이 테스트는 PR 2에서 옛 테이블과 함께 지운다.
@@ -544,7 +605,9 @@ getCategoryChangeRates_before_시각에_지수_스냅샷이_없으면_index_befo
 4. 새 합산 클래스에 트리 → 합계 테스트가 있다
 5. `CategoryRankingSummary`에 지수 값이 실리는지 보는 테스트가 있다 (5-4)
 6. `/api/map`이 `snapshotTime`을 받는다. 커스텀·기본 둘 다. 요청 마켓 중 하나라도 그 시각이 없으면 빈
-   응답이다. ISO 형식 문자열이 바인딩되는지를 포함해 테스트가 있다
+   응답이다 — 서비스 테스트가 있다. `snapshotTime=2026-09-22T10:05:00`이 `LocalDateTime`으로
+   바인딩되는지는 `MockMvcBuilders.standaloneSetup(new MarketMapController(...))`로 본다(레포에
+   컨트롤러 테스트가 없고 `@WebMvcTest` 의존성도 없다. 의존성을 더하지 않는다)
 7. 커스텀 트리의 `tierBreakdown`이 항상 빈 배열이다
 8. `GET /api/sector`와 2인자 `getCategoryChangeRates`가 없다
 9. `CollectionScheduler`가 집계 테이블에 쓰지 않는다. `lastChangeRateSuccess`가 없다
@@ -567,10 +630,10 @@ getCategoryChangeRates_before_시각에_지수_스냅샷이_없으면_index_befo
 
 | # | 내용 | 같이 고칠 테스트 |
 |---|---|---|
-| 1 | 합산 로직을 새 클래스로 옮긴다 (결정 1). 옛 `captureSnapshot`이 새 클래스를 부른다. 동작 변화 없음 | 새 클래스 테스트 추가, `combine` 스텁을 진짜 클래스로, 옛 서비스 테스트 생성자 |
-| 2 | 텔레그램 랭킹 셋의 입력을 트리 기반으로 (결정 2). 병합 랭킹의 "하나라도 비면 빈 목록" | 13개 입력 전환, `getCategoryChangeRates_*` 셋 3인자로, stale id 테스트 삭제, 지수 테스트, 병합 규칙 테스트 |
-| 3 | `/api/map`에 `snapshotTime` (결정 4) | 서비스·컨트롤러 테스트 |
-| 4 | 가격 캐시 (결정 5) — 새 빈, 전용 매니저, `toMarketMapItem`, 적재 | 컨텍스트 테스트, 적재 실패 테스트 |
+| 1 | 합산 로직을 새 클래스로 옮긴다 (결정 1). 옛 `captureSnapshot`이 새 클래스를 부른다. `SCALE` 상수도 옮긴다. 동작 변화 없음 | 새 클래스 테스트 추가, `combine` 스텁을 진짜 클래스로, 옛 서비스 테스트 생성자 |
+| 2 | 텔레그램 랭킹 셋의 입력을 트리 기반으로 (결정 2). 병합 랭킹의 "하나라도 비면 빈 목록" | 13개 입력 전환(구간 공통 셋업 포함), `getCategoryChangeRates_*` 셋 3인자로, stale id 테스트 삭제, 지수 테스트, 병합 규칙 테스트 |
+| 3 | `/api/map`에 `snapshotTime` (결정 4) | 서비스 테스트, `standaloneSetup` 바인딩 테스트 |
+| 4 | 가격 캐시 (결정 5) — 새 빈, 전용 매니저(새 `@Configuration`), 커스텀·기본 둘 다 새 빈 사용, `toMarketMapItem`, 적재 | 컨텍스트 테스트, `IndexContributionRankingCollector` 적재 실패 테스트(새 파일), `MarketMapQueryServiceTest` 생성자와 가격 스텁(마켓별 호출로 바뀐다) |
 | 5 | 수집기 저장 제거, 발송 인자 제거, 정리 배치 단계 제거, `captureSnapshot` 삭제, 필드 정리 (결정 6·7). 여기서 집계 테이블 쓰기가 멈춘다 | 5-9 전부, 발송기 테스트 교체 |
 | 6 | `tierBreakdown` 빈 배열, `/api/sector` 삭제, 2인자 삭제, `MarketMapQueryService` 필드 정리 (결정 2·3·7) | 빈 응답 테스트 삭제, 커스텀 트리의 `tierBreakdown`이 빈 배열인지 보는 테스트 추가 |
 | 7 | 6절 실데이터 비교 테스트 | — |

@@ -154,7 +154,7 @@ public class MarketMapQueryService {
             MarketQuery marketQuery, LocalDateTime snapshotTime, int beforeMinutes) {
         List<Market> markets = marketQuery.toMarkets();
         SnapshotResponse<CategoryChangeRateMarketRanking> ranking =
-                marketMapCategoryChangeRateSnapshotService.findRankingForMarkets(markets, snapshotTime, beforeMinutes);
+                buildRankingForMarkets(markets, snapshotTime, beforeMinutes);
 
         Map<Market, BigDecimal> nowIndexChangeRateByMarket =
                 toChangeRateByMarket(findOverviewsBySnapshotTime(snapshotTime));
@@ -168,6 +168,47 @@ public class MarketMapQueryService {
                         .map(marketRanking -> decorateRanking(
                                 marketRanking, nowIndexChangeRateByMarket, beforeIndexChangeRateByMarket, categoryById))
                         .toList());
+    }
+
+    /**
+     * markets가 정확히 snapshotTime 시각에 가진 카테고리별 현재/직전(beforeMinutes분 전) 등락률 랭킹 —
+     * 마켓마다 그 시각의 커스텀 트리를 빌드해 합산한다(결정 1). 합산 결과(카테고리별 구간 원시 합계)가
+     * 빈 마켓은 결과 목록에서 아예 빠진다 — 트리 자체가 비어 있지 않아도(카테고리 노드는 있는데 가격
+     * 행이 없어 종목이 0개) 합산 결과는 빌 수 있으므로, 트리가 아니라 합산 결과의 비어 있음으로
+     * 판단한다. beforeMinutes 시각에 정확히 일치하는 카테고리가 없으면(장 시작 직후, 수집 gap 등) 해당
+     * 카테고리는 before 없이 내려준다 — 가장 가까운 다른 시점 데이터로 조용히 대체하지 않는다.
+     */
+    private SnapshotResponse<CategoryChangeRateMarketRanking> buildRankingForMarkets(
+            List<Market> markets, LocalDateTime snapshotTime, int beforeMinutes) {
+        LocalDateTime beforeTime = snapshotTime.minusMinutes(beforeMinutes);
+        List<CategoryChangeRateMarketRanking> rankings = markets.stream()
+                .map(market -> toMarketRanking(market, snapshotTime, beforeTime))
+                .filter(Objects::nonNull)
+                .toList();
+        return new SnapshotResponse<>(snapshotTime, rankings);
+    }
+
+    private CategoryChangeRateMarketRanking toMarketRanking(
+            Market market, LocalDateTime snapshotTime, LocalDateTime beforeTime) {
+        Map<Long, List<CategoryTierBreakdown>> now =
+                categoryTierAggregationService.aggregateByCategory(getCustomMarketMapTree(market, snapshotTime));
+        if (now.isEmpty()) {
+            return null;
+        }
+        Map<Long, List<CategoryTierBreakdown>> before =
+                categoryTierAggregationService.aggregateByCategory(getCustomMarketMapTree(market, beforeTime));
+        List<CategoryChangeRateItem> items = now.entrySet().stream()
+                .map(entry -> toItem(entry.getKey(), entry.getValue(), before.get(entry.getKey())))
+                .toList();
+        return new CategoryChangeRateMarketRanking(market, items);
+    }
+
+    private CategoryChangeRateItem toItem(
+            Long categoryId, List<CategoryTierBreakdown> now, List<CategoryTierBreakdown> before) {
+        if (before == null) {
+            return CategoryChangeRateItem.withoutBefore(categoryId, now);
+        }
+        return CategoryChangeRateItem.withBefore(categoryId, now, before);
     }
 
     private Map<Market, BigDecimal> toChangeRateByMarket(Map<Market, MarketOverviewSnapshot> overviewsByMarket) {
@@ -276,17 +317,23 @@ public class MarketMapQueryService {
     public List<TopCategoryItem> getMergedTopCategoryRanking(
             MarketQuery marketQuery, LocalDateTime snapshotTime, AverageMode averageMode, boolean sectorFilter) {
         List<Market> markets = marketQuery.toMarkets();
-        Map<Long, List<CategoryTierBreakdown>> mergedByCategoryId =
-                marketMapCategoryChangeRateSnapshotService
-                        .findTierBreakdownsByCategoryId(markets, snapshotTime)
-                        .values()
-                        .stream()
-                        .flatMap(byCategoryId -> byCategoryId.entrySet().stream())
-                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (a, b) -> {
-                            List<CategoryTierBreakdown> merged = new ArrayList<>(a);
-                            merged.addAll(b);
-                            return merged;
-                        }));
+        List<Map<Long, List<CategoryTierBreakdown>>> breakdownsByMarket = markets.stream()
+                .map(market -> categoryTierAggregationService.aggregateByCategory(
+                        getCustomMarketMapTree(market, snapshotTime)))
+                .toList();
+        // 결정 2 — 요청한 마켓 중 하나라도 합산 결과가 비면 빈 목록을 돌려준다. 한 마켓만 수집에
+        // 실패해도 나머지 마켓만으로 TOP2를 뽑으면, 지도 이미지는 markets 전체 기준인데 캡션은 일부
+        // 마켓 기준이 되어 틀린 캡션이 조용히 나간다.
+        if (breakdownsByMarket.stream().anyMatch(Map::isEmpty)) {
+            return List.of();
+        }
+        Map<Long, List<CategoryTierBreakdown>> mergedByCategoryId = breakdownsByMarket.stream()
+                .flatMap(byCategoryId -> byCategoryId.entrySet().stream())
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (a, b) -> {
+                    List<CategoryTierBreakdown> merged = new ArrayList<>(a);
+                    merged.addAll(b);
+                    return merged;
+                }));
 
         Map<Long, MarketMapCategory> categoryById = findCategoryById();
         Set<Long> excludedTierIds = excludedTierIds();

@@ -4,9 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
-import dev.eolmae.marketmonitor.domain.marketmap.dto.MarketValueTierItem;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategory;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapStockCategory;
+import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketValueTierThreshold;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapStockCategoryRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketValueTierThresholdRepository;
@@ -22,10 +22,8 @@ import dev.eolmae.marketmonitor.domain.stock.repository.MarketOverviewSnapshotRe
 import dev.eolmae.marketmonitor.domain.stock.repository.SectorPriceSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceSnapshotService;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
-import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateItem;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateMarketRanking;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryRankingSummary;
-import dev.eolmae.marketmonitor.domain.view.dto.CategoryTierBreakdown;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapResponse;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
@@ -34,12 +32,13 @@ import dev.eolmae.marketmonitor.domain.view.enums.AverageMode;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -57,12 +56,17 @@ class MarketMapQueryServiceTest {
             Mockito.mock(MarketMapStockCategoryRepository.class);
     private final MarketMapCategoryChangeRateSnapshotService marketMapCategoryChangeRateSnapshotService =
             Mockito.mock(MarketMapCategoryChangeRateSnapshotService.class);
-    // combine()은 필드를 참조하지 않는 순수 계산이라 mock 대신 진짜 객체를 쓴다 — repository는 combine이
-    // 부르지 않으므로 mock으로 채워둔다.
+    // 구간 리포지토리 하나를 합산 클래스·구간 서비스가 같이 본다 — 트리 기반 랭킹은 이 둘이 같은 구간
+    // 목록을 보는 것을 전제로 한다(합산 클래스는 findAll()로 라벨→id, 구간 서비스는
+    // findAllByOrderByThresholdValueAsc()로 종목의 구간을 정한다).
+    private final MarketValueTierThresholdRepository marketValueTierThresholdRepository =
+            Mockito.mock(MarketValueTierThresholdRepository.class);
     private final CategoryTierAggregationService categoryTierAggregationService =
-            new CategoryTierAggregationService(Mockito.mock(MarketValueTierThresholdRepository.class));
+            new CategoryTierAggregationService(marketValueTierThresholdRepository);
+    // mock 대신 진짜 객체를 쓴다 — resolveTier가 실제로 실행돼야 트리 기반 테스트의 종목이 의도한 구간에
+    // 들어간다(5-1).
     private final MarketValueTierThresholdService marketValueTierThresholdService =
-            Mockito.mock(MarketValueTierThresholdService.class);
+            new MarketValueTierThresholdService(marketValueTierThresholdRepository);
     private final MarketOverviewSnapshotRepository marketOverviewSnapshotRepository =
             Mockito.mock(MarketOverviewSnapshotRepository.class);
     private final SectorPriceSnapshotService sectorPriceSnapshotService =
@@ -77,6 +81,13 @@ class MarketMapQueryServiceTest {
             categoryTierAggregationService,
             marketValueTierThresholdService,
             marketOverviewSnapshotRepository);
+
+    // 구간 스텁 공통 셋업 — 진짜 구간 서비스로 바뀌면서 트리를 빌드하는 모든 테스트에 구간이 필요해졌다
+    // (5-1). 구간이 여럿 필요한 테스트는 이 기본값을 자기 stubTierThresholds 호출로 덮어쓴다.
+    @BeforeEach
+    void stubDefaultTier() {
+        stubTierThresholds(tierThreshold(10L, "대형", 0L, false));
+    }
 
     @Test
     void getCustomMarketMap_트리집계와_카테고리명_매칭이_정확히_반영된다() {
@@ -377,18 +388,20 @@ class MarketMapQueryServiceTest {
     @Test
     void getCategoryChangeRates_랭킹과_같은_시각의_지수_등락률이_마켓별로_붙는다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
-        CategoryChangeRateMarketRanking kospiRanking = new CategoryChangeRateMarketRanking(
-                Market.KOSPI, List.of(CategoryChangeRateItem.withoutBefore(1L, List.of())));
-        CategoryChangeRateMarketRanking kosdaqRanking = new CategoryChangeRateMarketRanking(
-                Market.KOSDAQ, List.of(CategoryChangeRateItem.withoutBefore(2L, List.of())));
-        when(marketMapCategoryChangeRateSnapshotService.findLatestCommonSnapshotTime(
-                        List.of(Market.KOSPI, Market.KOSDAQ)))
-                .thenReturn(Optional.of(snapshotTime));
-        when(marketMapCategoryChangeRateSnapshotService.findRankingForMarkets(
-                        List.of(Market.KOSPI, Market.KOSDAQ), snapshotTime, 60))
-                .thenReturn(new SnapshotResponse<>(snapshotTime, List.of(kospiRanking, kosdaqRanking)));
-        when(marketMapCategoryRepository.findAll())
-                .thenReturn(List.of(category(1L, null, "반도체"), category(2L, null, "제약")));
+        MarketMapCategory semiconductor = category(1L, null, "반도체");
+        MarketMapCategory pharma = category(2L, null, "제약");
+        stubCategoryTree(
+                List.of(semiconductor, pharma),
+                List.of(MarketMapStockCategory.create("A", 1L), MarketMapStockCategory.create("B", 2L)));
+        stubStockCache(stock("A", Market.KOSPI), stock("B", Market.KOSDAQ));
+        stubPrices(
+                Market.KOSPI,
+                snapshotTime,
+                price("A", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.TEN));
+        stubPrices(
+                Market.KOSDAQ,
+                snapshotTime,
+                price("B", Market.KOSDAQ, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.TEN));
         when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime))
                 .thenReturn(List.of(
                         marketOverviewSnapshot(Market.KOSPI, snapshotTime, BigDecimal.valueOf(1.23)),
@@ -401,7 +414,7 @@ class MarketMapQueryServiceTest {
                                 Market.KOSDAQ, snapshotTime.minusMinutes(60), BigDecimal.valueOf(-0.20))));
 
         SnapshotResponse<CategoryChangeRateMarketRanking> response =
-                service.getCategoryChangeRates(MarketQuery.ALL_STOCK, 60);
+                service.getCategoryChangeRates(MarketQuery.ALL_STOCK, snapshotTime, 60);
 
         CategoryChangeRateMarketRanking kospi = response.items().stream()
                 .filter(ranking -> ranking.market() == Market.KOSPI)
@@ -421,19 +434,19 @@ class MarketMapQueryServiceTest {
     @Test
     void getCategoryChangeRates_그_시각에_지수_스냅샷이_없으면_index가_null이다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
-        CategoryChangeRateMarketRanking kospiRanking = new CategoryChangeRateMarketRanking(
-                Market.KOSPI, List.of(CategoryChangeRateItem.withoutBefore(1L, List.of())));
-        when(marketMapCategoryChangeRateSnapshotService.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
-                .thenReturn(Optional.of(snapshotTime));
-        when(marketMapCategoryChangeRateSnapshotService.findRankingForMarkets(List.of(Market.KOSPI), snapshotTime, 60))
-                .thenReturn(new SnapshotResponse<>(snapshotTime, List.of(kospiRanking)));
-        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(category(1L, null, "반도체")));
+        MarketMapCategory semiconductor = category(1L, null, "반도체");
+        stubCategoryTree(List.of(semiconductor), List.of(MarketMapStockCategory.create("A", 1L)));
+        stubStockCache(stock("A", Market.KOSPI));
+        stubPrices(
+                Market.KOSPI,
+                snapshotTime,
+                price("A", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.TEN));
         // 이번 수집 주기에 지수기여도랭킹 수집만 실패해서, 카테고리 랭킹은 있는데 지수 스냅샷은 그 시각에
         // 없는 경우 — 다른 시각 값으로 조용히 대체하지 않고 index 전체가 null로 내려간다.
         when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
 
         SnapshotResponse<CategoryChangeRateMarketRanking> response =
-                service.getCategoryChangeRates(MarketQuery.KOSPI, 60);
+                service.getCategoryChangeRates(MarketQuery.KOSPI, snapshotTime, 60);
 
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().get(0).index()).isNull();
@@ -442,13 +455,13 @@ class MarketMapQueryServiceTest {
     @Test
     void getCategoryChangeRates_before_시각에_지수_스냅샷이_없으면_index_before가_null이다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
-        CategoryChangeRateMarketRanking kospiRanking = new CategoryChangeRateMarketRanking(
-                Market.KOSPI, List.of(CategoryChangeRateItem.withoutBefore(1L, List.of())));
-        when(marketMapCategoryChangeRateSnapshotService.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
-                .thenReturn(Optional.of(snapshotTime));
-        when(marketMapCategoryChangeRateSnapshotService.findRankingForMarkets(List.of(Market.KOSPI), snapshotTime, 60))
-                .thenReturn(new SnapshotResponse<>(snapshotTime, List.of(kospiRanking)));
-        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(category(1L, null, "반도체")));
+        MarketMapCategory semiconductor = category(1L, null, "반도체");
+        stubCategoryTree(List.of(semiconductor), List.of(MarketMapStockCategory.create("A", 1L)));
+        stubStockCache(stock("A", Market.KOSPI));
+        stubPrices(
+                Market.KOSPI,
+                snapshotTime,
+                price("A", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.TEN));
         // now 시각(10:00)에는 지수 스냅샷이 있지만, before 시각(09:00, beforeMinutes=60)에는 없는
         // 경우 — 장 시작 직후나 수집 gap. 가까운 다른 시점 값으로 대체하지 않고 before만 null이다.
         when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime))
@@ -457,7 +470,7 @@ class MarketMapQueryServiceTest {
                 .thenReturn(List.of());
 
         SnapshotResponse<CategoryChangeRateMarketRanking> response =
-                service.getCategoryChangeRates(MarketQuery.KOSPI, 60);
+                service.getCategoryChangeRates(MarketQuery.KOSPI, snapshotTime, 60);
 
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().get(0).index().now()).isEqualByComparingTo(BigDecimal.valueOf(1.23));
@@ -465,40 +478,27 @@ class MarketMapQueryServiceTest {
     }
 
     @Test
-    void getCategoryChangeRates_스냅샷의_categoryId가_카테고리_테이블에_없으면_그_항목만_빠진다() {
-        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
-        // 카테고리 버전 복원 직후처럼, 스냅샷 row는 이미 지워진 categoryId(99L)를 가리킬 수 있다.
-        CategoryChangeRateMarketRanking kospiRanking = new CategoryChangeRateMarketRanking(
-                Market.KOSPI,
-                List.of(
-                        CategoryChangeRateItem.withoutBefore(1L, List.of()),
-                        CategoryChangeRateItem.withoutBefore(99L, List.of())));
-        when(marketMapCategoryChangeRateSnapshotService.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
-                .thenReturn(Optional.of(snapshotTime));
-        when(marketMapCategoryChangeRateSnapshotService.findRankingForMarkets(List.of(Market.KOSPI), snapshotTime, 60))
-                .thenReturn(new SnapshotResponse<>(snapshotTime, List.of(kospiRanking)));
-        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(category(1L, null, "반도체")));
-        when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
-
-        SnapshotResponse<CategoryChangeRateMarketRanking> response =
-                service.getCategoryChangeRates(MarketQuery.KOSPI, 60);
-
-        assertThat(response.items()).hasSize(1);
-        assertThat(response.items().get(0).items()).extracting("categoryId").containsExactly(1L);
-    }
-
-    @Test
     void getTopCategoryRankings_자식_카테고리는_랭킹에서_제외된다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        LocalDateTime beforeTime = snapshotTime.minusMinutes(60);
         MarketMapCategory root = category(1L, null, "반도체");
         MarketMapCategory child = category(2L, 1L, "반도체 소재");
-        // child가 root보다 등락률이 훨씬 높아도, 대분류가 아니므로 결과에 나오면 안 된다.
-        stubRankingForTopCategories(
-                snapshotTime,
+        stubCategoryTree(
                 List.of(root, child),
-                List.of(),
-                changeRateItemWithFlatBefore(root.getId(), tier(10L, "대형", 50_000, 10000)), // +5%p
-                changeRateItemWithFlatBefore(child.getId(), tier(10L, "대형", 900_000, 10000))); // +90%p
+                List.of(MarketMapStockCategory.create("A1", 1L), MarketMapStockCategory.create("A2", 2L)));
+        stubStockCache(stock("A1", Market.KOSPI), stock("A2", Market.KOSPI));
+        // child(A2)가 root보다 등락률이 훨씬 높아도(부모 집계에 재귀로 포함되긴 하지만), 대분류가
+        // 아니므로 결과에 별도로 나오면 안 된다.
+        stubPrices(
+                Market.KOSPI,
+                snapshotTime,
+                price("A1", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(5)),
+                price("A2", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(90)));
+        stubPrices(
+                Market.KOSPI,
+                beforeTime,
+                price("A1", Market.KOSPI, beforeTime, BigDecimal.valueOf(10_000), BigDecimal.ZERO),
+                price("A2", Market.KOSPI, beforeTime, BigDecimal.valueOf(10_000), BigDecimal.ZERO));
 
         List<CategoryRankingSummary> summaries =
                 service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
@@ -512,16 +512,34 @@ class MarketMapQueryServiceTest {
     @Test
     void getTopCategoryRankings_TOP2까지만_등락률_내림차순으로_노출된다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        LocalDateTime beforeTime = snapshotTime.minusMinutes(60);
         MarketMapCategory a = category(1L, null, "반도체");
         MarketMapCategory b = category(2L, null, "화학");
         MarketMapCategory c = category(3L, null, "자동차");
-        stubRankingForTopCategories(
-                snapshotTime,
+        stubCategoryTree(
                 List.of(a, b, c),
-                List.of(),
-                changeRateItemWithFlatBefore(a.getId(), tier(10L, "대형", 100_000, 10000)), // +10%p
-                changeRateItemWithFlatBefore(b.getId(), tier(10L, "대형", 50_000, 10000)), // +5%p
-                changeRateItemWithFlatBefore(c.getId(), tier(10L, "대형", 20_000, 10000))); // +2%p, 3위라 빠져야 함
+                List.of(
+                        MarketMapStockCategory.create("A", 1L),
+                        MarketMapStockCategory.create("B", 2L),
+                        MarketMapStockCategory.create("C", 3L)));
+        stubStockCache(stock("A", Market.KOSPI), stock("B", Market.KOSPI), stock("C", Market.KOSPI));
+        stubPrices(
+                Market.KOSPI,
+                snapshotTime,
+                price("A", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.TEN), // +10%p
+                price("B", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(5)), // +5%p
+                price(
+                        "C",
+                        Market.KOSPI,
+                        snapshotTime,
+                        BigDecimal.valueOf(10_000),
+                        BigDecimal.valueOf(2))); // +2%p, 3위라 빠져야 함
+        stubPrices(
+                Market.KOSPI,
+                beforeTime,
+                price("A", Market.KOSPI, beforeTime, BigDecimal.valueOf(10_000), BigDecimal.ZERO),
+                price("B", Market.KOSPI, beforeTime, BigDecimal.valueOf(10_000), BigDecimal.ZERO),
+                price("C", Market.KOSPI, beforeTime, BigDecimal.valueOf(10_000), BigDecimal.ZERO));
 
         List<CategoryRankingSummary> summaries =
                 service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
@@ -536,14 +554,22 @@ class MarketMapQueryServiceTest {
     @Test
     void getTopCategoryRankings_before가_없는_카테고리는_랭킹에서_빠진다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        LocalDateTime beforeTime = snapshotTime.minusMinutes(60);
         MarketMapCategory a = category(1L, null, "반도체");
         MarketMapCategory b = category(2L, null, "화학");
-        stubRankingForTopCategories(
+        stubCategoryTree(
+                List.of(a, b), List.of(MarketMapStockCategory.create("A", 1L), MarketMapStockCategory.create("B", 2L)));
+        stubStockCache(stock("A", Market.KOSPI), stock("B", Market.KOSPI));
+        stubPrices(
+                Market.KOSPI,
                 snapshotTime,
-                List.of(a, b),
-                List.of(),
-                changeRateItem(a.getId(), tier(10L, "대형", 900_000, 10000)), // +90%, before 없음
-                changeRateItemWithFlatBefore(b.getId(), tier(10L, "대형", 50_000, 10000))); // +5%p
+                price("A", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(90)),
+                price("B", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(5)));
+        // before: A는 가격 행 자체가 없다(before 없음), B만 0%로 존재한다.
+        stubPrices(
+                Market.KOSPI,
+                beforeTime,
+                price("B", Market.KOSPI, beforeTime, BigDecimal.valueOf(10_000), BigDecimal.ZERO));
 
         List<CategoryRankingSummary> summaries =
                 service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
@@ -559,8 +585,13 @@ class MarketMapQueryServiceTest {
     void getTopCategoryRankings_before가_전부_없으면_빈_목록이_된다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
         MarketMapCategory a = category(1L, null, "반도체");
-        stubRankingForTopCategories(
-                snapshotTime, List.of(a), List.of(), changeRateItem(a.getId(), tier(10L, "대형", 100_000, 10000)));
+        stubCategoryTree(List.of(a), List.of(MarketMapStockCategory.create("A", 1L)));
+        stubStockCache(stock("A", Market.KOSPI));
+        stubPrices(
+                Market.KOSPI,
+                snapshotTime,
+                price("A", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.TEN));
+        // before 시각은 존재 자체를 스텁하지 않는다 — 그 시각 스냅샷이 통째로 없는 경우.
 
         List<CategoryRankingSummary> summaries =
                 service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
@@ -571,16 +602,41 @@ class MarketMapQueryServiceTest {
     @Test
     void getTopCategoryRankings_기본_제외_구간은_평균_계산에서_빠진다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        LocalDateTime beforeTime = snapshotTime.minusMinutes(60);
         MarketMapCategory root = category(1L, null, "반도체");
-        // tier(20L)이 결과에 포함되면 -20%, 빠지면 +10% — 제외가 실제로 적용됐는지 값으로 검증한다.
-        stubRankingForTopCategories(
-                snapshotTime,
+        // 구간은 시가총액으로 정해진다 — 대형 1종목(시총 10,000, +10%)과 소형 4종목(합계 시총 10,000,
+        // 각 -50%)으로 나눈다. 소형은 기본 제외 구간이라 평균에서 빠지면 +10%만 남는다.
+        stubTierThresholds(tierThreshold(20L, "소형", 0L, true), tierThreshold(10L, "대형", 5_000L, false));
+        stubCategoryTree(
                 List.of(root),
-                List.of(20L),
-                changeRateItemWithFlatBefore(
-                        root.getId(),
-                        tier(10L, "대형", 100_000, 10000), // +10%p, 포함
-                        tier(20L, "소형", -500_000, 10000))); // -50%p, 제외 대상
+                List.of(
+                        MarketMapStockCategory.create("BIG", 1L),
+                        MarketMapStockCategory.create("S1", 1L),
+                        MarketMapStockCategory.create("S2", 1L),
+                        MarketMapStockCategory.create("S3", 1L),
+                        MarketMapStockCategory.create("S4", 1L)));
+        stubStockCache(
+                stock("BIG", Market.KOSPI),
+                stock("S1", Market.KOSPI),
+                stock("S2", Market.KOSPI),
+                stock("S3", Market.KOSPI),
+                stock("S4", Market.KOSPI));
+        stubPrices(
+                Market.KOSPI,
+                snapshotTime,
+                price("BIG", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.TEN),
+                price("S1", Market.KOSPI, snapshotTime, BigDecimal.valueOf(2_500), BigDecimal.valueOf(-50)),
+                price("S2", Market.KOSPI, snapshotTime, BigDecimal.valueOf(2_500), BigDecimal.valueOf(-50)),
+                price("S3", Market.KOSPI, snapshotTime, BigDecimal.valueOf(2_500), BigDecimal.valueOf(-50)),
+                price("S4", Market.KOSPI, snapshotTime, BigDecimal.valueOf(2_500), BigDecimal.valueOf(-50)));
+        stubPrices(
+                Market.KOSPI,
+                beforeTime,
+                price("BIG", Market.KOSPI, beforeTime, BigDecimal.valueOf(10_000), BigDecimal.ZERO),
+                price("S1", Market.KOSPI, beforeTime, BigDecimal.valueOf(2_500), BigDecimal.ZERO),
+                price("S2", Market.KOSPI, beforeTime, BigDecimal.valueOf(2_500), BigDecimal.ZERO),
+                price("S3", Market.KOSPI, beforeTime, BigDecimal.valueOf(2_500), BigDecimal.ZERO),
+                price("S4", Market.KOSPI, beforeTime, BigDecimal.valueOf(2_500), BigDecimal.ZERO));
 
         List<CategoryRankingSummary> summaries =
                 service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
@@ -593,18 +649,31 @@ class MarketMapQueryServiceTest {
     @Test
     void getTopCategoryRankingsByChangeRate_등락률_기준으로_델타_기준과_다른_카테고리를_뽑는다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        LocalDateTime beforeTime = snapshotTime.minusMinutes(60);
         MarketMapCategory a = category(1L, null, "반도체");
         MarketMapCategory b = category(2L, null, "화학");
         MarketMapCategory c = category(3L, null, "자동차");
+        stubCategoryTree(
+                List.of(a, b, c),
+                List.of(
+                        MarketMapStockCategory.create("A", 1L),
+                        MarketMapStockCategory.create("B", 2L),
+                        MarketMapStockCategory.create("C", 3L)));
+        stubStockCache(stock("A", Market.KOSPI), stock("B", Market.KOSPI), stock("C", Market.KOSPI));
         // a: now +20%, before +19% → 델타 +1%p. b: now +5%, before -10% → 델타 +15%p.
         // c: now +10%, before +8% → 델타 +2%p.
-        CategoryChangeRateItem itemA = CategoryChangeRateItem.withBefore(
-                a.getId(), List.of(tier(10L, "대형", 200_000, 10_000)), List.of(tier(10L, "대형", 190_000, 10_000)));
-        CategoryChangeRateItem itemB = CategoryChangeRateItem.withBefore(
-                b.getId(), List.of(tier(10L, "대형", 50_000, 10_000)), List.of(tier(10L, "대형", -100_000, 10_000)));
-        CategoryChangeRateItem itemC = CategoryChangeRateItem.withBefore(
-                c.getId(), List.of(tier(10L, "대형", 100_000, 10_000)), List.of(tier(10L, "대형", 80_000, 10_000)));
-        stubRankingForTopCategories(snapshotTime, List.of(a, b, c), List.of(), itemA, itemB, itemC);
+        stubPrices(
+                Market.KOSPI,
+                snapshotTime,
+                price("A", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(20)),
+                price("B", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(5)),
+                price("C", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.TEN));
+        stubPrices(
+                Market.KOSPI,
+                beforeTime,
+                price("A", Market.KOSPI, beforeTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(19)),
+                price("B", Market.KOSPI, beforeTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(-10)),
+                price("C", Market.KOSPI, beforeTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(8)));
 
         List<CategoryRankingSummary> deltaRankings =
                 service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
@@ -625,19 +694,32 @@ class MarketMapQueryServiceTest {
         MarketMapCategory a = category(1L, null, "반도체");
         MarketMapCategory b = category(2L, null, "화학");
         MarketMapCategory c = category(3L, null, "자동차");
-        stubMergedRanking(List.of(a, b, c));
-
+        stubCategoryTree(
+                List.of(a, b, c),
+                List.of(
+                        MarketMapStockCategory.create("A1", 1L),
+                        MarketMapStockCategory.create("A2", 1L),
+                        MarketMapStockCategory.create("B1", 2L),
+                        MarketMapStockCategory.create("B2", 2L),
+                        MarketMapStockCategory.create("C1", 3L)));
+        stubStockCache(
+                stock("A1", Market.KOSPI),
+                stock("A2", Market.KOSDAQ),
+                stock("B1", Market.KOSPI),
+                stock("B2", Market.KOSDAQ),
+                stock("C1", Market.KOSPI));
         // a는 KOSPI 단독으로 보면 압도적 1위(+100%)지만 KOSDAQ에서 -90%라 합치면 +5%로 밀린다.
-        Map<Long, List<CategoryTierBreakdown>> kospiBreakdowns = Map.of(
-                a.getId(), List.of(tier(10L, "대형", 1_000_000, 10_000)),
-                b.getId(), List.of(tier(10L, "대형", 80_000, 10_000)),
-                c.getId(), List.of(tier(10L, "대형", 60_000, 10_000)));
-        Map<Long, List<CategoryTierBreakdown>> kosdaqBreakdowns = Map.of(
-                a.getId(), List.of(tier(10L, "대형", -900_000, 10_000)),
-                b.getId(), List.of(tier(10L, "대형", 80_000, 10_000)));
-        when(marketMapCategoryChangeRateSnapshotService.findTierBreakdownsByCategoryId(
-                        List.of(Market.KOSPI, Market.KOSDAQ), snapshotTime))
-                .thenReturn(Map.of(Market.KOSPI, kospiBreakdowns, Market.KOSDAQ, kosdaqBreakdowns));
+        stubPrices(
+                Market.KOSPI,
+                snapshotTime,
+                price("A1", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(100)),
+                price("B1", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(8)),
+                price("C1", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(6)));
+        stubPrices(
+                Market.KOSDAQ,
+                snapshotTime,
+                price("A2", Market.KOSDAQ, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(-90)),
+                price("B2", Market.KOSDAQ, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(8)));
 
         List<TopCategoryItem> merged =
                 service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime, AverageMode.WEIGHTED, false);
@@ -650,17 +732,19 @@ class MarketMapQueryServiceTest {
     void getMergedTopCategoryRanking_원시값을_합산한_뒤_한_번만_나눈다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
         MarketMapCategory a = category(1L, null, "반도체");
-        stubMergedRanking(List.of(a));
-
+        stubCategoryTree(
+                List.of(a), List.of(MarketMapStockCategory.create("A1", 1L), MarketMapStockCategory.create("A2", 1L)));
+        stubStockCache(stock("A1", Market.KOSPI), stock("A2", Market.KOSDAQ));
         // KOSPI 시총 10,000에 +10%p, KOSDAQ 시총 40,000에 -2%p — 단순 평균이면 (10-2)/2=+4가 되지만,
         // KOSDAQ 쪽 시총 비중이 훨씬 커서 원시값을 합산한 뒤 나누면 +0.4가 맞다.
-        Map<Long, List<CategoryTierBreakdown>> kospiBreakdowns =
-                Map.of(a.getId(), List.of(tier(10L, "대형", 100_000, 10_000)));
-        Map<Long, List<CategoryTierBreakdown>> kosdaqBreakdowns =
-                Map.of(a.getId(), List.of(tier(10L, "대형", -80_000, 40_000)));
-        when(marketMapCategoryChangeRateSnapshotService.findTierBreakdownsByCategoryId(
-                        List.of(Market.KOSPI, Market.KOSDAQ), snapshotTime))
-                .thenReturn(Map.of(Market.KOSPI, kospiBreakdowns, Market.KOSDAQ, kosdaqBreakdowns));
+        stubPrices(
+                Market.KOSPI,
+                snapshotTime,
+                price("A1", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.TEN));
+        stubPrices(
+                Market.KOSDAQ,
+                snapshotTime,
+                price("A2", Market.KOSDAQ, snapshotTime, BigDecimal.valueOf(40_000), BigDecimal.valueOf(-2)));
 
         List<TopCategoryItem> merged =
                 service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime, AverageMode.WEIGHTED, false);
@@ -674,10 +758,27 @@ class MarketMapQueryServiceTest {
     @Test
     void getMergedTopCategoryRanking_그_시각_스냅샷이_없으면_빈_목록이다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
-        stubMergedRanking(List.of(category(1L, null, "반도체")));
-        when(marketMapCategoryChangeRateSnapshotService.findTierBreakdownsByCategoryId(
-                        List.of(Market.KOSPI, Market.KOSDAQ), snapshotTime))
-                .thenReturn(Map.of());
+        stubCategoryTree(List.of(category(1L, null, "반도체")), List.of());
+        // KOSPI·KOSDAQ 둘 다 그 시각 스냅샷 자체를 스텁하지 않는다 — 캡처가 아예 안 된 tick.
+
+        assertThat(service.getMergedTopCategoryRanking(
+                        MarketQuery.ALL_STOCK, snapshotTime, AverageMode.WEIGHTED, false))
+                .isEmpty();
+    }
+
+    // 결정 2가 새로 더한 규칙 — 한 마켓만 데이터가 없어도(다른 마켓은 멀쩡해도) 전체가 빈 목록이어야
+    // 한다. 위 테스트(둘 다 없음)만으로는 "하나라도"인지 "전부"인지 구분이 안 된다.
+    @Test
+    void getMergedTopCategoryRanking_한_마켓만_합산이_비어도_빈_목록이다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        MarketMapCategory a = category(1L, null, "반도체");
+        stubCategoryTree(List.of(a), List.of(MarketMapStockCategory.create("A1", 1L)));
+        stubStockCache(stock("A1", Market.KOSPI));
+        stubPrices(
+                Market.KOSPI,
+                snapshotTime,
+                price("A1", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.TEN));
+        // KOSDAQ은 그 시각 스냅샷 자체가 없다 — KOSPI만 있어도 전체가 빈 목록이어야 한다.
 
         assertThat(service.getMergedTopCategoryRanking(
                         MarketQuery.ALL_STOCK, snapshotTime, AverageMode.WEIGHTED, false))
@@ -692,14 +793,24 @@ class MarketMapQueryServiceTest {
         MarketMapCategory excluded = category(1L, null, "반도체");
         excluded.exclude();
         MarketMapCategory included = category(2L, null, "화학");
-        stubMergedRanking(List.of(excluded, included));
-
-        Map<Long, List<CategoryTierBreakdown>> kospiBreakdowns = Map.of(
-                excluded.getId(), List.of(tier(10L, "대형", 900_000, 10_000)), // +90%, 제외 대상이면 빠져야 함
-                included.getId(), List.of(tier(10L, "대형", 50_000, 10_000))); // +5%
-        when(marketMapCategoryChangeRateSnapshotService.findTierBreakdownsByCategoryId(
-                        List.of(Market.KOSPI, Market.KOSDAQ), snapshotTime))
-                .thenReturn(Map.of(Market.KOSPI, kospiBreakdowns));
+        stubCategoryTree(
+                List.of(excluded, included),
+                List.of(
+                        MarketMapStockCategory.create("A1", 1L),
+                        MarketMapStockCategory.create("B1", 2L),
+                        MarketMapStockCategory.create("B2", 2L)));
+        stubStockCache(stock("A1", Market.KOSPI), stock("B1", Market.KOSPI), stock("B2", Market.KOSDAQ));
+        stubPrices(
+                Market.KOSPI,
+                snapshotTime,
+                price("A1", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(90)),
+                price("B1", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(5)));
+        // KOSDAQ에 아무 종목도 없으면 "하나라도 비면 빈 목록" 규칙에 걸려 전체가 빈다 — 화학에 KOSDAQ
+        // 종목을 하나 더한다. 등락률이 같아(+5%) 병합 뒤 값은 그대로다.
+        stubPrices(
+                Market.KOSDAQ,
+                snapshotTime,
+                price("B2", Market.KOSDAQ, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(5)));
 
         List<TopCategoryItem> filtered =
                 service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime, AverageMode.WEIGHTED, true);
@@ -710,19 +821,23 @@ class MarketMapQueryServiceTest {
         assertThat(unfiltered).extracting(TopCategoryItem::categoryName).containsExactlyInAnyOrder("반도체", "화학");
     }
 
-    // 가중평균과 산술평균이 실제로 다른 값이 나오는 것을 보여준다 — 4-arg tier()만 쓰는 기존 픽스처는
-    // itemCount가 항상 1이라 두 평균이 우연히 같아서 이 분기를 검증하지 못한다.
+    // 가중평균과 산술평균이 실제로 다른 값이 나오는 것을 보여준다 — 종목 하나짜리 픽스처는 itemCount가
+    // 항상 1이라 두 평균이 우연히 같아서 이 분기를 검증하지 못한다.
     @Test
     void getTopCategoryRankingsByChangeRate_평균_방식에_따라_결과가_달라진다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
         MarketMapCategory a = category(1L, null, "반도체");
+        stubCategoryTree(
+                List.of(a),
+                List.of(MarketMapStockCategory.create("BIG", 1L), MarketMapStockCategory.create("SMALL", 1L)));
+        stubStockCache(stock("BIG", Market.KOSPI), stock("SMALL", Market.KOSPI));
         // 시총 90,000짜리 종목 +30%, 시총 10,000짜리 종목 +10% — 가중평균은 시총이 큰 쪽에 끌려 +28%,
         // 산술평균은 종목당 등락률을 그대로 평균내 +20%.
-        stubRankingForTopCategories(
+        stubPrices(
+                Market.KOSPI,
                 snapshotTime,
-                List.of(a),
-                List.of(),
-                changeRateItem(a.getId(), tier(10L, "대형", 2_800_000, 100_000, 40, 2)));
+                price("BIG", Market.KOSPI, snapshotTime, BigDecimal.valueOf(90_000), BigDecimal.valueOf(30)),
+                price("SMALL", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.TEN));
 
         List<CategoryRankingSummary> weighted = service.getTopCategoryRankingsByChangeRate(
                 MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
@@ -738,15 +853,25 @@ class MarketMapQueryServiceTest {
     @Test
     void getTopCategoryRankings_평균_방식에_따라_델타_결과가_달라진다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        LocalDateTime beforeTime = snapshotTime.minusMinutes(60);
         MarketMapCategory a = category(1L, null, "반도체");
+        stubCategoryTree(
+                List.of(a),
+                List.of(MarketMapStockCategory.create("BIG", 1L), MarketMapStockCategory.create("SMALL", 1L)));
+        stubStockCache(stock("BIG", Market.KOSPI), stock("SMALL", Market.KOSPI));
         // now:    시총 90,000 +30% / 10,000 +10%  → 가중 +28%, 산술 +20%
         // before: 시총 80,000 +10% / 20,000   0%  → 가중  +8%, 산술  +5%
         // → 가중 델타는 +20%p, 산술 델타는 +15%p로 서로 다르다.
-        CategoryChangeRateItem item = CategoryChangeRateItem.withBefore(
-                a.getId(),
-                List.of(tier(10L, "대형", 2_800_000, 100_000, 40, 2)),
-                List.of(tier(10L, "대형", 800_000, 100_000, 10, 2)));
-        stubRankingForTopCategories(snapshotTime, List.of(a), List.of(), item);
+        stubPrices(
+                Market.KOSPI,
+                snapshotTime,
+                price("BIG", Market.KOSPI, snapshotTime, BigDecimal.valueOf(90_000), BigDecimal.valueOf(30)),
+                price("SMALL", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.TEN));
+        stubPrices(
+                Market.KOSPI,
+                beforeTime,
+                price("BIG", Market.KOSPI, beforeTime, BigDecimal.valueOf(80_000), BigDecimal.TEN),
+                price("SMALL", Market.KOSPI, beforeTime, BigDecimal.valueOf(20_000), BigDecimal.ZERO));
 
         List<CategoryRankingSummary> weighted =
                 service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
@@ -764,12 +889,15 @@ class MarketMapQueryServiceTest {
         MarketMapCategory excluded = category(1L, null, "반도체");
         excluded.exclude();
         MarketMapCategory included = category(2L, null, "화학");
-        stubRankingForTopCategories(
-                snapshotTime,
+        stubCategoryTree(
                 List.of(excluded, included),
-                List.of(),
-                changeRateItem(excluded.getId(), tier(10L, "대형", 900_000, 10000)), // +90%, 제외 대상이면 빠져야 함
-                changeRateItem(included.getId(), tier(10L, "대형", 50_000, 10000))); // +5%
+                List.of(MarketMapStockCategory.create("A", 1L), MarketMapStockCategory.create("B", 2L)));
+        stubStockCache(stock("A", Market.KOSPI), stock("B", Market.KOSPI));
+        stubPrices(
+                Market.KOSPI,
+                snapshotTime,
+                price("A", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(90)),
+                price("B", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(5)));
 
         List<CategoryRankingSummary> filtered = service.getTopCategoryRankingsByChangeRate(
                 MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, true);
@@ -784,58 +912,72 @@ class MarketMapQueryServiceTest {
                 .containsExactly("반도체", "화학");
     }
 
-    private void stubMergedRanking(List<MarketMapCategory> categories) {
-        when(marketMapCategoryRepository.findAll()).thenReturn(categories);
-        when(marketValueTierThresholdService.getValueTiers()).thenReturn(List.of());
+    // 텔레그램 섹터 캡션의 "#코스피 +x.xx%"가 CategoryRankingSummary.indexChangeRate를 읽는다
+    // (toCategoryRankingSummary의 marketRanking.index().now()) — 캡션이 실제로 읽는 자리에 지수 값이
+    // 실리는지 보는 테스트가 지금까지 없었다.
+    @Test
+    void getTopCategoryRankings_지수_등락률이_함께_담긴다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        MarketMapCategory a = category(1L, null, "반도체");
+        stubCategoryTree(List.of(a), List.of(MarketMapStockCategory.create("A", 1L)));
+        stubStockCache(stock("A", Market.KOSPI));
+        stubPrices(
+                Market.KOSPI,
+                snapshotTime,
+                price("A", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.TEN));
+        when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime))
+                .thenReturn(List.of(marketOverviewSnapshot(Market.KOSPI, snapshotTime, BigDecimal.valueOf(1.23))));
+
+        List<CategoryRankingSummary> summaries =
+                service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
+
+        assertThat(summaries.get(0).indexChangeRate()).isEqualByComparingTo(BigDecimal.valueOf(1.23));
     }
 
-    private void stubRankingForTopCategories(
-            LocalDateTime snapshotTime,
-            List<MarketMapCategory> categories,
-            List<Long> excludedTierIds,
-            CategoryChangeRateItem... items) {
-        when(marketMapCategoryChangeRateSnapshotService.findRankingForMarkets(List.of(Market.KOSPI), snapshotTime, 60))
-                .thenReturn(new SnapshotResponse<>(
-                        snapshotTime, List.of(new CategoryChangeRateMarketRanking(Market.KOSPI, List.of(items)))));
-        when(marketMapCategoryRepository.findAll()).thenReturn(categories);
-        when(marketValueTierThresholdService.getValueTiers())
-                .thenReturn(excludedTierIds.stream()
-                        .map(id -> new MarketValueTierItem(id, "제외구간", 0L, true))
-                        .toList());
-        when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
-    }
-
-    private CategoryChangeRateItem changeRateItem(Long categoryId, CategoryTierBreakdown... breakdowns) {
-        return CategoryChangeRateItem.withoutBefore(categoryId, List.of(breakdowns));
-    }
-
-    /** 랭킹 값은 now - before이므로, before를 0%로 두면 델타가 곧 now가 되어 기대값을 읽기 쉽다.
-     * 같은 tierId를 써야 기본 제외 구간 필터가 now/before 양쪽에 똑같이 걸린다. */
-    private CategoryChangeRateItem changeRateItemWithFlatBefore(
-            Long categoryId, CategoryTierBreakdown... nowBreakdowns) {
-        List<CategoryTierBreakdown> before = Arrays.stream(nowBreakdowns)
-                .map(b -> tier(b.tierId(), b.tierLabel(), 0L, b.totalValue().longValue()))
+    private void stubTierThresholds(MarketValueTierThreshold... tiers) {
+        List<MarketValueTierThreshold> sorted = List.of(tiers).stream()
+                .sorted(Comparator.comparing(MarketValueTierThreshold::getThresholdValue))
                 .toList();
-        return CategoryChangeRateItem.withBefore(categoryId, List.of(nowBreakdowns), before);
+        when(marketValueTierThresholdRepository.findAll()).thenReturn(List.of(tiers));
+        when(marketValueTierThresholdRepository.findAllByOrderByThresholdValueAsc())
+                .thenReturn(sorted);
     }
 
-    /** 가중평균만 검증하는 기존 픽스처용 — itemCount 1에 simpleSum을 종목당 등락률(weightedSum/totalValue,
-     * Σ가 아니라 1건짜리 평균)로 채워서 산술평균이 가중평균과 실제로 같아지게 한다(6-arg tier()의 특수
-     * 케이스일 뿐, 산술평균 자체를 검증하는 데는 쓰지 않는다). */
-    private CategoryTierBreakdown tier(Long tierId, String label, long weightedSum, long totalValue) {
-        return tier(tierId, label, weightedSum, totalValue, weightedSum / totalValue, 1);
+    private MarketValueTierThreshold tierThreshold(
+            Long id, String label, long thresholdValue, boolean excludedByDefault) {
+        MarketValueTierThreshold threshold = MarketValueTierThreshold.create(label, thresholdValue, excludedByDefault);
+        ReflectionTestUtils.setField(threshold, "id", id);
+        return threshold;
     }
 
-    /** 가중평균과 산술평균이 실제로 달라지는 픽스처용 — simpleSum·itemCount를 따로 받는다. */
-    private CategoryTierBreakdown tier(
-            Long tierId, String label, long weightedSum, long totalValue, long simpleSum, int itemCount) {
-        return new CategoryTierBreakdown(
-                tierId,
-                label,
-                BigDecimal.valueOf(weightedSum),
-                BigDecimal.valueOf(totalValue),
-                BigDecimal.valueOf(simpleSum),
-                itemCount);
+    private void stubCategoryTree(List<MarketMapCategory> categories, List<MarketMapStockCategory> assignments) {
+        when(marketMapCategoryRepository.findAll()).thenReturn(categories);
+        when(marketMapStockCategoryRepository.findAll()).thenReturn(assignments);
+    }
+
+    private void stubStockCache(StockInfo... stocks) {
+        when(stockInfoCacheService.getCache())
+                .thenReturn(List.of(stocks).stream()
+                        .collect(Collectors.toMap(StockInfo::getStockCode, Function.identity())));
+    }
+
+    private void stubPrices(Market market, LocalDateTime time, SectorPriceSnapshot... snapshots) {
+        when(sectorPriceSnapshotRepository.existsByMarketTypeAndSnapshotTime(market, time))
+                .thenReturn(true);
+        when(sectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(List.of(market), time))
+                .thenReturn(List.of(snapshots));
+    }
+
+    /** 트리 기반 랭킹 테스트용 종목 — listCount를 1로 고정해 price()의 totalMarketValue를 그대로
+     * 시가총액으로 쓴다(currentPrice * listCount = currentPrice). */
+    private StockInfo stock(String stockCode, Market market) {
+        return StockInfo.create(stockCode, stockCode, market, "0", null, 1L, BigDecimal.TEN);
+    }
+
+    private SectorPriceSnapshot price(
+            String stockCode, Market market, LocalDateTime time, BigDecimal totalMarketValue, BigDecimal changeRate) {
+        return SectorPriceSnapshot.create(
+                market, time, stockCode, ExchangeType.KRX, stockCode, totalMarketValue, BigDecimal.ZERO, changeRate);
     }
 
     private MarketOverviewSnapshot marketOverviewSnapshot(

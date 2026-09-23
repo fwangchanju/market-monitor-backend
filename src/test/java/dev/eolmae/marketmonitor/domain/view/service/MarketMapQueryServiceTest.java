@@ -124,7 +124,7 @@ class MarketMapQueryServiceTest {
                         priceSnapshot("051910", snapshotTime, BigDecimal.ONE)));
         when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
 
-        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI);
+        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI, null);
 
         assertThat(response.snapshotTime()).isEqualTo(snapshotTime);
         List<MarketMapCategoryNode> nodes = response.items();
@@ -177,7 +177,7 @@ class MarketMapQueryServiceTest {
                         priceSnapshot("051910", snapshotTime, BigDecimal.ONE)));
         when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
 
-        MarketMapResponse response = service.getDefaultMarketMap(MarketQuery.KOSPI);
+        MarketMapResponse response = service.getDefaultMarketMap(MarketQuery.KOSPI, null);
 
         assertThat(response.snapshotTime()).isEqualTo(snapshotTime);
         List<MarketMapCategoryNode> nodes = response.items();
@@ -224,7 +224,7 @@ class MarketMapQueryServiceTest {
                 .thenReturn(List.of(priceSnapshot("005930", snapshotTime, BigDecimal.TEN)));
         when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
 
-        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI);
+        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI, null);
 
         List<MarketMapCategoryNode> nodes = response.items();
         assertThat(nodes).hasSize(2);
@@ -271,7 +271,7 @@ class MarketMapQueryServiceTest {
                         priceSnapshot("005930", snapshotTime, BigDecimal.TEN)));
         when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
 
-        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI);
+        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI, null);
 
         MarketMapCategoryNode parentNode = response.items().stream()
                 .filter(node -> node.categoryName().equals("전기/전자"))
@@ -304,7 +304,7 @@ class MarketMapQueryServiceTest {
                 .thenReturn(List.of(priceSnapshot("005930", snapshotTime, BigDecimal.TEN)));
         when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
 
-        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI);
+        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI, null);
 
         MarketMapCategoryNode semiconductorNode = response.items().stream()
                 .filter(node -> node.categoryName().equals("반도체"))
@@ -326,7 +326,7 @@ class MarketMapQueryServiceTest {
                 .thenReturn(List.of());
         when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
 
-        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI);
+        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI, null);
 
         assertThat(response.items()).isEmpty();
     }
@@ -345,7 +345,7 @@ class MarketMapQueryServiceTest {
         when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime))
                 .thenReturn(List.of(marketOverviewSnapshot(Market.KOSPI, snapshotTime, BigDecimal.valueOf(1.23))));
 
-        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI);
+        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI, null);
 
         assertThat(response.marketOverview()).isNotNull();
         assertThat(response.marketOverview().market()).isEqualTo(Market.KOSPI);
@@ -365,11 +365,44 @@ class MarketMapQueryServiceTest {
         when(sectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(markets, snapshotTime))
                 .thenReturn(List.of());
 
-        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.ALL_STOCK);
+        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.ALL_STOCK, null);
 
         // 마켓이 여럿이면 합쳐서 보여줄 단일 지수값이 없으므로, 지수 스냅샷 자체를 조회하지 않고 곧장 null.
         assertThat(response.marketOverview()).isNull();
         Mockito.verifyNoInteractions(marketOverviewSnapshotRepository);
+    }
+
+    @Test
+    void getCustomMarketMap_snapshotTime을_명시하면_최신이_아니라_그_시각_그대로_쓴다() {
+        LocalDateTime requestedTime = LocalDateTime.of(2026, 7, 31, 10, 5);
+        when(marketMapCategoryRepository.findAll()).thenReturn(List.of());
+        when(marketMapStockCategoryRepository.findAll()).thenReturn(List.of());
+        when(stockInfoCacheService.getCache()).thenReturn(Map.of());
+        when(sectorPriceSnapshotRepository.existsByMarketTypeAndSnapshotTime(Market.KOSPI, requestedTime))
+                .thenReturn(true);
+        when(sectorPriceSnapshotRepository.findByMarketTypeInAndSnapshotTime(List.of(Market.KOSPI), requestedTime))
+                .thenReturn(List.of());
+        when(marketOverviewSnapshotRepository.findBySnapshotTime(requestedTime)).thenReturn(List.of());
+
+        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI, requestedTime);
+
+        assertThat(response.snapshotTime()).isEqualTo(requestedTime);
+        // 명시한 시각이 있으면 "최신 공통 시각" 조회는 부르지 않는다 — 가까운 시각으로 대체하지 않는다.
+        Mockito.verify(sectorPriceSnapshotRepository, Mockito.never()).findLatestCommonSnapshotTime(Mockito.anyList());
+    }
+
+    // ALL_STOCK인데 그 시각에 코스피만 있고 코스닥은 없는 경우 — 반쪽 트리를 내려주면 안 된다(결정 4).
+    @Test
+    void getCustomMarketMap_snapshotTime에_요청_마켓_중_하나라도_없으면_빈_응답이다() {
+        LocalDateTime requestedTime = LocalDateTime.of(2026, 7, 31, 10, 5);
+        when(sectorPriceSnapshotRepository.existsByMarketTypeAndSnapshotTime(Market.KOSPI, requestedTime))
+                .thenReturn(true);
+        when(sectorPriceSnapshotRepository.existsByMarketTypeAndSnapshotTime(Market.KOSDAQ, requestedTime))
+                .thenReturn(false);
+
+        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.ALL_STOCK, requestedTime);
+
+        assertThat(response).isEqualTo(MarketMapResponse.empty());
     }
 
     @Test

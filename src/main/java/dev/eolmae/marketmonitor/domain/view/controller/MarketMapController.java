@@ -10,8 +10,10 @@ import dev.eolmae.marketmonitor.domain.view.dto.ExcludedStockItem;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapResponse;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
+import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,10 +34,14 @@ public class MarketMapController {
     private final MarketValueTierThresholdService marketValueTierThresholdService;
 
     @GetMapping
-    public MarketMapResponse getMarketMap(@RequestParam MarketQuery market, @RequestParam boolean isCustom) {
+    public MarketMapResponse getMarketMap(
+            @RequestParam MarketQuery market,
+            @RequestParam boolean isCustom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+                    LocalDateTime snapshotTime) {
         return isCustom
-                ? marketMapQueryService.getCustomMarketMap(market)
-                : marketMapQueryService.getDefaultMarketMap(market);
+                ? marketMapQueryService.getCustomMarketMap(market, snapshotTime)
+                : marketMapQueryService.getDefaultMarketMap(market, snapshotTime);
     }
 
     @GetMapping("/value-tiers")

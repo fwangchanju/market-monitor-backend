@@ -40,6 +40,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -69,12 +70,12 @@ public class MarketMapQueryService {
     private final MarketValueTierThresholdService marketValueTierThresholdService;
     private final MarketOverviewSnapshotRepository marketOverviewSnapshotRepository;
 
-    /** 기본 마켓맵: stock_info 카테고리 그대로(override 없이) 기준, 자식 없는 1뎁스 노드로 감싸서 반환 (getCustomMarketMap과 응답 모양 통일) */
-    public MarketMapResponse getDefaultMarketMap(MarketQuery marketQuery) {
+    /** 기본 마켓맵: stock_info 카테고리 그대로(override 없이) 기준, 자식 없는 1뎁스 노드로 감싸서 반환
+     * (getCustomMarketMap과 응답 모양 통일). snapshotTime이 없으면 최신, 있으면 그 시각 그대로(결정 4). */
+    public MarketMapResponse getDefaultMarketMap(MarketQuery marketQuery, LocalDateTime snapshotTime) {
         List<Market> markets = marketQuery.toMarkets();
-        return sectorPriceSnapshotService
-                .findLatestCommonSnapshotTime(markets)
-                .map(latestSnapshotTime -> buildDefaultMarketMap(markets, latestSnapshotTime))
+        return resolveSnapshotTime(markets, snapshotTime)
+                .map(resolvedSnapshotTime -> buildDefaultMarketMap(markets, resolvedSnapshotTime))
                 .orElseGet(MarketMapResponse::empty);
     }
 
@@ -106,13 +107,25 @@ public class MarketMapQueryService {
         return new MarketMapResponse(latestSnapshotTime, nodes, findSingleMarketOverview(markets, latestSnapshotTime));
     }
 
-    /** 커스텀 마켓맵: 어드민이 구성한 카테고리 트리 기준. 트리에 배정 안 된 종목은 stock_info 카테고리로 묶은 노드를 같은 레벨에 섞어서 반환 */
-    public MarketMapResponse getCustomMarketMap(MarketQuery marketQuery) {
+    /** 커스텀 마켓맵: 어드민이 구성한 카테고리 트리 기준. 트리에 배정 안 된 종목은 stock_info 카테고리로
+     * 묶은 노드를 같은 레벨에 섞어서 반환. snapshotTime이 없으면 최신, 있으면 그 시각 그대로(결정 4). */
+    public MarketMapResponse getCustomMarketMap(MarketQuery marketQuery, LocalDateTime snapshotTime) {
         List<Market> markets = marketQuery.toMarkets();
-        return sectorPriceSnapshotService
-                .findLatestCommonSnapshotTime(markets)
-                .map(latestSnapshotTime -> buildCustomMarketMap(markets, latestSnapshotTime))
+        return resolveSnapshotTime(markets, snapshotTime)
+                .map(resolvedSnapshotTime -> buildCustomMarketMap(markets, resolvedSnapshotTime))
                 .orElseGet(MarketMapResponse::empty);
+    }
+
+    /** snapshotTime이 없으면 지금처럼 markets 전부가 공통으로 가진 최신 시각을 쓴다(그 정의상 이미
+     * 전부에 있는 시각이다). 있으면 그 시각을 그대로 쓰되, markets 전부에 정확히 그 시각이 있을 때만
+     * 유효하다 — 하나라도 없으면 빈 응답이다. 가까운 시각으로 대체하지 않는다(결정 4). */
+    private Optional<LocalDateTime> resolveSnapshotTime(List<Market> markets, LocalDateTime snapshotTime) {
+        if (snapshotTime == null) {
+            return sectorPriceSnapshotService.findLatestCommonSnapshotTime(markets);
+        }
+        boolean allMarketsHaveSnapshot =
+                markets.stream().allMatch(market -> sectorPriceSnapshotService.existsSnapshot(market, snapshotTime));
+        return allMarketsHaveSnapshot ? Optional.of(snapshotTime) : Optional.empty();
     }
 
     private MarketMapResponse buildCustomMarketMap(List<Market> markets, LocalDateTime latestSnapshotTime) {

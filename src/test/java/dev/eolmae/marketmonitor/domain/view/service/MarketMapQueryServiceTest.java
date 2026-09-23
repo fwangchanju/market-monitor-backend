@@ -11,7 +11,6 @@ import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRep
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapStockCategoryRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketValueTierThresholdRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.service.CategoryTierAggregationService;
-import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryChangeRateSnapshotService;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketValueTierThresholdService;
 import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
@@ -55,8 +54,6 @@ class MarketMapQueryServiceTest {
             Mockito.mock(MarketMapCategoryRepository.class);
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository =
             Mockito.mock(MarketMapStockCategoryRepository.class);
-    private final MarketMapCategoryChangeRateSnapshotService marketMapCategoryChangeRateSnapshotService =
-            Mockito.mock(MarketMapCategoryChangeRateSnapshotService.class);
     // 구간 리포지토리 하나를 합산 클래스·구간 서비스가 같이 본다 — 트리 기반 랭킹은 이 둘이 같은 구간
     // 목록을 보는 것을 전제로 한다(합산 클래스는 findAll()로 라벨→id, 구간 서비스는
     // findAllByOrderByThresholdValueAsc()로 종목의 구간을 정한다).
@@ -79,7 +76,6 @@ class MarketMapQueryServiceTest {
             marketMapExcludedStockRepository,
             marketMapCategoryRepository,
             marketMapStockCategoryRepository,
-            marketMapCategoryChangeRateSnapshotService,
             categoryTierAggregationService,
             marketValueTierThresholdService,
             marketOverviewSnapshotRepository);
@@ -154,6 +150,31 @@ class MarketMapQueryServiceTest {
         assertThat(chemicalNode.children()).isEmpty();
         assertThat(chemicalNode.items()).extracting("stockCode").containsExactly("051910");
         assertThat(chemicalNode.totalMarketValue()).isEqualByComparingTo(BigDecimal.valueOf(500));
+    }
+
+    // 결정 3 — 저장된 집계 테이블을 더 이상 읽지 않으므로 tierBreakdown은 항상 빈 배열이다. 프론트 zod
+    // 스키마가 이 필드를 필수로 잡고 있어 필드 자체는 남긴다. 합산이 있을 법한(가격 행이 있는 종목)
+    // 입력을 넣고도 빈 배열인지 봐야 의미가 있다 — 원래 비는 경우만 보면 이 가드를 검증하지 못한다.
+    @Test
+    void getCustomMarketMap_tierBreakdown은_항상_빈_배열이다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        MarketMapCategory semiconductor = category(1L, null, "반도체");
+        stubCategoryTree(List.of(semiconductor), List.of(MarketMapStockCategory.create("005930", 1L)));
+        stubStockCache(stockInfo("005930", "삼성전자", null, 100L, BigDecimal.TEN));
+        when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
+                .thenReturn(Optional.of(snapshotTime));
+        when(sectorPriceCacheService.getCache(Market.KOSPI, snapshotTime))
+                .thenReturn(Map.ofEntries(priceSnapshot("005930", snapshotTime, BigDecimal.TEN)));
+        when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
+
+        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI, null);
+
+        MarketMapCategoryNode semiconductorNode = response.items().stream()
+                .filter(node -> node.categoryName().equals("반도체"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(semiconductorNode.totalMarketValue()).isEqualByComparingTo(BigDecimal.valueOf(1000));
+        assertThat(semiconductorNode.tierBreakdown()).isEmpty();
     }
 
     @Test
@@ -398,19 +419,6 @@ class MarketMapQueryServiceTest {
         MarketMapResponse response = service.getCustomMarketMap(MarketQuery.ALL_STOCK, requestedTime);
 
         assertThat(response).isEqualTo(MarketMapResponse.empty());
-    }
-
-    @Test
-    void getCategoryChangeRates_랭킹_스냅샷이_없으면_빈_응답을_그대로_반환한다() {
-        when(marketMapCategoryChangeRateSnapshotService.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
-                .thenReturn(Optional.empty());
-
-        SnapshotResponse<CategoryChangeRateMarketRanking> response =
-                service.getCategoryChangeRates(MarketQuery.KOSPI, 60);
-
-        assertThat(response.snapshotTime()).isNull();
-        assertThat(response.items()).isEmpty();
-        Mockito.verifyNoInteractions(marketOverviewSnapshotRepository);
     }
 
     @Test

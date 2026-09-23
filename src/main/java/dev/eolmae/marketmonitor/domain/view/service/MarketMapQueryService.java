@@ -8,7 +8,6 @@ import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketValueTierThreshold
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapStockCategoryRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.service.CategoryTierAggregationService;
-import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryChangeRateSnapshotService;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketValueTierThresholdService;
 import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
@@ -67,7 +66,6 @@ public class MarketMapQueryService {
     private final MarketMapExcludedStockRepository marketMapExcludedStockRepository;
     private final MarketMapCategoryRepository marketMapCategoryRepository;
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository;
-    private final MarketMapCategoryChangeRateSnapshotService marketMapCategoryChangeRateSnapshotService;
     private final CategoryTierAggregationService categoryTierAggregationService;
     private final MarketValueTierThresholdService marketValueTierThresholdService;
     private final MarketOverviewSnapshotRepository marketOverviewSnapshotRepository;
@@ -129,40 +127,18 @@ public class MarketMapQueryService {
         return allMarketsHaveSnapshot ? Optional.of(snapshotTime) : Optional.empty();
     }
 
+    // tierBreakdown은 항상 빈 배열이다 — 저장된 집계 테이블을 더 이상 읽지 않는다. 프론트 zod 스키마가
+    // 이 필드를 필수로 잡고 있어 필드 자체는 남기되 빈 배열을 싣는다(결정 3). 기본 마켓맵이 이미 이
+    // 모양으로 응답해왔으므로, 옛 프론트는 그 경우 종목에서 직접 평균을 계산하는 폴백을 이미 탄다.
     private MarketMapResponse buildCustomMarketMap(List<Market> markets, LocalDateTime latestSnapshotTime) {
-        // 등락률 데코레이션(tierBreakdown)은 카테고리별로 하나만 붙으므로, All Stocks처럼 markets가
-        // 여러 개여도 마켓별로 나눌 필요 없이 그대로 합쳐서 조회한다.
-        Map<Long, List<CategoryTierBreakdown>> tierBreakdownByCategoryId =
-                marketMapCategoryChangeRateSnapshotService
-                        .findTierBreakdownsByCategoryId(markets, latestSnapshotTime)
-                        .values()
-                        .stream()
-                        .flatMap(byCategoryId -> byCategoryId.entrySet().stream())
-                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (a, b) -> {
-                            List<CategoryTierBreakdown> merged = new ArrayList<>(a);
-                            merged.addAll(b);
-                            return merged;
-                        }));
-        List<MarketMapCategoryNode> tree = buildCategoryTree(markets, latestSnapshotTime, tierBreakdownByCategoryId);
+        List<MarketMapCategoryNode> tree = buildCategoryTree(markets, latestSnapshotTime);
         return new MarketMapResponse(latestSnapshotTime, tree, findSingleMarketOverview(markets, latestSnapshotTime));
     }
 
     /**
-     * 마켓맵 카테고리별 등락률 랭킹(섹터 페이지) — markets 전부가 공통으로 가진 최신 시각을 구한 뒤
-     * 시각 인자 변형에 위임한다.
-     */
-    public SnapshotResponse<CategoryChangeRateMarketRanking> getCategoryChangeRates(
-            MarketQuery marketQuery, int beforeMinutes) {
-        return marketMapCategoryChangeRateSnapshotService
-                .findLatestCommonSnapshotTime(marketQuery.toMarkets())
-                .map(snapshotTime -> getCategoryChangeRates(marketQuery, snapshotTime, beforeMinutes))
-                .orElseGet(SnapshotResponse::empty);
-    }
-
-    /**
-     * 스냅샷 시각을 인자로 받는 변형 — 텔레그램 발송 경로처럼 이미 확정된 dataTime을 그대로 써야 하는
-     * 호출부(getTopCategoryRankings)용. 그 시각에 지수 스냅샷이 없으면(부분 실패로 아예 없는 경우)
-     * 조용히 비워서 내려준다 — 다른 시점 값으로 대체하지 않는다.
+     * 마켓맵 카테고리별 등락률 랭킹(섹터 페이지) — 텔레그램 발송 경로처럼 이미 확정된 dataTime을 그대로
+     * 써야 하는 호출부(getTopCategoryRankings)용이라 시각을 인자로 받는다. 그 시각에 지수 스냅샷이
+     * 없으면(부분 실패로 아예 없는 경우) 조용히 비워서 내려준다 — 다른 시점 값으로 대체하지 않는다.
      */
     public SnapshotResponse<CategoryChangeRateMarketRanking> getCategoryChangeRates(
             MarketQuery marketQuery, LocalDateTime snapshotTime, int beforeMinutes) {

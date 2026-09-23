@@ -11,15 +11,10 @@ import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateItem;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateMarketRanking;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryTierBreakdown;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
-import dev.eolmae.marketmonitor.domain.view.dto.MarketMapItem;
-import dev.eolmae.marketmonitor.domain.view.dto.SnapshotAverages;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -33,9 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 마켓맵 카테고리별(하위 카테고리 재귀 포함) × 시가총액 구간별 등락률 원시 합계(분자/분모) 스냅샷 저장.
- * 트리 자체는 호출부가 MarketMapQueryService로 이미 만들어서 넘겨준다 — 이 서비스가 MarketMapQueryService를
- * 직접 의존하면, MarketMapQueryService가 최신 스냅샷 값을 읽어 응답에 채워 넣을 때(반대 방향 의존) 순환
- * 참조가 된다.
+ * 합산 자체는 CategoryTierAggregationService가 하고, 이 서비스는 그 결과를 엔티티로 바꿔 저장만 한다.
  */
 @Slf4j
 @Service
@@ -43,7 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class MarketMapCategoryChangeRateSnapshotService {
 
-    private static final int SCALE = 4;
+    private final CategoryTierAggregationService categoryTierAggregationService;
 
     // collect.*와 무관한 별개 상수 — "보존할 스냅샷 시각"의 윈도우다. KRX 정규장은 15:30에 닫히고 NXT
     // 애프터마켓은 15:40에 열려서 그 10분은 두 시장 다 닫혀 있어 가격이 안 바뀐다. 그 안에서 가장 늦은
@@ -61,10 +54,20 @@ public class MarketMapCategoryChangeRateSnapshotService {
         if (tree.isEmpty()) {
             return;
         }
-        Map<String, MarketValueTierThreshold> tierByLabel = marketValueTierThresholdRepository.findAll().stream()
-                .collect(Collectors.toMap(MarketValueTierThreshold::getLabel, Function.identity()));
-        List<MarketMapCategoryChangeRateSnapshot> snapshots = new ArrayList<>();
-        collectSnapshots(tree, market, snapshotTime, tierByLabel, snapshots);
+        Map<Long, List<CategoryTierBreakdown>> breakdownsByCategoryId =
+                categoryTierAggregationService.aggregateByCategory(tree);
+        List<MarketMapCategoryChangeRateSnapshot> snapshots = breakdownsByCategoryId.entrySet().stream()
+                .flatMap(entry -> entry.getValue().stream()
+                        .map(breakdown -> MarketMapCategoryChangeRateSnapshot.create(
+                                market,
+                                entry.getKey(),
+                                breakdown.tierId(),
+                                snapshotTime,
+                                breakdown.weightedSum(),
+                                breakdown.totalValue(),
+                                breakdown.simpleSum(),
+                                breakdown.itemCount())))
+                .toList();
         marketMapCategoryChangeRateSnapshotRepository.saveAll(snapshots);
     }
 
@@ -144,31 +147,6 @@ public class MarketMapCategoryChangeRateSnapshotService {
         return CategoryChangeRateItem.withBefore(categoryId, now, before);
     }
 
-    /** 전달받은 구간별 원시값을 전부 합산한 뒤 마지막에 한 번만 나눈 최종 가중/산술평균 — 화면 필터와
-     * 무관하게 항상 전체 구간 기준이 필요한 호출부(텔레그램 캡션 등)용. 이미 나뉜 평균끼리 다시 평균내면
-     * 구간별 종목 수/시총 비중을 알 수 없어 틀리기 때문에, 반드시 원시값 합산 후 나눗셈 순서를 지킨다. */
-    public SnapshotAverages combine(List<CategoryTierBreakdown> breakdowns) {
-        BigDecimal weightedSum = BigDecimal.ZERO;
-        BigDecimal totalValue = BigDecimal.ZERO;
-        BigDecimal simpleSum = BigDecimal.ZERO;
-        int itemCount = 0;
-        for (CategoryTierBreakdown breakdown : breakdowns) {
-            weightedSum = weightedSum.add(breakdown.weightedSum());
-            totalValue = totalValue.add(breakdown.totalValue());
-            simpleSum = simpleSum.add(breakdown.simpleSum());
-            itemCount += breakdown.itemCount();
-        }
-        BigDecimal weightedAvg = BigDecimal.ZERO;
-        if (totalValue.signum() != 0) {
-            weightedAvg = weightedSum.divide(totalValue, SCALE, RoundingMode.HALF_UP);
-        }
-        BigDecimal simpleAvg = BigDecimal.ZERO;
-        if (itemCount != 0) {
-            simpleAvg = simpleSum.divide(BigDecimal.valueOf(itemCount), SCALE, RoundingMode.HALF_UP);
-        }
-        return new SnapshotAverages(weightedAvg, simpleAvg);
-    }
-
     /** cutoff 이전이면서 그 날짜·마켓의 보존 윈도우([15:30, 15:40)) latest가 아닌 스냅샷 정리 — dryRun이면
      * 조회만 하고 로그로 남긴다. */
     @Transactional
@@ -241,55 +219,4 @@ public class MarketMapCategoryChangeRateSnapshotService {
     private static boolean isInWindow(LocalTime time, LocalTime windowStart, LocalTime windowEnd) {
         return !time.isBefore(windowStart) && time.isBefore(windowEnd);
     }
-
-    private void collectSnapshots(
-            List<MarketMapCategoryNode> nodes,
-            Market market,
-            LocalDateTime snapshotTime,
-            Map<String, MarketValueTierThreshold> tierByLabel,
-            List<MarketMapCategoryChangeRateSnapshot> out) {
-        for (MarketMapCategoryNode node : nodes) {
-            Map<String, List<MarketMapItem>> itemsByTierLabel =
-                    collectItems(node).stream().collect(Collectors.groupingBy(MarketMapItem::marketValueTier));
-            for (Map.Entry<String, List<MarketMapItem>> entry : itemsByTierLabel.entrySet()) {
-                Long tierId = tierByLabel.get(entry.getKey()).getId();
-                RawSums sums = computeRawSums(entry.getValue());
-                out.add(MarketMapCategoryChangeRateSnapshot.create(
-                        market,
-                        node.categoryId(),
-                        tierId,
-                        snapshotTime,
-                        sums.weightedSum(),
-                        sums.totalValue(),
-                        sums.simpleSum(),
-                        sums.itemCount()));
-            }
-            collectSnapshots(node.children(), market, snapshotTime, tierByLabel, out);
-        }
-    }
-
-    private List<MarketMapItem> collectItems(MarketMapCategoryNode node) {
-        List<MarketMapItem> items = new ArrayList<>(node.items());
-        for (MarketMapCategoryNode child : node.children()) {
-            items.addAll(collectItems(child));
-        }
-        return items;
-    }
-
-    // 가중평균의 분자(Σ등락률×시총)/분모(Σ시총), 산술평균의 분자(Σ등락률)/분모(종목 수)를 나누지 않고
-    // 원시값 그대로 한 번의 순회로 구한다 — 여러 구간을 조합할 땐 이미 나뉜 평균끼리 다시 평균내면 틀리므로,
-    // 나눗셈은 조회 시점에 필요한 구간들을 합산한 뒤 마지막에 한 번만 한다.
-    private RawSums computeRawSums(List<MarketMapItem> items) {
-        BigDecimal totalValue = BigDecimal.ZERO;
-        BigDecimal weightedSum = BigDecimal.ZERO;
-        BigDecimal simpleSum = BigDecimal.ZERO;
-        for (MarketMapItem item : items) {
-            totalValue = totalValue.add(item.totalMarketValue());
-            weightedSum = weightedSum.add(item.changeRate().multiply(item.totalMarketValue()));
-            simpleSum = simpleSum.add(item.changeRate());
-        }
-        return new RawSums(weightedSum, totalValue, simpleSum, items.size());
-    }
-
-    private record RawSums(BigDecimal weightedSum, BigDecimal totalValue, BigDecimal simpleSum, int itemCount) {}
 }

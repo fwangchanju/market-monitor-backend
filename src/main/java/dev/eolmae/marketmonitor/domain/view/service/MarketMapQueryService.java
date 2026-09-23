@@ -7,6 +7,7 @@ import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapStockCategory;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketValueTierThreshold;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapStockCategoryRepository;
+import dev.eolmae.marketmonitor.domain.marketmap.service.CategoryTierAggregationService;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryChangeRateSnapshotService;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketValueTierThresholdService;
 import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
@@ -64,6 +65,7 @@ public class MarketMapQueryService {
     private final MarketMapCategoryRepository marketMapCategoryRepository;
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository;
     private final MarketMapCategoryChangeRateSnapshotService marketMapCategoryChangeRateSnapshotService;
+    private final CategoryTierAggregationService categoryTierAggregationService;
     private final MarketValueTierThresholdService marketValueTierThresholdService;
     private final MarketOverviewSnapshotRepository marketOverviewSnapshotRepository;
 
@@ -402,7 +404,7 @@ public class MarketMapQueryService {
         if (included.isEmpty()) {
             return null;
         }
-        SnapshotAverages averages = marketMapCategoryChangeRateSnapshotService.combine(included);
+        SnapshotAverages averages = categoryTierAggregationService.combine(included);
         return switch (averageMode) {
             case WEIGHTED -> averages.weightedAvgChangeRate();
             case SIMPLE -> averages.simpleAvgChangeRate();

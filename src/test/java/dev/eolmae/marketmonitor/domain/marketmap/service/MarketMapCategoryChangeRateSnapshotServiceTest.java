@@ -25,13 +25,17 @@ class MarketMapCategoryChangeRateSnapshotServiceTest {
     private static final LocalTime WINDOW_START = LocalTime.of(15, 30);
     private static final LocalTime WINDOW_END = LocalTime.of(15, 40);
 
+    private final CategoryTierAggregationService categoryTierAggregationService =
+            mock(CategoryTierAggregationService.class);
     private final MarketMapCategoryChangeRateSnapshotRepository marketMapCategoryChangeRateSnapshotRepository =
             mock(MarketMapCategoryChangeRateSnapshotRepository.class);
     private final MarketValueTierThresholdRepository marketValueTierThresholdRepository =
             mock(MarketValueTierThresholdRepository.class);
     private final MarketMapCategoryChangeRateSnapshotService marketMapCategoryChangeRateSnapshotService =
             new MarketMapCategoryChangeRateSnapshotService(
-                    marketMapCategoryChangeRateSnapshotRepository, marketValueTierThresholdRepository);
+                    categoryTierAggregationService,
+                    marketMapCategoryChangeRateSnapshotRepository,
+                    marketValueTierThresholdRepository);
 
     @Test
     void cleanupSnapshotsBefore_드라이런이면_삭제_메서드를_호출하지_않는다() {

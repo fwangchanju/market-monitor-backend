@@ -9,6 +9,8 @@ import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategory;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapStockCategory;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapStockCategoryRepository;
+import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketValueTierThresholdRepository;
+import dev.eolmae.marketmonitor.domain.marketmap.service.CategoryTierAggregationService;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryChangeRateSnapshotService;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketValueTierThresholdService;
 import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
@@ -26,13 +28,11 @@ import dev.eolmae.marketmonitor.domain.view.dto.CategoryRankingSummary;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryTierBreakdown;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapResponse;
-import dev.eolmae.marketmonitor.domain.view.dto.SnapshotAverages;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
 import dev.eolmae.marketmonitor.domain.view.dto.TopCategoryItem;
 import dev.eolmae.marketmonitor.domain.view.enums.AverageMode;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
@@ -57,6 +57,10 @@ class MarketMapQueryServiceTest {
             Mockito.mock(MarketMapStockCategoryRepository.class);
     private final MarketMapCategoryChangeRateSnapshotService marketMapCategoryChangeRateSnapshotService =
             Mockito.mock(MarketMapCategoryChangeRateSnapshotService.class);
+    // combine()은 필드를 참조하지 않는 순수 계산이라 mock 대신 진짜 객체를 쓴다 — repository는 combine이
+    // 부르지 않으므로 mock으로 채워둔다.
+    private final CategoryTierAggregationService categoryTierAggregationService =
+            new CategoryTierAggregationService(Mockito.mock(MarketValueTierThresholdRepository.class));
     private final MarketValueTierThresholdService marketValueTierThresholdService =
             Mockito.mock(MarketValueTierThresholdService.class);
     private final MarketOverviewSnapshotRepository marketOverviewSnapshotRepository =
@@ -70,6 +74,7 @@ class MarketMapQueryServiceTest {
             marketMapCategoryRepository,
             marketMapStockCategoryRepository,
             marketMapCategoryChangeRateSnapshotService,
+            categoryTierAggregationService,
             marketValueTierThresholdService,
             marketOverviewSnapshotRepository);
 
@@ -782,8 +787,6 @@ class MarketMapQueryServiceTest {
     private void stubMergedRanking(List<MarketMapCategory> categories) {
         when(marketMapCategoryRepository.findAll()).thenReturn(categories);
         when(marketValueTierThresholdService.getValueTiers()).thenReturn(List.of());
-        when(marketMapCategoryChangeRateSnapshotService.combine(Mockito.anyList()))
-                .thenAnswer(invocation -> combine(invocation.getArgument(0)));
     }
 
     private void stubRankingForTopCategories(
@@ -799,29 +802,7 @@ class MarketMapQueryServiceTest {
                 .thenReturn(excludedTierIds.stream()
                         .map(id -> new MarketValueTierItem(id, "제외구간", 0L, true))
                         .toList());
-        when(marketMapCategoryChangeRateSnapshotService.combine(Mockito.anyList()))
-                .thenAnswer(invocation -> combine(invocation.getArgument(0)));
         when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
-    }
-
-    // combine()이 필드를 전혀 참조하지 않는 순수 계산이라, 스텁 대신 같은 식을 여기서 재현해서 쓴다.
-    private SnapshotAverages combine(List<CategoryTierBreakdown> breakdowns) {
-        BigDecimal weightedSum = BigDecimal.ZERO;
-        BigDecimal totalValue = BigDecimal.ZERO;
-        BigDecimal simpleSum = BigDecimal.ZERO;
-        int itemCount = 0;
-        for (CategoryTierBreakdown breakdown : breakdowns) {
-            weightedSum = weightedSum.add(breakdown.weightedSum());
-            totalValue = totalValue.add(breakdown.totalValue());
-            simpleSum = simpleSum.add(breakdown.simpleSum());
-            itemCount += breakdown.itemCount();
-        }
-        BigDecimal weightedAvg =
-                totalValue.signum() == 0 ? BigDecimal.ZERO : weightedSum.divide(totalValue, 4, RoundingMode.HALF_UP);
-        BigDecimal simpleAvg = itemCount == 0
-                ? BigDecimal.ZERO
-                : simpleSum.divide(BigDecimal.valueOf(itemCount), 4, RoundingMode.HALF_UP);
-        return new SnapshotAverages(weightedAvg, simpleAvg);
     }
 
     private CategoryChangeRateItem changeRateItem(Long categoryId, CategoryTierBreakdown... breakdowns) {

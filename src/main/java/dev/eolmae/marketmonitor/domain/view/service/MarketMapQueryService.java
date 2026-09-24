@@ -127,9 +127,6 @@ public class MarketMapQueryService {
         return allMarketsHaveSnapshot ? Optional.of(snapshotTime) : Optional.empty();
     }
 
-    // tierBreakdown은 항상 빈 배열이다 — 저장된 집계 테이블을 더 이상 읽지 않는다. 프론트 zod 스키마가
-    // 이 필드를 필수로 잡고 있어 필드 자체는 남기되 빈 배열을 싣는다(결정 3). 기본 마켓맵이 이미 이
-    // 모양으로 응답해왔으므로, 옛 프론트는 그 경우 종목에서 직접 평균을 계산하는 폴백을 이미 탄다.
     private MarketMapResponse buildCustomMarketMap(List<Market> markets, LocalDateTime latestSnapshotTime) {
         List<MarketMapCategoryNode> tree = buildCategoryTree(markets, latestSnapshotTime);
         return new MarketMapResponse(latestSnapshotTime, tree, findSingleMarketOverview(markets, latestSnapshotTime));
@@ -479,13 +476,6 @@ public class MarketMapQueryService {
     }
 
     private List<MarketMapCategoryNode> buildCategoryTree(List<Market> markets, LocalDateTime latestSnapshotTime) {
-        return buildCategoryTree(markets, latestSnapshotTime, Map.of());
-    }
-
-    private List<MarketMapCategoryNode> buildCategoryTree(
-            List<Market> markets,
-            LocalDateTime latestSnapshotTime,
-            Map<Long, List<CategoryTierBreakdown>> tierBreakdownByCategoryId) {
         List<StockInfo> candidates = filterCandidates(markets);
         List<MarketMapCategory> categories = marketMapCategoryRepository.findAll();
         Map<Long, List<MarketMapCategory>> childrenByParentId = new HashMap<>();
@@ -513,31 +503,27 @@ public class MarketMapQueryService {
                                 Collectors.toList())));
 
         return childrenByParentId.getOrDefault(NO_PARENT_KEY, List.of()).stream()
-                .map(category ->
-                        toCategoryNode(category, childrenByParentId, itemsByCategoryId, tierBreakdownByCategoryId))
+                .map(category -> toCategoryNode(category, childrenByParentId, itemsByCategoryId))
                 .toList();
     }
 
     private MarketMapCategoryNode toCategoryNode(
             MarketMapCategory category,
             Map<Long, List<MarketMapCategory>> childrenByParentId,
-            Map<Long, List<MarketMapItem>> itemsByCategoryId,
-            Map<Long, List<CategoryTierBreakdown>> tierBreakdownByCategoryId) {
+            Map<Long, List<MarketMapItem>> itemsByCategoryId) {
         List<MarketMapCategoryNode> children = childrenByParentId.getOrDefault(category.getId(), List.of()).stream()
-                .map(child -> toCategoryNode(child, childrenByParentId, itemsByCategoryId, tierBreakdownByCategoryId))
+                .map(child -> toCategoryNode(child, childrenByParentId, itemsByCategoryId))
                 .toList();
         List<MarketMapItem> items = itemsByCategoryId.getOrDefault(category.getId(), List.of());
         BigDecimal itemsValue =
                 items.stream().map(MarketMapItem::totalMarketValue).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal childrenValue =
                 children.stream().map(MarketMapCategoryNode::totalMarketValue).reduce(BigDecimal.ZERO, BigDecimal::add);
-        List<CategoryTierBreakdown> tierBreakdown = tierBreakdownByCategoryId.getOrDefault(category.getId(), List.of());
         return new MarketMapCategoryNode(
                 category.getId(),
                 category.getName(),
                 category.isExcluded(),
                 itemsValue.add(childrenValue),
-                tierBreakdown,
                 children,
                 items);
     }

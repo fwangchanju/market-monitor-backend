@@ -152,31 +152,6 @@ class MarketMapQueryServiceTest {
         assertThat(chemicalNode.totalMarketValue()).isEqualByComparingTo(BigDecimal.valueOf(500));
     }
 
-    // 결정 3 — 저장된 집계 테이블을 더 이상 읽지 않으므로 tierBreakdown은 항상 빈 배열이다. 프론트 zod
-    // 스키마가 이 필드를 필수로 잡고 있어 필드 자체는 남긴다. 합산이 있을 법한(가격 행이 있는 종목)
-    // 입력을 넣고도 빈 배열인지 봐야 의미가 있다 — 원래 비는 경우만 보면 이 가드를 검증하지 못한다.
-    @Test
-    void getCustomMarketMap_tierBreakdown은_항상_빈_배열이다() {
-        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
-        MarketMapCategory semiconductor = category(1L, null, "반도체");
-        stubCategoryTree(List.of(semiconductor), List.of(MarketMapStockCategory.create("005930", 1L)));
-        stubStockCache(stockInfo("005930", "삼성전자", null, 100L, BigDecimal.TEN));
-        when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
-                .thenReturn(Optional.of(snapshotTime));
-        when(sectorPriceCacheService.getCache(Market.KOSPI, snapshotTime))
-                .thenReturn(Map.ofEntries(priceSnapshot("005930", snapshotTime, BigDecimal.TEN)));
-        when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
-
-        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI, null);
-
-        MarketMapCategoryNode semiconductorNode = response.items().stream()
-                .filter(node -> node.categoryName().equals("반도체"))
-                .findFirst()
-                .orElseThrow();
-        assertThat(semiconductorNode.totalMarketValue()).isEqualByComparingTo(BigDecimal.valueOf(1000));
-        assertThat(semiconductorNode.tierBreakdown()).isEmpty();
-    }
-
     @Test
     void getDefaultMarketMap_stock_info_카테고리_그대로_1뎁스_노드로_묶인다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);

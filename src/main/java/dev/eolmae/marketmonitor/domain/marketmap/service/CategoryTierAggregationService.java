@@ -33,8 +33,8 @@ public class CategoryTierAggregationService {
     private final MarketValueTierThresholdRepository marketValueTierThresholdRepository;
 
     /** 트리(하위 카테고리 재귀 포함)를 카테고리 id별 시가총액 구간별 등락률 원시 합계로 묶는다 —
-     * MarketMapCategoryChangeRateSnapshotService.findTierBreakdownsByCategoryId가 마켓 하나에 대해
-     * 돌려주는 것과 같은 모양이다. items가 하나도 없는 카테고리(자신과 하위 전부 빈 경우)는 결과 맵에
+     * 카테고리 id → 구간별 원시 합계 맵을 돌려준다.
+     * items가 하나도 없는 카테고리(자신과 하위 전부 빈 경우)는 결과 맵에
      * 아예 없다. */
     public Map<Long, List<CategoryTierBreakdown>> aggregateByCategory(List<MarketMapCategoryNode> tree) {
         Map<String, MarketValueTierThreshold> tierByLabel = marketValueTierThresholdRepository.findAll().stream()

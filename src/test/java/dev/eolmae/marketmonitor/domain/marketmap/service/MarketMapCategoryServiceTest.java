@@ -17,7 +17,6 @@ import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryDeletePreview;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryItem;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategory;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapStockCategory;
-import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryChangeRateSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapStockCategoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
@@ -39,16 +38,10 @@ class MarketMapCategoryServiceTest {
             Mockito.mock(MarketMapCategoryRepository.class);
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository =
             Mockito.mock(MarketMapStockCategoryRepository.class);
-    private final MarketMapCategoryChangeRateSnapshotRepository marketMapCategoryChangeRateSnapshotRepository =
-            Mockito.mock(MarketMapCategoryChangeRateSnapshotRepository.class);
     private final StockInfoRepository stockInfoRepository = Mockito.mock(StockInfoRepository.class);
     private final StockInfoCacheService stockInfoCacheService = Mockito.mock(StockInfoCacheService.class);
     private final MarketMapCategoryService service = new MarketMapCategoryService(
-            marketMapCategoryRepository,
-            marketMapStockCategoryRepository,
-            marketMapCategoryChangeRateSnapshotRepository,
-            stockInfoRepository,
-            stockInfoCacheService);
+            marketMapCategoryRepository, marketMapStockCategoryRepository, stockInfoRepository, stockInfoCacheService);
 
     @Test
     void onStockInfoSynced_없는_카테고리는_생성하고_신규종목을_배정한다() {
@@ -284,12 +277,8 @@ class MarketMapCategoryServiceTest {
 
         service.delete(1L);
 
-        InOrder inOrder = Mockito.inOrder(
-                marketMapStockCategoryRepository,
-                marketMapCategoryChangeRateSnapshotRepository,
-                marketMapCategoryRepository);
+        InOrder inOrder = Mockito.inOrder(marketMapStockCategoryRepository, marketMapCategoryRepository);
         inOrder.verify(marketMapStockCategoryRepository).deleteByCategoryIdIn(List.of(1L));
-        inOrder.verify(marketMapCategoryChangeRateSnapshotRepository).deleteByCategoryIdIn(List.of(1L));
         inOrder.verify(marketMapCategoryRepository).deleteAll(Mockito.anyList());
     }
 

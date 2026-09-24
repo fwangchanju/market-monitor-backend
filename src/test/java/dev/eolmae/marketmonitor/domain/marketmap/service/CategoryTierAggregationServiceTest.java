@@ -35,7 +35,6 @@ class CategoryTierAggregationServiceTest {
                 "반도체",
                 false,
                 BigDecimal.ZERO,
-                List.of(),
                 List.of(child),
                 List.of(item("005930", "대형", BigDecimal.TEN, 10_000)));
 
@@ -138,7 +137,7 @@ class CategoryTierAggregationServiceTest {
     }
 
     private MarketMapCategoryNode leaf(Long categoryId, String categoryName, List<MarketMapItem> items) {
-        return new MarketMapCategoryNode(categoryId, categoryName, false, BigDecimal.ZERO, List.of(), List.of(), items);
+        return new MarketMapCategoryNode(categoryId, categoryName, false, BigDecimal.ZERO, List.of(), items);
     }
 
     private MarketMapItem item(String stockCode, String tierLabel, BigDecimal changeRate, long totalMarketValue) {

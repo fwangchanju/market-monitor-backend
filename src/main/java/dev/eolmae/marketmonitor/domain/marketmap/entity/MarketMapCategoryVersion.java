@@ -12,7 +12,7 @@ import lombok.Getter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-@Table(name = "market_map_category_version")
+@Table(name = "custom_snapshot")
 @Entity
 @Getter
 public class MarketMapCategoryVersion {

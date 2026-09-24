@@ -14,7 +14,6 @@ import dev.eolmae.marketmonitor.domain.marketmap.service.CategoryTierAggregation
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketValueTierThresholdService;
 import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
-import dev.eolmae.marketmonitor.domain.stock.repository.MarketMapExcludedStockRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketOverviewSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.SectorPriceSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceCacheService;
@@ -48,8 +47,6 @@ class MarketMapQueryServiceTest {
     private final SectorPriceSnapshotRepository sectorPriceSnapshotRepository =
             Mockito.mock(SectorPriceSnapshotRepository.class);
     private final SectorPriceCacheService sectorPriceCacheService = Mockito.mock(SectorPriceCacheService.class);
-    private final MarketMapExcludedStockRepository marketMapExcludedStockRepository =
-            Mockito.mock(MarketMapExcludedStockRepository.class);
     private final MarketMapCategoryRepository marketMapCategoryRepository =
             Mockito.mock(MarketMapCategoryRepository.class);
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository =
@@ -73,7 +70,6 @@ class MarketMapQueryServiceTest {
             stockInfoCacheService,
             sectorPriceSnapshotService,
             sectorPriceCacheService,
-            marketMapExcludedStockRepository,
             marketMapCategoryRepository,
             marketMapStockCategoryRepository,
             categoryTierAggregationService,
@@ -156,7 +152,7 @@ class MarketMapQueryServiceTest {
     void getDefaultMarketMap_stock_info_카테고리_그대로_1뎁스_노드로_묶인다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
 
-        // 기본 마켓맵은 market_map_category를 아예 안 쓰므로, 매칭되는 카테고리가 없어도(예: 종목 업종이
+        // 기본 마켓맵은 custom_sector를 아예 안 쓰므로, 매칭되는 카테고리가 없어도(예: 종목 업종이
         // 나중에 바뀌어 자동생성된 카테고리가 없는 경우) 조회 자체가 깨지면 안 됨을 검증
         StockInfo samsung = stockInfo("005930", "삼성전자", "반도체", 100L, BigDecimal.TEN);
         StockInfo skHynix = stockInfo("000660", "SK하이닉스", "반도체", 50L, BigDecimal.valueOf(20));
@@ -893,7 +889,7 @@ class MarketMapQueryServiceTest {
         assertThat(simple.get(0).topCategories().get(0).changeRate()).isEqualByComparingTo(BigDecimal.valueOf(15));
     }
 
-    // 섹터 제외(market_map_category.is_excluded)를 켜고 끄면 TOP2에 들어오는 카테고리가 달라진다.
+    // 섹터 제외(custom_sector.is_excluded)를 켜고 끄면 TOP2에 들어오는 카테고리가 달라진다.
     @Test
     void getTopCategoryRankingsByChangeRate_섹터_제외를_켜면_isExcluded_카테고리가_빠진다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);

@@ -8,7 +8,7 @@ import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import lombok.Getter;
 
-@Table(name = "market_map_stock_category")
+@Table(name = "custom_stock_sector")
 @Entity
 @Getter
 public class MarketMapStockCategory {

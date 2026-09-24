@@ -5,8 +5,6 @@ import dev.eolmae.marketmonitor.domain.marketmap.dto.MarketValueTierItem;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryService;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapScaleService;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketValueTierThresholdService;
-import dev.eolmae.marketmonitor.domain.stock.service.MarketMapExcludedStockService;
-import dev.eolmae.marketmonitor.domain.view.dto.ExcludedStockItem;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapResponse;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
@@ -28,7 +26,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class MarketMapController {
 
     private final MarketMapQueryService marketMapQueryService;
-    private final MarketMapExcludedStockService marketMapExcludedStockService;
     private final MarketMapCategoryService marketMapCategoryService;
     private final MarketMapScaleService marketMapScaleService;
     private final MarketValueTierThresholdService marketValueTierThresholdService;
@@ -54,26 +51,6 @@ public class MarketMapController {
         return marketMapScaleService.getScale();
     }
 
-    @GetMapping("/excluded-stocks")
-    public List<ExcludedStockItem> getExcludedStocks() {
-        return marketMapQueryService.listExcludedStocks();
-    }
-
-    @PostMapping("/excluded-stocks/{stockCode}")
-    public void registerExcludedStock(@PathVariable String stockCode) {
-        marketMapExcludedStockService.register(stockCode);
-    }
-
-    @DeleteMapping("/excluded-stocks/{stockCode}")
-    public void unregisterExcludedStock(@PathVariable String stockCode) {
-        marketMapExcludedStockService.unregister(stockCode);
-    }
-
-    @DeleteMapping("/excluded-stocks")
-    public void deleteExcludedStocks() {
-        marketMapExcludedStockService.deleteAll();
-    }
-
     @PostMapping("/excluded-categories/{categoryId}")
     public void registerExcludedCategory(@PathVariable Long categoryId) {
         marketMapCategoryService.exclude(categoryId);
@@ -91,7 +68,6 @@ public class MarketMapController {
 
     @DeleteMapping("/reset")
     public void resetMarketMapCustomizations() {
-        marketMapExcludedStockService.deleteAll();
         marketMapCategoryService.resetExcludes();
     }
 }

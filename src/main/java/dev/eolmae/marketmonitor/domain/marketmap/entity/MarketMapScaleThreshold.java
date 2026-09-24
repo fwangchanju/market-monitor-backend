@@ -14,7 +14,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import lombok.Getter;
 
-@Table(name = "market_map_scale_threshold")
+@Table(name = "custom_scale_threshold")
 @Entity
 @Getter
 public class MarketMapScaleThreshold {

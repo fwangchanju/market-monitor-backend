@@ -9,7 +9,6 @@ import dev.eolmae.marketmonitor.domain.marketmap.dto.CategoryItem;
 import dev.eolmae.marketmonitor.domain.marketmap.dto.StockCategoryItem;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapCategory;
 import dev.eolmae.marketmonitor.domain.marketmap.entity.MarketMapStockCategory;
-import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryChangeRateSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapCategoryRepository;
 import dev.eolmae.marketmonitor.domain.marketmap.repository.MarketMapStockCategoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
@@ -40,7 +39,6 @@ public class MarketMapCategoryService {
 
     private final MarketMapCategoryRepository marketMapCategoryRepository;
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository;
-    private final MarketMapCategoryChangeRateSnapshotRepository marketMapCategoryChangeRateSnapshotRepository;
     private final StockInfoRepository stockInfoRepository;
     private final StockInfoCacheService stockInfoCacheService;
 
@@ -248,8 +246,6 @@ public class MarketMapCategoryService {
             log.info("[카테고리삭제] 비활성 배정 행 삭제 | categoryId={}|count={}", categoryId, stockCategories.size());
             marketMapStockCategoryRepository.deleteByCategoryIdIn(subCategoryIds);
         }
-
-        marketMapCategoryChangeRateSnapshotRepository.deleteByCategoryIdIn(subCategoryIds);
 
         List<MarketMapCategory> subCategories = subCategoryIds.stream()
                 .map(categoryById::get)

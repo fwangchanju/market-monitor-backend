@@ -86,7 +86,7 @@ public class ApplicationConfig {
     }
 
     // 웹 직렬화는 Jackson 3(tools.jackson)을 쓰고 이 빈은 Jackson 2(com.fasterxml.jackson)라 웹
-    // 레이어와 무관하다. KrxCrawler/TelegramClient/MarketMapCategoryTreeService가 내부용으로 직접 쓴다.
+    // 레이어와 무관하다. KrxCrawler/TelegramClient/CustomSectorTreeService가 내부용으로 직접 쓴다.
     @Bean
     public ObjectMapper internalObjectMapper() {
         return new ObjectMapper();

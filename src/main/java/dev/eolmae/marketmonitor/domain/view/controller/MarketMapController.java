@@ -1,10 +1,10 @@
 package dev.eolmae.marketmonitor.domain.view.controller;
 
-import dev.eolmae.marketmonitor.domain.marketmap.dto.MarketMapScaleResponse;
-import dev.eolmae.marketmonitor.domain.marketmap.dto.MarketValueTierItem;
-import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryService;
-import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapScaleService;
-import dev.eolmae.marketmonitor.domain.marketmap.service.MarketValueTierThresholdService;
+import dev.eolmae.marketmonitor.domain.custom.dto.CustomScaleResponse;
+import dev.eolmae.marketmonitor.domain.custom.dto.CustomValueTierItem;
+import dev.eolmae.marketmonitor.domain.custom.service.CustomScaleService;
+import dev.eolmae.marketmonitor.domain.custom.service.CustomSectorService;
+import dev.eolmae.marketmonitor.domain.custom.service.CustomValueTierThresholdService;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapResponse;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
@@ -26,9 +26,9 @@ import org.springframework.web.bind.annotation.RestController;
 public class MarketMapController {
 
     private final MarketMapQueryService marketMapQueryService;
-    private final MarketMapCategoryService marketMapCategoryService;
-    private final MarketMapScaleService marketMapScaleService;
-    private final MarketValueTierThresholdService marketValueTierThresholdService;
+    private final CustomSectorService customSectorService;
+    private final CustomScaleService customScaleService;
+    private final CustomValueTierThresholdService customValueTierThresholdService;
 
     @GetMapping
     public MarketMapResponse getMarketMap(
@@ -42,32 +42,32 @@ public class MarketMapController {
     }
 
     @GetMapping("/value-tiers")
-    public List<MarketValueTierItem> getValueTiers() {
-        return marketValueTierThresholdService.getValueTiers();
+    public List<CustomValueTierItem> getValueTiers() {
+        return customValueTierThresholdService.getValueTiers();
     }
 
     @GetMapping("/scale")
-    public MarketMapScaleResponse getScale() {
-        return marketMapScaleService.getScale();
+    public CustomScaleResponse getScale() {
+        return customScaleService.getScale();
     }
 
     @PostMapping("/excluded-categories/{categoryId}")
     public void registerExcludedCategory(@PathVariable Long categoryId) {
-        marketMapCategoryService.exclude(categoryId);
+        customSectorService.exclude(categoryId);
     }
 
     @DeleteMapping("/excluded-categories/{categoryId}")
     public void unregisterExcludedCategory(@PathVariable Long categoryId) {
-        marketMapCategoryService.include(categoryId);
+        customSectorService.include(categoryId);
     }
 
     @DeleteMapping("/excluded-categories")
     public void deleteExcludedCategories() {
-        marketMapCategoryService.resetExcludes();
+        customSectorService.resetExcludes();
     }
 
     @DeleteMapping("/reset")
     public void resetMarketMapCustomizations() {
-        marketMapCategoryService.resetExcludes();
+        customSectorService.resetExcludes();
     }
 }

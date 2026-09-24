@@ -66,7 +66,7 @@ class CustomSectorServiceTest {
         ArgumentCaptor<List<CustomStockSector>> assignmentCaptor = ArgumentCaptor.forClass(List.class);
         verify(marketMapStockCategoryRepository).saveAll(assignmentCaptor.capture());
         assertThat(assignmentCaptor.getValue())
-                .extracting(CustomStockSector::getStockCode, CustomStockSector::getCategoryId)
+                .extracting(CustomStockSector::getStockCode, CustomStockSector::getSectorId)
                 .containsExactlyInAnyOrder(tuple("005930", 1L), tuple("051910", chemicalId));
     }
 
@@ -82,7 +82,7 @@ class CustomSectorServiceTest {
         ArgumentCaptor<List<CustomStockSector>> assignmentCaptor = ArgumentCaptor.forClass(List.class);
         verify(marketMapStockCategoryRepository).saveAll(assignmentCaptor.capture());
         assertThat(assignmentCaptor.getValue())
-                .extracting(CustomStockSector::getStockCode, CustomStockSector::getCategoryId)
+                .extracting(CustomStockSector::getStockCode, CustomStockSector::getSectorId)
                 .containsExactly(tuple("005930", 1L));
     }
 
@@ -111,7 +111,7 @@ class CustomSectorServiceTest {
         ArgumentCaptor<List<CustomStockSector>> assignmentCaptor = ArgumentCaptor.forClass(List.class);
         verify(marketMapStockCategoryRepository).saveAll(assignmentCaptor.capture());
         assertThat(assignmentCaptor.getValue())
-                .extracting(CustomStockSector::getStockCode, CustomStockSector::getCategoryId)
+                .extracting(CustomStockSector::getStockCode, CustomStockSector::getSectorId)
                 .containsExactly(tuple("005930", 1L));
     }
 
@@ -156,7 +156,7 @@ class CustomSectorServiceTest {
     void deletePreview_배정된_종목이_있으면_종목_목록과_함께_차단된다() {
         CustomSector semiconductor = category(1L, null, "반도체");
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
-        when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L)))
+        when(marketMapStockCategoryRepository.findBySectorIdIn(List.of(1L)))
                 .thenReturn(List.of(CustomStockSector.create("005930", 1L)));
         StockInfo samsung = StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", "반도체", 100L, BigDecimal.TEN);
         when(stockInfoCacheService.getCache()).thenReturn(Map.of("005930", samsung));
@@ -176,7 +176,7 @@ class CustomSectorServiceTest {
     void deletePreview_차단_목록에는_활성_주권_종목만_담긴다() {
         CustomSector semiconductor = category(1L, null, "반도체");
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
-        when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L)))
+        when(marketMapStockCategoryRepository.findBySectorIdIn(List.of(1L)))
                 .thenReturn(List.of(CustomStockSector.create("005930", 1L), CustomStockSector.create("000660", 1L)));
         StockInfo delisted = StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", "반도체", 100L, BigDecimal.TEN);
         delisted.markInactive();
@@ -196,8 +196,7 @@ class CustomSectorServiceTest {
         CustomSector electronics = category(1L, null, "전기/전자");
         CustomSector semiconductor = category(2L, 1L, "반도체");
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(electronics, semiconductor));
-        when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L, 2L)))
-                .thenReturn(List.of());
+        when(marketMapStockCategoryRepository.findBySectorIdIn(List.of(1L, 2L))).thenReturn(List.of());
 
         SectorDeletePreview preview = service.deletePreview(1L);
 
@@ -217,7 +216,7 @@ class CustomSectorServiceTest {
     void delete_배정된_종목이_있으면_409로_차단된다() {
         CustomSector semiconductor = category(1L, null, "반도체");
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
-        when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L)))
+        when(marketMapStockCategoryRepository.findBySectorIdIn(List.of(1L)))
                 .thenReturn(List.of(CustomStockSector.create("005930", 1L)));
         StockInfo samsung = StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", "반도체", 100L, BigDecimal.TEN);
         when(stockInfoCacheService.getCache()).thenReturn(Map.of("005930", samsung));
@@ -231,7 +230,7 @@ class CustomSectorServiceTest {
     void delete_비활성_종목만_배정된_카테고리는_삭제된다() {
         CustomSector semiconductor = category(1L, null, "반도체");
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
-        when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L)))
+        when(marketMapStockCategoryRepository.findBySectorIdIn(List.of(1L)))
                 .thenReturn(List.of(CustomStockSector.create("005930", 1L)));
         StockInfo delisted = StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", "반도체", 100L, BigDecimal.TEN);
         delisted.markInactive();
@@ -239,7 +238,7 @@ class CustomSectorServiceTest {
 
         assertThatCode(() -> service.delete(1L)).doesNotThrowAnyException();
 
-        verify(marketMapStockCategoryRepository).deleteByCategoryIdIn(List.of(1L));
+        verify(marketMapStockCategoryRepository).deleteBySectorIdIn(List.of(1L));
         verify(marketMapCategoryRepository).deleteAll(List.of(semiconductor));
     }
 
@@ -249,14 +248,14 @@ class CustomSectorServiceTest {
     void delete_주권이_아닌_종목만_배정된_카테고리는_삭제된다() {
         CustomSector etfCategory = category(1L, null, "ETF");
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(etfCategory));
-        when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L)))
+        when(marketMapStockCategoryRepository.findBySectorIdIn(List.of(1L)))
                 .thenReturn(List.of(CustomStockSector.create("069500", 1L)));
         StockInfo etf = StockInfo.create("069500", "KODEX 200", Market.KOSPI, "8", "ETF", 100L, BigDecimal.TEN);
         when(stockInfoCacheService.getCache()).thenReturn(Map.of("069500", etf));
 
         assertThatCode(() -> service.delete(1L)).doesNotThrowAnyException();
 
-        verify(marketMapStockCategoryRepository).deleteByCategoryIdIn(List.of(1L));
+        verify(marketMapStockCategoryRepository).deleteBySectorIdIn(List.of(1L));
     }
 
     // FK 위반을 막는 순서 — 이 레포는 DB 테스트가 없으므로(docs/rules/testing.md) 여기서 확인 가능한
@@ -266,7 +265,7 @@ class CustomSectorServiceTest {
     void delete_비활성_배정_행이_카테고리보다_먼저_삭제된다() {
         CustomSector semiconductor = category(1L, null, "반도체");
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
-        when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L)))
+        when(marketMapStockCategoryRepository.findBySectorIdIn(List.of(1L)))
                 .thenReturn(List.of(CustomStockSector.create("005930", 1L)));
         StockInfo delisted = StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", "반도체", 100L, BigDecimal.TEN);
         delisted.markInactive();
@@ -275,7 +274,7 @@ class CustomSectorServiceTest {
         service.delete(1L);
 
         InOrder inOrder = Mockito.inOrder(marketMapStockCategoryRepository, marketMapCategoryRepository);
-        inOrder.verify(marketMapStockCategoryRepository).deleteByCategoryIdIn(List.of(1L));
+        inOrder.verify(marketMapStockCategoryRepository).deleteBySectorIdIn(List.of(1L));
         inOrder.verify(marketMapCategoryRepository).deleteAll(Mockito.anyList());
     }
 
@@ -284,7 +283,7 @@ class CustomSectorServiceTest {
     void delete_활성_주권_종목이_하나라도_있으면_여전히_차단된다() {
         CustomSector semiconductor = category(1L, null, "반도체");
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
-        when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(1L)))
+        when(marketMapStockCategoryRepository.findBySectorIdIn(List.of(1L)))
                 .thenReturn(List.of(CustomStockSector.create("005930", 1L), CustomStockSector.create("000660", 1L)));
         StockInfo delisted = StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", "반도체", 100L, BigDecimal.TEN);
         delisted.markInactive();
@@ -293,7 +292,7 @@ class CustomSectorServiceTest {
 
         assertThatThrownBy(() -> service.delete(1L)).isInstanceOf(ConflictException.class);
 
-        verify(marketMapStockCategoryRepository, never()).deleteByCategoryIdIn(Mockito.anyList());
+        verify(marketMapStockCategoryRepository, never()).deleteBySectorIdIn(Mockito.anyList());
     }
 
     @Test
@@ -304,8 +303,7 @@ class CustomSectorServiceTest {
         CustomSector b = category(4L, 1L, "B");
         CustomSector child = category(5L, 3L, "자식");
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(parent, a, target, b, child));
-        when(marketMapStockCategoryRepository.findByCategoryIdIn(List.of(3L, 5L)))
-                .thenReturn(List.of());
+        when(marketMapStockCategoryRepository.findBySectorIdIn(List.of(3L, 5L))).thenReturn(List.of());
 
         service.delete(3L);
 

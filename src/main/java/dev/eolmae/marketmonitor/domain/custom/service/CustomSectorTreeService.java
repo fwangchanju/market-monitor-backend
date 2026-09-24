@@ -49,7 +49,7 @@ public class CustomSectorTreeService {
                 .collect(Collectors.groupingBy(
                         category -> category.hasNoParent() ? NO_PARENT_KEY : category.getParentId()));
         Map<Long, List<CustomStockSector>> stocksByCategoryId =
-                stockCategories.stream().collect(Collectors.groupingBy(CustomStockSector::getCategoryId));
+                stockCategories.stream().collect(Collectors.groupingBy(CustomStockSector::getSectorId));
 
         return childrenByParentId.getOrDefault(NO_PARENT_KEY, List.of()).stream()
                 .map(category -> toNode(category, childrenByParentId, stocksByCategoryId))
@@ -114,7 +114,7 @@ public class CustomSectorTreeService {
                 .filter(StockInfo::isActiveAndOrdinary)
                 .filter(stockInfo -> !restoredStockCodes.contains(stockInfo.getStockCode()))
                 .map(stockInfo -> new StockInfoSyncedEvent.NewStock(
-                        stockInfo.getStockCode(), normalizeCategoryName(stockInfo.getCategoryName())))
+                        stockInfo.getStockCode(), normalizeCategoryName(stockInfo.getIndustryName())))
                 .toList();
     }
 

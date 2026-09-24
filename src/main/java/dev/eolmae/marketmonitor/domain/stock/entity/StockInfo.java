@@ -32,8 +32,8 @@ public class StockInfo {
     @Column(length = 5)
     private String marketCode;
 
-    @Column(length = 50)
-    private String categoryName;
+    @Column(name = "industry_name", length = 50)
+    private String industryName;
 
     @Column(nullable = false)
     private Long listCount;
@@ -57,7 +57,7 @@ public class StockInfo {
             String stockName,
             Market marketType,
             String marketCode,
-            String categoryName,
+            String industryName,
             Long listCount,
             BigDecimal lastPrice) {
         var entity = new StockInfo();
@@ -65,7 +65,7 @@ public class StockInfo {
         entity.stockName = stockName;
         entity.marketType = marketType;
         entity.marketCode = marketCode;
-        entity.categoryName = categoryName;
+        entity.industryName = industryName;
         entity.listCount = listCount;
         entity.lastPrice = lastPrice;
         entity.active = true;
@@ -78,13 +78,13 @@ public class StockInfo {
             String stockName,
             Market marketType,
             String marketCode,
-            String categoryName,
+            String industryName,
             Long listCount,
             BigDecimal lastPrice) {
         this.stockName = stockName;
         this.marketType = marketType;
         this.marketCode = marketCode;
-        this.categoryName = categoryName;
+        this.industryName = industryName;
         this.listCount = listCount;
         this.lastPrice = lastPrice;
         this.active = true;

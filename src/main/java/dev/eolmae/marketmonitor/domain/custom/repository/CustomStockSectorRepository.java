@@ -6,9 +6,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface CustomStockSectorRepository extends JpaRepository<CustomStockSector, String> {
 
-    List<CustomStockSector> findByCategoryId(Long categoryId);
+    List<CustomStockSector> findBySectorId(Long sectorId);
 
-    List<CustomStockSector> findByCategoryIdIn(List<Long> categoryIds);
+    List<CustomStockSector> findBySectorIdIn(List<Long> sectorIds);
 
-    void deleteByCategoryIdIn(List<Long> categoryIds);
+    void deleteBySectorIdIn(List<Long> sectorIds);
 }

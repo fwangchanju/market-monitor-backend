@@ -71,8 +71,18 @@
 - 기존 데이터는 admin 사용자 id로 마이그레이션
 - `domain/access`(IP 화이트리스트, 관리자 토큰)는 이 작업으로 대체되어 사라진다
 - 신규 가입 시 초기 적재: 가입이 발생하면 `stock_info` 기준으로
-  `market_map_category` / `market_map_stock_category`에 전체 정보를 초기 적재한다
+  `custom_sector` / `custom_stock_sector`에 전체 정보를 초기 적재한다
 - 사용자별 커스텀 데이터에 개수 상한을 건다(아래 「사용자별 커스텀 데이터 상한」)
+- **커스텀 API 이름 정리를 여기서 같이 한다** (2026-09-25 결정, 구획 1 PR 2d를 흡수).
+  경로가 권한을 뜻하지 않게 되는 시점이라 따로 하면 곧 버릴 nginx 규칙을 만들어야 하고, 프론트·백엔드
+  동시 배포도 두 번이 된다
+  - URL `/api/admin/market-map/*` → `/api/custom/*` (아래 「`/api/admin/` 을 `/api/custom/` 으로 바꾼다」)
+  - 커스텀 API dto의 JSON 필드 `category*` → `sector*`, `version*` → `snapshot*`. `SectorTreeNode`의
+    키는 `custom_snapshot.snapshot_json`에 저장되므로, 그 시점에 저장본이 있으면 JSON도 변환한다
+  - 지도 응답(`/api/map`)의 `categoryId` 등은 바꾸지 않는다 — 지도 쪽 이름이다
+  - 프론트 파일명(`marketMapAdmin.ts`, `useMarketMapAdmin` 등) → custom, 옛 페이지 `/admin/market-map`
+    (`MarketMapAdminPage`) 삭제
+  - 백엔드 테스트의 mock 변수 이름(`marketMapCategoryRepository` 등)을 클래스 이름(`customSectorRepository`)에 맞춘다
 
 **선행 조건**: 코드 정비(CI·테스트·버그 수정·문서) 완료. 안전망도 문서도 없는 상태에서 인증과 데이터
 마이그레이션 같은 위험한 작업을 하지 않는다.

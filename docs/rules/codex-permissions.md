@@ -2,7 +2,7 @@
 
 ## 목적과 현재 적용 범위
 
-이 문서는 `.claude/settings.json`의 거부·승인 규칙을 Codex에서 어떻게 재현할지 정한다. 저장소의 `AGENTS.md`에는 에이전트의 행동 규칙을 적었다. 아래 `config.toml`과 `.rules` 예시는 **설치 전 예시**이며, 이 문서만으로 런타임 제한이 켜지지는 않는다. Codex CLI가 이 환경의 PATH에 없어 규칙 로딩과 `execpolicy check`를 실제 실행하지 못했다.
+이 문서는 `.claude/settings.json`의 거부·승인 규칙을 Codex에서 어떻게 재현할지 정한다. 저장소의 `AGENTS.md`에는 에이전트의 행동 규칙을 적었다. `.codex/config.toml`과 `.codex/rules/market-monitor.rules`를 저장소에 추가했다. 이 프로젝트를 신뢰한 새 Codex 세션에서 로드된다. Codex CLI가 이 환경의 PATH에 없어 규칙 로딩과 `execpolicy check`를 실제 실행하지 못했다.
 
 | Claude 규칙 | Codex에서 사용할 제어 | 범위 |
 |---|---|---|
@@ -12,9 +12,9 @@
 
 `AGENTS.md`는 지시문이지 파일·도구 접근을 막는 보안 경계가 아니다. 특히 Claude의 `Read(infra/.env)`와 `mcp__github__merge_pull_request` 거부를 `AGENTS.md`만으로 동일하게 강제했다고 간주하면 안 된다.
 
-## 로컬 Codex 설정 예시
+## 프로젝트 Codex 설정
 
-Codex 0.138.0 이상에서 permission profile을 사용할 수 있는 환경이라면, 활성 설정 계층의 `.codex/config.toml`에 다음을 둔다. 기존 설정에 `sandbox_mode` 또는 `[sandbox_workspace_write]`가 있으면 먼저 제거해야 프로필이 선택된다. 프로젝트 `.codex` 계층은 신뢰된 프로젝트에서만 로드된다.
+Codex 0.138.0 이상에서 permission profile을 사용할 수 있는 환경이라면, 저장소의 `.codex/config.toml`에 다음 설정이 적용된다. 활성 설정의 어느 계층에든 `sandbox_mode` 또는 `[sandbox_workspace_write]`가 있거나 `--sandbox`가 지정되면 이 프로필 대신 기존 샌드박스가 적용된다. 프로젝트 `.codex` 계층은 신뢰된 프로젝트에서만 로드된다.
 
 ```toml
 approval_policy = "on-request"
@@ -34,9 +34,9 @@ glob_scan_max_depth = 6
 
 위 패턴은 `infra/.env`를 포함한 환경 파일을 대상으로 한다. 실제 저장소 깊이와 Codex 버전에 맞춰 시작 시 규칙이 로드되는지 확인한다. 키를 이용한 테스트가 필요한 경우 Codex에게 파일 읽기 권한을 주는 대신 사용자가 실행 환경에 값을 주입한다.
 
-## 셸 명령 규칙 예시
+## 셸 명령 규칙
 
-신뢰된 프로젝트의 `.codex/rules/market-monitor.rules`에 다음을 둔다. `.rules`는 인수 접두사를 비교하므로 `gh -R owner/repo pr merge` 같은 변형은 별도 규칙이나 훅으로 막아야 한다. `git commit`과 `push`는 샌드박스 밖 실행 요청에서 승인 대상으로 만든다.
+신뢰된 프로젝트의 `.codex/rules/market-monitor.rules`에 아래 규칙을 추가했다. `.rules`는 인수 접두사를 비교하므로 `gh -R owner/repo pr merge` 같은 변형은 별도 규칙이나 훅으로 막아야 한다. `git commit`과 `push`는 샌드박스 밖 실행 요청에서 승인 대상으로 만든다.
 
 ```python
 prefix_rule(pattern = ["gh", "pr", "merge"], decision = "forbidden", justification = "PR 병합은 사용자가 한다")

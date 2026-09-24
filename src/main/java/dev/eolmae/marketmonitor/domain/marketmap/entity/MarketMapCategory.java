@@ -10,7 +10,7 @@ import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import lombok.Getter;
 
-@Table(name = "market_map_category")
+@Table(name = "custom_sector")
 @Entity
 @Getter
 public class MarketMapCategory {
@@ -22,7 +22,7 @@ public class MarketMapCategory {
     @Column(name = "parent_id")
     private Long parentId;
 
-    @Column(name = "version_id")
+    @Column(name = "snapshot_id")
     private Long versionId;
 
     @Column(nullable = false, length = 50)

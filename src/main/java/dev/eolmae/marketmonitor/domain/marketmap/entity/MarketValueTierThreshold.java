@@ -15,7 +15,7 @@ import lombok.Getter;
 // 지금은 4행 고정이지만, 나중에 userId가 붙으면 사용자마다 구간 개수·이름·기준값이 달라질 수 있어서
 // 애초에 고정 개수를 전제하는 enum으로는 표현이 불가능하다. label은 영문 코드/한글 표시명을 나누지 않고
 // 하나만 둔다(구분할 이유가 없음).
-@Table(name = "market_value_tier_threshold")
+@Table(name = "custom_value_tier_threshold")
 @Entity
 @Getter
 public class MarketValueTierThreshold {

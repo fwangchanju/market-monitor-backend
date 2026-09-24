@@ -10,7 +10,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryService;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapScaleService;
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketValueTierThresholdService;
-import dev.eolmae.marketmonitor.domain.stock.service.MarketMapExcludedStockService;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapResponse;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
@@ -26,7 +25,6 @@ class MarketMapControllerTest {
     private final MarketMapQueryService marketMapQueryService = mock(MarketMapQueryService.class);
     private final MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new MarketMapController(
                     marketMapQueryService,
-                    mock(MarketMapExcludedStockService.class),
                     mock(MarketMapCategoryService.class),
                     mock(MarketMapScaleService.class),
                     mock(MarketValueTierThresholdService.class)))

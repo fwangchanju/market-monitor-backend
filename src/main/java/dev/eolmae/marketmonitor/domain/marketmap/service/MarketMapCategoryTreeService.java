@@ -94,7 +94,7 @@ public class MarketMapCategoryTreeService {
     /** 라이브 테이블을 스냅샷 내용으로 완전히 교체하고, 새로 생성되는 카테고리 전체를 주어진 버전으로 태깅한다.
      * 스냅샷은 저장 시점 기준이라, 그 이후 신규 상장된 종목(및 그 종목만 쓰는 신규 카테고리)은 스냅샷에 없어서
      * 복원 직후엔 배정이 빠진 채로 남는다. stock_info 기준 활성 주권 종목과 방금 복원된 배정을 비교해 누락분을
-     * 채워, "활성 주권 종목은 항상 market_map_stock_category에 배정돼 있다"는 불변식을 복원 후에도 유지한다. */
+     * 채워, "활성 주권 종목은 항상 custom_stock_sector에 배정돼 있다"는 불변식을 복원 후에도 유지한다. */
     public void restore(List<CategoryTreeNode> tree, Long versionId) {
         marketMapStockCategoryRepository.deleteAllInBatch();
         marketMapCategoryRepository.deleteAllInBatch();

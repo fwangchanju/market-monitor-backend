@@ -9,7 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 시가총액 구간(초대형주/대형주/...) 분류 — 코드 enum이 아니라 market_value_tier_threshold 데이터 기준. */
+/** 시가총액 구간(초대형주/대형주/...) 분류 — 코드 enum이 아니라 custom_value_tier_threshold 데이터 기준. */
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor

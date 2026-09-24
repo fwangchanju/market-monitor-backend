@@ -100,7 +100,7 @@ class MarketMapCategoryServiceTest {
     @Test
     void onStockInfoSynced_이벤트에_없어도_배정_행이_없는_활성_일반주는_배정된다() {
         // ETF로 있다가 일반주로 전환된 종목처럼, StockInfoCollector의 이벤트(신규 종목만)엔 안 실리지만
-        // market_map_stock_category엔 아직 배정 행이 없는 경우
+        // custom_stock_sector엔 아직 배정 행이 없는 경우
         MarketMapCategory semiconductor = category(1L, null, "반도체");
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
         when(marketMapStockCategoryRepository.findAll()).thenReturn(List.of());

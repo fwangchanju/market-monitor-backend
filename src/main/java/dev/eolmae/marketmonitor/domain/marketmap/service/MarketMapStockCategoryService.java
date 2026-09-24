@@ -53,7 +53,7 @@ public class MarketMapStockCategoryService {
     }
 
     /** 여러 종목을 한 카테고리로 한 번에 재배정한다. 건별 assign을 반복 호출하는 대신 조회를 한 번만 수행.
-     * 화면 목록 자체가 market_map_stock_category 기준이라 요청으로 들어온 stockCode는 이미 존재하는 것이 정상이며,
+     * 화면 목록 자체가 custom_stock_sector 기준이라 요청으로 들어온 stockCode는 이미 존재하는 것이 정상이며,
      * 그 사이 삭제되는 등의 이유로 조회되지 않은 stockCode만 실패 목록으로 돌려준다. */
     public BulkAssignResponse bulkAssign(List<String> stockCodes, Long categoryId) {
         if (!marketMapCategoryRepository.existsById(categoryId)) {

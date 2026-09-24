@@ -11,7 +11,6 @@ import dev.eolmae.marketmonitor.domain.marketmap.service.CategoryTierAggregation
 import dev.eolmae.marketmonitor.domain.marketmap.service.MarketValueTierThresholdService;
 import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
-import dev.eolmae.marketmonitor.domain.stock.repository.MarketMapExcludedStockRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketOverviewSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceCacheService;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceCacheService.CachedStockPrice;
@@ -21,7 +20,6 @@ import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateItem;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateMarketRanking;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryRankingSummary;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryTierBreakdown;
-import dev.eolmae.marketmonitor.domain.view.dto.ExcludedStockItem;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketIndexChangeRate;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapItem;
@@ -63,7 +61,6 @@ public class MarketMapQueryService {
     private final StockInfoCacheService stockInfoCacheService;
     private final SectorPriceSnapshotService sectorPriceSnapshotService;
     private final SectorPriceCacheService sectorPriceCacheService;
-    private final MarketMapExcludedStockRepository marketMapExcludedStockRepository;
     private final MarketMapCategoryRepository marketMapCategoryRepository;
     private final MarketMapStockCategoryRepository marketMapStockCategoryRepository;
     private final CategoryTierAggregationService categoryTierAggregationService;
@@ -241,7 +238,7 @@ public class MarketMapQueryService {
     }
 
     /**
-     * 텔레그램 캡션용 카테고리 TOP2 랭킹 — 대분류(depth 0)만, 기본 제외 구간(market_value_tier_threshold
+     * 텔레그램 캡션용 카테고리 TOP2 랭킹 — 대분류(depth 0)만, 기본 제외 구간(custom_value_tier_threshold
      * .is_excluded_by_default)을 뺀 **beforeMinutes분 전 대비 변화(%p)** 기준 내림차순 TOP2.
      * 필터·정렬·TOP2 확정까지 전부 여기서 끝내고, notification 쪽(CategoryRankingTextBuilder)은 텍스트
      * 포매팅만 한다. 데이터 없는 마켓은 getCategoryChangeRates가 이미 결과에서 뺀 상태라 자동으로
@@ -562,7 +559,7 @@ public class MarketMapQueryService {
         return toMarketMapItem(stockInfo, cachedPrice, (String) null, sortedTiers);
     }
 
-    /** 커스텀 마켓맵용: market_map_stock_category에 배정된 alias(없으면 null)를 같이 실어 보낸다 */
+    /** 커스텀 마켓맵용: custom_stock_sector에 배정된 alias(없으면 null)를 같이 실어 보낸다 */
     private MarketMapItem toMarketMapItem(
             StockInfo stockInfo,
             CachedStockPrice cachedPrice,
@@ -601,19 +598,5 @@ public class MarketMapQueryService {
             return null;
         }
         return stockCategory.getAlias();
-    }
-
-    /** 마켓맵 표시 제외 종목 목록 */
-    public List<ExcludedStockItem> listExcludedStocks() {
-        Map<String, StockInfo> stockInfoCache = stockInfoCacheService.getCache();
-        return marketMapExcludedStockRepository.findByIsActiveTrue().stream()
-                .map(excluded -> new ExcludedStockItem(
-                        excluded.getStockCode(), resolveStockName(excluded.getStockCode(), stockInfoCache)))
-                .toList();
-    }
-
-    private String resolveStockName(String stockCode, Map<String, StockInfo> stockInfoCache) {
-        StockInfo stockInfo = stockInfoCache.get(stockCode);
-        return stockInfo != null ? stockInfo.getStockName() : stockCode;
     }
 }

@@ -48,7 +48,7 @@ public class MarketMapCategoryService {
     }
 
     /** stock -> marketmap 순환 의존을 피하려고 이벤트로 수신(StockInfoSyncedEvent 참고).
-     * 이벤트 payload(신규 종목)에 더해, "활성 일반주인데 아직 market_map_stock_category에 배정 행이
+     * 이벤트 payload(신규 종목)에 더해, "활성 일반주인데 아직 custom_stock_sector에 배정 행이
      * 없는 종목"도 직접 계산해서 함께 채운다 — 이미 stock_info에 있던 종목이 나중에 일반주가 되는
      * 경우(ETF로 등록됐다가 marketCode가 바뀌는 등)는 이벤트에 실리지 않아 배정을 영영 못 받기
      * 때문이다. StockInfoCollector가 이벤트에 신규 종목만 싣는 것은 그대로 둔다. */
@@ -92,7 +92,7 @@ public class MarketMapCategoryService {
         syncStockCategories(stocks);
     }
 
-    /** 주어진 종목 중 카테고리명이 아직 없는 것만 최상위 카테고리로 생성한 뒤 market_map_stock_category에 배정한다. */
+    /** 주어진 종목 중 카테고리명이 아직 없는 것만 최상위 카테고리로 생성한 뒤 custom_stock_sector에 배정한다. */
     private void syncStockCategories(List<StockInfoSyncedEvent.NewStock> stocks) {
         if (stocks.isEmpty()) {
             return;
@@ -241,7 +241,7 @@ public class MarketMapCategoryService {
         }
 
         // 활성 주권 배정은 없다고 확인했지만(위 판정), 비활성 종목의 배정 행은 여전히 남아있을 수 있다 —
-        // market_map_category를 가리키는 FK라 카테고리 삭제 전에 먼저 지워야 한다(결정 1).
+        // custom_sector를 가리키는 FK라 카테고리 삭제 전에 먼저 지워야 한다(결정 1).
         if (!stockCategories.isEmpty()) {
             log.info("[카테고리삭제] 비활성 배정 행 삭제 | categoryId={}|count={}", categoryId, stockCategories.size());
             marketMapStockCategoryRepository.deleteByCategoryIdIn(subCategoryIds);

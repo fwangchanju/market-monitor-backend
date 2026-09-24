@@ -1,0 +1,16 @@
+package dev.eolmae.marketmonitor.domain.custom.dto;
+
+import dev.eolmae.marketmonitor.common.enums.Market;
+import java.math.BigDecimal;
+
+public record StockSectorListItem(
+        String stockCode,
+        Market market,
+        String stockName,
+        String alias,
+        BigDecimal totalMarketValue,
+        String marketValueTier,
+        String originCategoryName,
+        String parentCategoryName,
+        String categoryName,
+        Long categoryId) {}

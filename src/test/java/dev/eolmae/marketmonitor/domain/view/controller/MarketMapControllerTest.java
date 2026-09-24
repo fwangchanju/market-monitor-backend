@@ -7,9 +7,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 
-import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapCategoryService;
-import dev.eolmae.marketmonitor.domain.marketmap.service.MarketMapScaleService;
-import dev.eolmae.marketmonitor.domain.marketmap.service.MarketValueTierThresholdService;
+import dev.eolmae.marketmonitor.domain.custom.service.CustomScaleService;
+import dev.eolmae.marketmonitor.domain.custom.service.CustomSectorService;
+import dev.eolmae.marketmonitor.domain.custom.service.CustomValueTierThresholdService;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapResponse;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
@@ -25,9 +25,9 @@ class MarketMapControllerTest {
     private final MarketMapQueryService marketMapQueryService = mock(MarketMapQueryService.class);
     private final MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new MarketMapController(
                     marketMapQueryService,
-                    mock(MarketMapCategoryService.class),
-                    mock(MarketMapScaleService.class),
-                    mock(MarketValueTierThresholdService.class)))
+                    mock(CustomSectorService.class),
+                    mock(CustomScaleService.class),
+                    mock(CustomValueTierThresholdService.class)))
             .build();
 
     @Test

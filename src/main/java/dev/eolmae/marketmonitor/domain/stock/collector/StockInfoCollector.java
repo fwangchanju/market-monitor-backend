@@ -93,7 +93,7 @@ public class StockInfoCollector {
                 .filter(stock -> StockMarketCode.isOrdinaryShare(stock.getMarketCode()))
                 .map(stock -> new StockInfoSyncedEvent.NewStock(
                         stock.getStockCode(),
-                        stock.getCategoryName().isBlank() ? UNCATEGORIZED : stock.getCategoryName()))
+                        stock.getIndustryName().isBlank() ? UNCATEGORIZED : stock.getIndustryName()))
                 .toList();
         eventPublisher.publishEvent(new StockInfoSyncedEvent(newStockEvents));
 

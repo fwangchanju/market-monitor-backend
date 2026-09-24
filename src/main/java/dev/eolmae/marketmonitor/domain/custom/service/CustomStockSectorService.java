@@ -108,7 +108,7 @@ public class CustomStockSectorService {
             Map<Long, CustomSector> categoryById,
             Map<String, SectorPriceSnapshot> latestPriceByStockCode,
             List<CustomValueTierThreshold> sortedTiers) {
-        CustomSector category = categoryById.get(stockCategory.getCategoryId());
+        CustomSector category = categoryById.get(stockCategory.getSectorId());
         CustomSector parent = category.hasNoParent() ? null : categoryById.get(category.getParentId());
 
         SectorPriceSnapshot priceSnapshot = latestPriceByStockCode.get(stockInfo.getStockCode());
@@ -126,7 +126,7 @@ public class CustomStockSectorService {
                 stockCategory.getAlias(),
                 totalMarketValue,
                 marketValueTier,
-                stockInfo.getCategoryName(),
+                stockInfo.getIndustryName(),
                 parent == null ? null : parent.getName(),
                 category.getName(),
                 category.getId());

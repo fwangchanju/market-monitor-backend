@@ -17,8 +17,8 @@ public class CustomStockSector {
     @Column(name = "stock_code", length = 20)
     private String stockCode;
 
-    @Column(name = "category_id", nullable = false)
-    private Long categoryId;
+    @Column(name = "sector_id", nullable = false)
+    private Long sectorId;
 
     @Column(length = 50)
     private String alias;
@@ -31,18 +31,18 @@ public class CustomStockSector {
 
     protected CustomStockSector() {}
 
-    public static CustomStockSector create(String stockCode, Long categoryId) {
+    public static CustomStockSector create(String stockCode, Long sectorId) {
         var entity = new CustomStockSector();
         entity.stockCode = stockCode;
-        entity.categoryId = categoryId;
+        entity.sectorId = sectorId;
         LocalDateTime now = LocalDateTime.now(Zone.KST.zoneId());
         entity.createdAt = now;
         entity.updatedAt = now;
         return entity;
     }
 
-    public void reassign(Long categoryId) {
-        this.categoryId = categoryId;
+    public void reassign(Long sectorId) {
+        this.sectorId = sectorId;
         this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
     }
 

@@ -79,7 +79,7 @@ public class CustomSectorService {
     }
 
     private String normalizeCategoryName(StockInfo stockInfo) {
-        String categoryName = stockInfo.getCategoryName();
+        String categoryName = stockInfo.getIndustryName();
         if (categoryName == null || categoryName.isBlank()) {
             return UNCATEGORIZED;
         }
@@ -217,7 +217,7 @@ public class CustomSectorService {
         CustomSector target = findCategory(categoryId, categoryById);
 
         List<Long> subCategoryIds = collectSubCategoryIds(categoryId, maps.categoryByParentId());
-        List<CustomStockSector> stockCategories = customStockSectorRepository.findByCategoryIdIn(subCategoryIds);
+        List<CustomStockSector> stockCategories = customStockSectorRepository.findBySectorIdIn(subCategoryIds);
         List<CustomStockSector> blockingStockCategories = findBlockingStockCategories(stockCategories);
         if (!blockingStockCategories.isEmpty()) {
             return SectorDeletePreview.blocked(
@@ -233,7 +233,7 @@ public class CustomSectorService {
         findCategory(categoryId, categoryById);
 
         List<Long> subCategoryIds = collectSubCategoryIds(categoryId, maps.categoryByParentId());
-        List<CustomStockSector> stockCategories = customStockSectorRepository.findByCategoryIdIn(subCategoryIds);
+        List<CustomStockSector> stockCategories = customStockSectorRepository.findBySectorIdIn(subCategoryIds);
         if (!findBlockingStockCategories(stockCategories).isEmpty()) {
             throw new ConflictException(ErrorCode.CATEGORY_HAS_ASSIGNED_STOCK, categoryId);
         }
@@ -242,7 +242,7 @@ public class CustomSectorService {
         // custom_sector를 가리키는 FK라 카테고리 삭제 전에 먼저 지워야 한다(결정 1).
         if (!stockCategories.isEmpty()) {
             log.info("[카테고리삭제] 비활성 배정 행 삭제 | categoryId={}|count={}", categoryId, stockCategories.size());
-            customStockSectorRepository.deleteByCategoryIdIn(subCategoryIds);
+            customStockSectorRepository.deleteBySectorIdIn(subCategoryIds);
         }
 
         List<CustomSector> subCategories = subCategoryIds.stream()
@@ -312,7 +312,7 @@ public class CustomSectorService {
                 .map(stockCategory -> new StockSectorItem(
                         stockCategory.getStockCode(),
                         resolveStockName(stockCategory.getStockCode(), stockInfoCache),
-                        categoryById.get(stockCategory.getCategoryId()).getName()))
+                        categoryById.get(stockCategory.getSectorId()).getName()))
                 .toList();
     }
 

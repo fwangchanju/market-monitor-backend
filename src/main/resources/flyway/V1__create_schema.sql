@@ -3,7 +3,7 @@ CREATE TABLE stock_info (
     stock_name VARCHAR(100) NOT NULL,
     market_type VARCHAR(20) NOT NULL,
     market_code VARCHAR(5),
-    category_name VARCHAR(50),
+    industry_name VARCHAR(50),
     list_count BIGINT NOT NULL,
     last_price DECIMAL(19,2),
     active BOOLEAN NOT NULL,
@@ -46,13 +46,13 @@ CREATE TABLE custom_sector (
 
 CREATE TABLE custom_stock_sector (
     stock_code VARCHAR(20) NOT NULL,
-    category_id BIGINT NOT NULL,
+    sector_id BIGINT NOT NULL,
     alias VARCHAR(50),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_custom_stock_sector PRIMARY KEY (stock_code),
     CONSTRAINT fk_custom_stock_sector_stock FOREIGN KEY (stock_code) REFERENCES stock_info (stock_code),
-    CONSTRAINT fk_custom_stock_sector_sector FOREIGN KEY (category_id) REFERENCES custom_sector (id)
+    CONSTRAINT fk_custom_stock_sector_sector FOREIGN KEY (sector_id) REFERENCES custom_sector (id)
 );
 
 CREATE TABLE custom_scale_threshold (

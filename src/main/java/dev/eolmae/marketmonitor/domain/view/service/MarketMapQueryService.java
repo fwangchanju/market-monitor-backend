@@ -84,7 +84,7 @@ public class MarketMapQueryService {
         Map<String, List<MarketMapItem>> grouped = candidates.stream()
                 .filter(stockInfo -> priceMap.containsKey(stockInfo.getStockCode()))
                 .collect(Collectors.groupingBy(
-                        stockInfo -> normalizeCategoryName(stockInfo.getCategoryName()),
+                        stockInfo -> normalizeCategoryName(stockInfo.getIndustryName()),
                         Collectors.mapping(
                                 stockInfo ->
                                         toMarketMapItem(stockInfo, priceMap.get(stockInfo.getStockCode()), sortedTiers),
@@ -490,7 +490,7 @@ public class MarketMapQueryService {
                 .filter(stockInfo -> priceMap.containsKey(stockInfo.getStockCode()))
                 .collect(Collectors.groupingBy(
                         stockInfo ->
-                                stockCategoryMap.get(stockInfo.getStockCode()).getCategoryId(),
+                                stockCategoryMap.get(stockInfo.getStockCode()).getSectorId(),
                         Collectors.mapping(
                                 stockInfo -> toMarketMapItem(
                                         stockInfo,

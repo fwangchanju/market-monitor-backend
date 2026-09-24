@@ -10,7 +10,7 @@ BEGIN
 END;
 $$;
 
-CREATE TABLE app_user (
+CREATE TABLE users (
     id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
     issuer VARCHAR(255),
     sub VARCHAR(255),
@@ -18,24 +18,23 @@ CREATE TABLE app_user (
     role VARCHAR(20) NOT NULL DEFAULT 'USER',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_app_user PRIMARY KEY (id),
-    CONSTRAINT uk_app_user_issuer_sub UNIQUE (issuer, sub),
-    CONSTRAINT ck_app_user_role CHECK (role IN ('USER', 'ADMIN'))
+    CONSTRAINT pk_users PRIMARY KEY (id),
+    CONSTRAINT uk_users_issuer_sub UNIQUE (issuer, sub),
+    CONSTRAINT ck_users_role CHECK (role IN ('USER', 'ADMIN'))
 );
 
 DO $$
 BEGIN
-    IF EXISTS (SELECT 1 FROM app_user WHERE id = 999999) THEN
+    IF EXISTS (SELECT 1 FROM users WHERE id = 999999) THEN
         RAISE EXCEPTION 'reserved migration user id 999999 already exists';
     END IF;
 END;
 $$;
 
-INSERT INTO app_user (id, issuer, sub, email, role)
+-- The explicit placeholder does not advance the identity sequence; signup starts at 1.
+INSERT INTO users (id, issuer, sub, email, role)
 OVERRIDING SYSTEM VALUE
 VALUES (999999, NULL, NULL, NULL, 'USER');
-
-SELECT setval(pg_get_serial_sequence('app_user', 'id'), 999999, TRUE);
 
 CREATE TABLE industry_info (
     id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
@@ -117,7 +116,7 @@ CREATE TABLE custom_stock_alias (
     CONSTRAINT fk_custom_stock_alias_stock
         FOREIGN KEY (stock_code) REFERENCES stock_info (stock_code),
     CONSTRAINT fk_custom_stock_alias_user
-        FOREIGN KEY (user_id) REFERENCES app_user (id) DEFERRABLE INITIALLY DEFERRED
+        FOREIGN KEY (user_id) REFERENCES users (id) DEFERRABLE INITIALLY DEFERRED
 );
 
 INSERT INTO custom_stock_alias (user_id, stock_code, alias, created_at, updated_at)
@@ -131,7 +130,7 @@ CREATE TABLE user_preference (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_user_preference PRIMARY KEY (user_id),
     CONSTRAINT fk_user_preference_user
-        FOREIGN KEY (user_id) REFERENCES app_user (id) DEFERRABLE INITIALLY DEFERRED
+        FOREIGN KEY (user_id) REFERENCES users (id) DEFERRABLE INITIALLY DEFERRED
 );
 
 INSERT INTO user_preference (user_id, payload) VALUES (999999, '{}'::JSONB);
@@ -146,7 +145,7 @@ CREATE TABLE user_refresh_token (
     CONSTRAINT pk_user_refresh_token PRIMARY KEY (id),
     CONSTRAINT uk_user_refresh_token_hash UNIQUE (token_hash),
     CONSTRAINT fk_user_refresh_token_user
-        FOREIGN KEY (user_id) REFERENCES app_user (id) DEFERRABLE INITIALLY DEFERRED
+        FOREIGN KEY (user_id) REFERENCES users (id) DEFERRABLE INITIALLY DEFERRED
 );
 
 CREATE INDEX idx_user_refresh_token_user_expiry ON user_refresh_token (user_id, expires_at);
@@ -162,7 +161,7 @@ ALTER TABLE custom_value_tier_threshold DROP CONSTRAINT uk_custom_value_tier_thr
 ALTER TABLE custom_snapshot
     ADD CONSTRAINT uk_custom_snapshot_id_user UNIQUE (id, user_id),
     ADD CONSTRAINT fk_custom_snapshot_user
-        FOREIGN KEY (user_id) REFERENCES app_user (id) DEFERRABLE INITIALLY DEFERRED;
+        FOREIGN KEY (user_id) REFERENCES users (id) DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE custom_sector
     ADD CONSTRAINT uk_custom_sector_user_name UNIQUE (user_id, name),
@@ -170,7 +169,7 @@ ALTER TABLE custom_sector
 
 ALTER TABLE custom_sector
     ADD CONSTRAINT fk_custom_sector_user
-        FOREIGN KEY (user_id) REFERENCES app_user (id) DEFERRABLE INITIALLY DEFERRED,
+        FOREIGN KEY (user_id) REFERENCES users (id) DEFERRABLE INITIALLY DEFERRED,
     ADD CONSTRAINT fk_custom_sector_parent_user
         FOREIGN KEY (parent_id, user_id) REFERENCES custom_sector (id, user_id)
         DEFERRABLE INITIALLY DEFERRED,
@@ -181,7 +180,7 @@ ALTER TABLE custom_sector
 ALTER TABLE custom_stock_sector
     ADD CONSTRAINT pk_custom_stock_sector PRIMARY KEY (user_id, stock_code),
     ADD CONSTRAINT fk_custom_stock_sector_user
-        FOREIGN KEY (user_id) REFERENCES app_user (id) DEFERRABLE INITIALLY DEFERRED,
+        FOREIGN KEY (user_id) REFERENCES users (id) DEFERRABLE INITIALLY DEFERRED,
     ADD CONSTRAINT fk_custom_stock_sector_sector_user
         FOREIGN KEY (sector_id, user_id) REFERENCES custom_sector (id, user_id)
         DEFERRABLE INITIALLY DEFERRED;
@@ -189,12 +188,12 @@ ALTER TABLE custom_stock_sector
 ALTER TABLE custom_scale_threshold
     ADD CONSTRAINT uk_custom_scale_threshold_user_percent UNIQUE (user_id, threshold_percent),
     ADD CONSTRAINT fk_custom_scale_threshold_user
-        FOREIGN KEY (user_id) REFERENCES app_user (id) DEFERRABLE INITIALLY DEFERRED;
+        FOREIGN KEY (user_id) REFERENCES users (id) DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE custom_value_tier_threshold
     ADD CONSTRAINT uk_custom_value_tier_threshold_user_label UNIQUE (user_id, label),
     ADD CONSTRAINT fk_custom_value_tier_threshold_user
-        FOREIGN KEY (user_id) REFERENCES app_user (id) DEFERRABLE INITIALLY DEFERRED;
+        FOREIGN KEY (user_id) REFERENCES users (id) DEFERRABLE INITIALLY DEFERRED;
 
 CREATE INDEX idx_custom_sector_user_parent ON custom_sector (user_id, parent_id);
 CREATE INDEX idx_custom_sector_user_snapshot ON custom_sector (user_id, snapshot_id);

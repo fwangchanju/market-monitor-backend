@@ -118,6 +118,9 @@ public class CustomSectorTreeService {
         customSectorRepository.deleteAll(customSectorRepository.findAllByUserId(userId));
         customScaleThresholdRepository.deleteAllByUserId(userId);
         customValueTierThresholdRepository.deleteAllByUserId(userId);
+        // IDENTITY 전략은 save() 즉시 INSERT하는데 위 delete들은 flush 전까지 큐에만 쌓여있어,
+        // flush 없이 restoreSectors를 부르면 같은 (user_id, name) 등 유니크 제약을 건드려 충돌한다.
+        customSectorRepository.flush();
 
         Map<Long, CustomSector> sectorBySnapshotId = restoreSectors(snapshot.sectors(), userId, snapshotId);
         List<CustomStockSector> assignments = snapshot.assignments().stream()

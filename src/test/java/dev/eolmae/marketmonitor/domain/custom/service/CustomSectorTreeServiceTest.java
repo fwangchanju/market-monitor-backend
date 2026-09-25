@@ -22,7 +22,9 @@ import dev.eolmae.marketmonitor.domain.custom.repository.CustomValueTierThreshol
 import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.mockito.Mockito;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -95,5 +97,29 @@ class CustomSectorTreeServiceTest {
 
         assertThat(service.isCurrentSnapshotFormat(legacySnapshot)).isFalse();
         assertThatThrownBy(() -> service.parseSnapshot(legacySnapshot)).isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void restore_섹터_삭제를_flush한_뒤에_섹터를_저장한다() throws Exception {
+        CustomSnapshotPayload snapshot = new CustomSnapshotPayload(
+                2,
+                List.of(new CustomSnapshotPayload.Sector(10L, null, "산업", 0, false)),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                Map.of());
+        String snapshotJson = objectMapper.writeValueAsString(snapshot);
+        Mockito.when(sectorRepository.save(Mockito.any(CustomSector.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        Mockito.when(stockInfoRepository.findAllById(Mockito.<Iterable<String>>any()))
+                .thenReturn(List.of());
+
+        service.restore(snapshotJson, USER_ID, 99L);
+
+        InOrder inOrder = Mockito.inOrder(sectorRepository);
+        inOrder.verify(sectorRepository).deleteAll(Mockito.anyList());
+        inOrder.verify(sectorRepository).flush();
+        inOrder.verify(sectorRepository).save(Mockito.any(CustomSector.class));
     }
 }

@@ -2,8 +2,8 @@ package dev.eolmae.marketmonitor.domain.custom.entity;
 
 import dev.eolmae.marketmonitor.common.enums.Zone;
 import jakarta.persistence.Column;
+import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import lombok.Getter;
@@ -13,9 +13,10 @@ import lombok.Getter;
 @Getter
 public class CustomStockSector {
 
-    @Id
-    @Column(name = "stock_code", length = 20)
-    private String stockCode;
+    private static final Long LEGACY_OWNER_ID = 999999L;
+
+    @EmbeddedId
+    private CustomStockSectorId id;
 
     @Column(name = "sector_id", nullable = false)
     private Long sectorId;
@@ -32,13 +33,25 @@ public class CustomStockSector {
     protected CustomStockSector() {}
 
     public static CustomStockSector create(String stockCode, Long sectorId) {
+        return create(LEGACY_OWNER_ID, stockCode, sectorId);
+    }
+
+    public static CustomStockSector create(Long userId, String stockCode, Long sectorId) {
         var entity = new CustomStockSector();
-        entity.stockCode = stockCode;
+        entity.id = new CustomStockSectorId(userId, stockCode);
         entity.sectorId = sectorId;
         LocalDateTime now = LocalDateTime.now(Zone.KST.zoneId());
         entity.createdAt = now;
         entity.updatedAt = now;
         return entity;
+    }
+
+    public Long getUserId() {
+        return id.getUserId();
+    }
+
+    public String getStockCode() {
+        return id.getStockCode();
     }
 
     public void reassign(Long sectorId) {

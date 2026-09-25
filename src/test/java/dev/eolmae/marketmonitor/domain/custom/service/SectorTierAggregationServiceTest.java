@@ -27,7 +27,8 @@ class SectorTierAggregationServiceTest {
     @Test
     void aggregateByCategory_하위_카테고리_항목이_부모_합계에_재귀로_포함된다() {
         CustomValueTierThreshold large = tier(10L, "대형");
-        when(marketValueTierThresholdRepository.findAll()).thenReturn(List.of(large));
+        when(marketValueTierThresholdRepository.findAllByUserIdOrderByThresholdValueAsc(999999L))
+                .thenReturn(List.of(large));
 
         MarketMapCategoryNode child = leaf(2L, "반도체 소재", List.of(item("000660", "대형", BigDecimal.TEN, 10_000)));
         MarketMapCategoryNode parent = new MarketMapCategoryNode(
@@ -54,7 +55,8 @@ class SectorTierAggregationServiceTest {
     void aggregateByCategory_시가총액_구간별로_따로_묶인다() {
         CustomValueTierThreshold large = tier(10L, "대형");
         CustomValueTierThreshold small = tier(20L, "소형");
-        when(marketValueTierThresholdRepository.findAll()).thenReturn(List.of(large, small));
+        when(marketValueTierThresholdRepository.findAllByUserIdOrderByThresholdValueAsc(999999L))
+                .thenReturn(List.of(large, small));
 
         MarketMapCategoryNode node = leaf(
                 1L,
@@ -76,7 +78,8 @@ class SectorTierAggregationServiceTest {
     @Test
     void aggregateByCategory_가중합과_산술합을_각각_구한다() {
         CustomValueTierThreshold large = tier(10L, "대형");
-        when(marketValueTierThresholdRepository.findAll()).thenReturn(List.of(large));
+        when(marketValueTierThresholdRepository.findAllByUserIdOrderByThresholdValueAsc(999999L))
+                .thenReturn(List.of(large));
 
         // 시총 90,000짜리 +30%, 시총 10,000짜리 +10% — 가중합은 시총에 끌리고 산술합은 종목당 등락률 합.
         MarketMapCategoryNode node = leaf(
@@ -99,7 +102,8 @@ class SectorTierAggregationServiceTest {
 
     @Test
     void aggregateByCategory_종목이_없는_카테고리는_결과_맵에_없다() {
-        when(marketValueTierThresholdRepository.findAll()).thenReturn(List.of());
+        when(marketValueTierThresholdRepository.findAllByUserIdOrderByThresholdValueAsc(999999L))
+                .thenReturn(List.of());
 
         MarketMapCategoryNode empty = leaf(1L, "빈카테고리", List.of());
 

@@ -18,8 +18,8 @@ import dev.eolmae.marketmonitor.domain.stock.repository.ProgramTradingHistoryRep
 import dev.eolmae.marketmonitor.domain.stock.repository.ProgramTradingRankingSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.ShortSellingDailyHistoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
+import dev.eolmae.marketmonitor.domain.stock.repository.WatchStockRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
-import dev.eolmae.marketmonitor.domain.stock.service.WatchStockCacheService;
 import dev.eolmae.marketmonitor.domain.view.dto.ProgramTradingRankingItem;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.enums.RankingType;
@@ -44,7 +44,7 @@ class MarketQueryServiceTest {
             Mockito.mock(ProgramTradingHistoryRepository.class),
             Mockito.mock(ProgramTradingDailyHistoryRepository.class),
             Mockito.mock(ShortSellingDailyHistoryRepository.class),
-            Mockito.mock(WatchStockCacheService.class),
+            Mockito.mock(WatchStockRepository.class),
             Mockito.mock(StockInfoCacheService.class));
 
     private final LocalDateTime snapshotTime = LocalDateTime.of(2025, 6, 2, 10, 0);

@@ -14,7 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class WatchStockService {
 
     private final WatchStockRepository watchStockRepository;
-    private final WatchStockCacheService watchStockCacheService;
     private final WatchStockBackfillService watchStockBackfillService;
 
     public void register(String stockCode) {
@@ -22,15 +21,11 @@ public class WatchStockService {
             return;
         }
         WatchStock watchStock = watchStockRepository.save(WatchStock.createManual(stockCode));
-        watchStockCacheService.evict();
         watchStockBackfillService.backfill(watchStock);
     }
 
     public void unregister(String stockCode) {
-        watchStockRepository.findByStockCode(stockCode).ifPresent(watchStock -> {
-            watchStockRepository.delete(watchStock);
-            watchStockCacheService.evict();
-        });
+        watchStockRepository.findByStockCode(stockCode).ifPresent(watchStockRepository::delete);
     }
 
     public void designateAsPrimary(String stockCode) {
@@ -39,7 +34,6 @@ public class WatchStockService {
                 .orElseThrow(() -> new BadRequestException(ErrorCode.INVALID_INPUT, stockCode));
         watchStockRepository.findByIsPrimaryTrue().ifPresent(WatchStock::clearPrimary);
         target.designateAsPrimary();
-        watchStockCacheService.evict();
     }
 
     /** 관심종목에 없으면 등록까지 함께 처리 후 대표로 지정 */
@@ -54,6 +48,5 @@ public class WatchStockService {
                 .findByStockCode(stockCode)
                 .orElseThrow(() -> new BadRequestException(ErrorCode.INVALID_INPUT, stockCode));
         target.clearPrimary();
-        watchStockCacheService.evict();
     }
 }

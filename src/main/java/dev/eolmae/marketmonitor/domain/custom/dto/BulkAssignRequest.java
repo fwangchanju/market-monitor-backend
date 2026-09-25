@@ -1,9 +1,12 @@
 package dev.eolmae.marketmonitor.domain.custom.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import java.util.List;
 
 public record BulkAssignRequest(
         @NotEmpty(message = "종목을 하나 이상 선택해주세요.") List<String> stockCodes,
-        @NotNull(message = "카테고리를 선택해주세요.") Long categoryId) {}
+
+        @NotNull(message = "섹터를 선택해주세요.") @JsonAlias("categoryId")
+        Long sectorId) {}

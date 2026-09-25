@@ -20,12 +20,17 @@ import lombok.Getter;
 @Getter
 public class CustomValueTierThreshold {
 
+    private static final Long LEGACY_OWNER_ID = 999999L;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(nullable = false, length = 50)
     private String label;
+
+    @Column(name = "user_id", nullable = false)
+    private Long userId;
 
     @Column(name = "threshold_value", nullable = false)
     private Long thresholdValue;
@@ -42,13 +47,26 @@ public class CustomValueTierThreshold {
     protected CustomValueTierThreshold() {}
 
     public static CustomValueTierThreshold create(String label, Long thresholdValue, boolean isExcludedByDefault) {
+        return create(LEGACY_OWNER_ID, label, thresholdValue, isExcludedByDefault);
+    }
+
+    public static CustomValueTierThreshold create(
+            Long userId, String label, Long thresholdValue, boolean isExcludedByDefault) {
         var entity = new CustomValueTierThreshold();
+        entity.userId = userId;
         entity.label = label;
         entity.thresholdValue = thresholdValue;
         entity.isExcludedByDefault = isExcludedByDefault;
         LocalDateTime now = LocalDateTime.now(Zone.KST.zoneId());
         entity.createdAt = now;
         entity.updatedAt = now;
+        return entity;
+    }
+
+    public static CustomValueTierThreshold createDefault(
+            Long id, String label, Long thresholdValue, boolean isExcludedByDefault) {
+        CustomValueTierThreshold entity = create(0L, label, thresholdValue, isExcludedByDefault);
+        entity.id = id;
         return entity;
     }
 

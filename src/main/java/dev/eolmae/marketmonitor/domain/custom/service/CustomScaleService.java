@@ -3,6 +3,7 @@ package dev.eolmae.marketmonitor.domain.custom.service;
 import dev.eolmae.marketmonitor.common.exception.ConflictException;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.NotFoundException;
+import dev.eolmae.marketmonitor.domain.auth.service.CurrentUser;
 import dev.eolmae.marketmonitor.domain.custom.dto.CustomScaleResponse;
 import dev.eolmae.marketmonitor.domain.custom.dto.ScaleThresholdItem;
 import dev.eolmae.marketmonitor.domain.custom.dto.ScaleThresholdRequest;
@@ -11,6 +12,7 @@ import dev.eolmae.marketmonitor.domain.custom.repository.CustomScaleThresholdRep
 import java.util.Comparator;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,10 +23,38 @@ import org.springframework.transaction.annotation.Transactional;
 public class CustomScaleService {
 
     private final CustomScaleThresholdRepository customScaleThresholdRepository;
+    private final JdbcTemplate jdbcTemplate;
 
     @Transactional(readOnly = true)
     public CustomScaleResponse getScale() {
-        List<ScaleThresholdItem> thresholds = customScaleThresholdRepository.findAll().stream()
+        Long userId = CurrentUser.currentId();
+        if (userId == null) {
+            return getDefaultScale();
+        }
+        return getUserScale(userId);
+    }
+
+    @Transactional(readOnly = true)
+    public CustomScaleResponse getDefaultScale() {
+        List<ScaleThresholdItem> thresholds = jdbcTemplate.query(
+                "SELECT threshold_percent, color, color_label FROM default_scale_threshold ORDER BY threshold_percent",
+                (resultSet, rowNumber) -> new ScaleThresholdItem(
+                        resultSet
+                                .getBigDecimal("threshold_percent")
+                                .movePointRight(2)
+                                .longValue(),
+                        resultSet.getBigDecimal("threshold_percent"),
+                        resultSet.getString("color"),
+                        resultSet.getString("color_label") == null
+                                ? null
+                                : dev.eolmae.marketmonitor.domain.custom.enums.ColorLabel.valueOf(
+                                        resultSet.getString("color_label"))));
+        return new CustomScaleResponse(thresholds);
+    }
+
+    @Transactional(readOnly = true)
+    public CustomScaleResponse getUserScale(Long userId) {
+        List<ScaleThresholdItem> thresholds = customScaleThresholdRepository.findAllByUserId(userId).stream()
                 .sorted(Comparator.comparing(CustomScaleThreshold::getThresholdPercent))
                 .map(this::toItem)
                 .toList();
@@ -32,18 +62,22 @@ public class CustomScaleService {
     }
 
     public ScaleThresholdItem createThreshold(ScaleThresholdRequest request) {
-        if (customScaleThresholdRepository.existsByThresholdPercent(request.thresholdPercent())) {
+        Long userId = CurrentUser.requireId();
+        if (customScaleThresholdRepository.existsByUserIdAndThresholdPercent(userId, request.thresholdPercent())) {
             throw new ConflictException(ErrorCode.SCALE_THRESHOLD_DUPLICATE, request.thresholdPercent());
         }
-        var entity = CustomScaleThreshold.create(request.thresholdPercent(), request.color(), request.colorLabel());
+        var entity =
+                CustomScaleThreshold.create(userId, request.thresholdPercent(), request.color(), request.colorLabel());
         return toItem(customScaleThresholdRepository.save(entity));
     }
 
     public ScaleThresholdItem updateThreshold(Long id, ScaleThresholdRequest request) {
+        Long userId = CurrentUser.requireId();
         var entity = customScaleThresholdRepository
-                .findById(id)
+                .findByIdAndUserId(id, userId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.SCALE_THRESHOLD_NOT_FOUND, id));
-        if (customScaleThresholdRepository.existsByThresholdPercentAndIdNot(request.thresholdPercent(), id)) {
+        if (customScaleThresholdRepository.existsByUserIdAndThresholdPercentAndIdNot(
+                userId, request.thresholdPercent(), id)) {
             throw new ConflictException(ErrorCode.SCALE_THRESHOLD_DUPLICATE, request.thresholdPercent());
         }
         entity.update(request.thresholdPercent(), request.color(), request.colorLabel());
@@ -51,10 +85,11 @@ public class CustomScaleService {
     }
 
     public void deleteThreshold(Long id) {
-        if (!customScaleThresholdRepository.existsById(id)) {
+        Long userId = CurrentUser.requireId();
+        if (customScaleThresholdRepository.findByIdAndUserId(id, userId).isEmpty()) {
             throw new NotFoundException(ErrorCode.SCALE_THRESHOLD_NOT_FOUND, id);
         }
-        customScaleThresholdRepository.deleteById(id);
+        customScaleThresholdRepository.deleteByIdAndUserId(id, userId);
     }
 
     private ScaleThresholdItem toItem(CustomScaleThreshold entity) {

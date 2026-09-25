@@ -10,7 +10,7 @@ public record StockSectorListItem(
         String alias,
         BigDecimal totalMarketValue,
         String marketValueTier,
-        String originCategoryName,
-        String parentCategoryName,
-        String categoryName,
-        Long categoryId) {}
+        String industryName,
+        String parentSectorName,
+        String sectorName,
+        Long sectorId) {}

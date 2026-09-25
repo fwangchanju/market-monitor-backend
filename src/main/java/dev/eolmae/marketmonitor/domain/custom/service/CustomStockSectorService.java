@@ -2,95 +2,156 @@ package dev.eolmae.marketmonitor.domain.custom.service;
 
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.NotFoundException;
+import dev.eolmae.marketmonitor.domain.auth.service.CurrentUser;
 import dev.eolmae.marketmonitor.domain.custom.dto.BulkAssignResponse;
 import dev.eolmae.marketmonitor.domain.custom.dto.StockSectorListItem;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomSector;
+import dev.eolmae.marketmonitor.domain.custom.entity.CustomStockAlias;
+import dev.eolmae.marketmonitor.domain.custom.entity.CustomStockAliasId;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomStockSector;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomValueTierThreshold;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomSectorRepository;
+import dev.eolmae.marketmonitor.domain.custom.repository.CustomStockAliasRepository;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomStockSectorRepository;
+import dev.eolmae.marketmonitor.domain.stock.entity.IndustryInfo;
 import dev.eolmae.marketmonitor.domain.stock.entity.SectorPriceSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
+import dev.eolmae.marketmonitor.domain.stock.repository.IndustryInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceSnapshotService;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 종목의 카테고리 배정/재배정. */
+/** 로그인 사용자의 종목 배정과 별칭을 관리한다. */
 @Service
 @Transactional
 @RequiredArgsConstructor
 public class CustomStockSectorService {
 
     private final CustomStockSectorRepository customStockSectorRepository;
+    private final CustomStockAliasRepository customStockAliasRepository;
     private final CustomSectorRepository customSectorRepository;
     private final StockInfoCacheService stockInfoCacheService;
     private final SectorPriceSnapshotService sectorPriceSnapshotService;
     private final CustomValueTierThresholdService customValueTierThresholdService;
+    private final IndustryInfoRepository industryInfoRepository;
+    private final JdbcTemplate jdbcTemplate;
 
-    public void assign(String stockCode, Long categoryId) {
-        if (!customSectorRepository.existsById(categoryId)) {
-            throw new NotFoundException(ErrorCode.CATEGORY_NOT_FOUND, categoryId);
-        }
-
-        customStockSectorRepository
-                .findById(stockCode)
-                .ifPresentOrElse(
-                        stockCategory -> stockCategory.reassign(categoryId),
-                        () -> customStockSectorRepository.save(CustomStockSector.create(stockCode, categoryId)));
+    public void assign(String stockCode, Long sectorId) {
+        Long userId = CurrentUser.requireId();
+        requireActiveStock(stockCode);
+        requireOwnedSector(sectorId, userId);
+        jdbcTemplate.update("""
+                INSERT INTO custom_stock_sector (user_id, stock_code, sector_id, created_at, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ON CONFLICT (user_id, stock_code)
+                DO UPDATE SET sector_id = EXCLUDED.sector_id, updated_at = CURRENT_TIMESTAMP
+                """, userId, stockCode, sectorId);
     }
 
-    /** 여러 종목을 한 카테고리로 한 번에 재배정한다. 건별 assign을 반복 호출하는 대신 조회를 한 번만 수행.
-     * 화면 목록 자체가 custom_stock_sector 기준이라 요청으로 들어온 stockCode는 이미 존재하는 것이 정상이며,
-     * 그 사이 삭제되는 등의 이유로 조회되지 않은 stockCode만 실패 목록으로 돌려준다. */
-    public BulkAssignResponse bulkAssign(List<String> stockCodes, Long categoryId) {
-        if (!customSectorRepository.existsById(categoryId)) {
-            throw new NotFoundException(ErrorCode.CATEGORY_NOT_FOUND, categoryId);
-        }
-
-        Set<String> remaining = new HashSet<>(stockCodes);
-        for (CustomStockSector stockCategory : customStockSectorRepository.findAllById(stockCodes)) {
-            stockCategory.reassign(categoryId);
-            remaining.remove(stockCategory.getStockCode());
-        }
-
-        return new BulkAssignResponse(new ArrayList<>(remaining), categoryId);
+    public void unassign(String stockCode) {
+        customStockSectorRepository.deleteByIdUserIdAndIdStockCode(CurrentUser.requireId(), stockCode);
     }
 
+    /** 요청에 있는 유효 종목은 배정 행 유무와 관계없이 upsert한다. */
+    public BulkAssignResponse bulkAssign(List<String> stockCodes, Long sectorId) {
+        Long userId = CurrentUser.requireId();
+        requireOwnedSector(sectorId, userId);
+        Set<String> remaining = new LinkedHashSet<>(stockCodes);
+        Map<String, StockInfo> stocks = stockInfoCacheService.getCache();
+        List<String> validStockCodes = remaining.stream()
+                .filter(stockCode -> {
+                    StockInfo stock = stocks.get(stockCode);
+                    return stock != null && stock.isActiveAndOrdinary();
+                })
+                .toList();
+        remaining.removeAll(validStockCodes);
+
+        if (!validStockCodes.isEmpty()) {
+            jdbcTemplate.batchUpdate("""
+                    INSERT INTO custom_stock_sector (user_id, stock_code, sector_id, created_at, updated_at)
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    ON CONFLICT (user_id, stock_code)
+                    DO UPDATE SET sector_id = EXCLUDED.sector_id, updated_at = CURRENT_TIMESTAMP
+                    """, validStockCodes, validStockCodes.size(), (statement, stockCode) -> {
+                statement.setLong(1, userId);
+                statement.setString(2, stockCode);
+                statement.setLong(3, sectorId);
+            });
+        }
+        return new BulkAssignResponse(new ArrayList<>(remaining), sectorId);
+    }
+
+    /** 별칭은 배정과 별도로 저장하고, 호환 기간에는 기존 배정 행에도 같은 값을 쓴다. */
     public void updateAlias(String stockCode, String alias) {
-        CustomStockSector stockCategory = customStockSectorRepository
-                .findById(stockCode)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.STOCK_CATEGORY_NOT_FOUND, stockCode));
-        stockCategory.updateAlias(alias);
+        Long userId = CurrentUser.requireId();
+        requireActiveStock(stockCode);
+        CustomStockAliasId id = new CustomStockAliasId(userId, stockCode);
+        if (alias == null || alias.isBlank()) {
+            customStockAliasRepository.deleteById(id);
+            jdbcTemplate.update(
+                    "UPDATE custom_stock_sector SET alias = NULL, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND stock_code = ?",
+                    userId,
+                    stockCode);
+            return;
+        }
+        jdbcTemplate.update("""
+                INSERT INTO custom_stock_alias (user_id, stock_code, alias, created_at, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ON CONFLICT (user_id, stock_code)
+                DO UPDATE SET alias = EXCLUDED.alias, updated_at = CURRENT_TIMESTAMP
+                """, userId, stockCode, alias);
+        jdbcTemplate.update(
+                "UPDATE custom_stock_sector SET alias = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND stock_code = ?",
+                alias,
+                userId,
+                stockCode);
     }
 
     @Transactional(readOnly = true)
     public SnapshotResponse<StockSectorListItem> getStockCategories() {
-        Map<Long, CustomSector> categoryById = customSectorRepository.findAll().stream()
+        Long userId = CurrentUser.requireId();
+        Map<Long, CustomSector> sectorById = customSectorRepository.findAllByUserId(userId).stream()
                 .collect(Collectors.toMap(CustomSector::getId, Function.identity()));
-        Map<String, CustomStockSector> stockCategoryByStockCode = customStockSectorRepository.findAll().stream()
-                .collect(Collectors.toMap(CustomStockSector::getStockCode, Function.identity()));
+        Map<String, CustomStockSector> assignmentByStockCode =
+                customStockSectorRepository.findAllByUserId(userId).stream()
+                        .collect(Collectors.toMap(CustomStockSector::getStockCode, Function.identity()));
+        Map<String, String> aliasByStockCode = customStockAliasRepository.findAllByIdUserId(userId).stream()
+                .collect(Collectors.toMap(CustomStockAlias::getStockCode, CustomStockAlias::getAlias));
+        List<StockInfo> activeStocks = stockInfoCacheService.getCache().values().stream()
+                .filter(StockInfo::isActiveAndOrdinary)
+                .toList();
+        Set<Long> industryIds = activeStocks.stream()
+                .map(StockInfo::getIndustryId)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, String> industryNameById = industryIds.isEmpty()
+                ? Map.of()
+                : industryInfoRepository.findAllById(industryIds).stream()
+                        .collect(Collectors.toMap(IndustryInfo::getId, IndustryInfo::getName));
         Map<String, SectorPriceSnapshot> latestPriceByStockCode =
                 sectorPriceSnapshotService.findLatestPriceByStockCode();
         List<CustomValueTierThreshold> sortedTiers = customValueTierThresholdService.findAllSortedAscending();
 
-        List<StockSectorListItem> items = stockInfoCacheService.getCache().values().stream()
-                .filter(StockInfo::isActiveAndOrdinary)
-                .map(stockInfo -> toStockCategoryListItem(
-                        stockInfo,
-                        stockCategoryByStockCode.get(stockInfo.getStockCode()),
-                        categoryById,
+        List<StockSectorListItem> items = activeStocks.stream()
+                .map(stock -> toStockSectorListItem(
+                        stock,
+                        assignmentByStockCode.get(stock.getStockCode()),
+                        aliasByStockCode.get(stock.getStockCode()),
+                        sectorById,
+                        industryNameById,
                         latestPriceByStockCode,
                         sortedTiers))
                 .toList();
@@ -102,33 +163,46 @@ public class CustomStockSectorService {
         return new SnapshotResponse<>(snapshotTime, items);
     }
 
-    private StockSectorListItem toStockCategoryListItem(
-            StockInfo stockInfo,
-            CustomStockSector stockCategory,
-            Map<Long, CustomSector> categoryById,
+    private StockSectorListItem toStockSectorListItem(
+            StockInfo stock,
+            CustomStockSector assignment,
+            String alias,
+            Map<Long, CustomSector> sectorById,
+            Map<Long, String> industryNameById,
             Map<String, SectorPriceSnapshot> latestPriceByStockCode,
             List<CustomValueTierThreshold> sortedTiers) {
-        CustomSector category = categoryById.get(stockCategory.getSectorId());
-        CustomSector parent = category.hasNoParent() ? null : categoryById.get(category.getParentId());
-
-        SectorPriceSnapshot priceSnapshot = latestPriceByStockCode.get(stockInfo.getStockCode());
+        CustomSector sector = assignment == null ? null : sectorById.get(assignment.getSectorId());
+        CustomSector parent = sector == null || sector.hasNoParent() ? null : sectorById.get(sector.getParentId());
+        SectorPriceSnapshot priceSnapshot = latestPriceByStockCode.get(stock.getStockCode());
         BigDecimal totalMarketValue = null;
         String marketValueTier = null;
         if (priceSnapshot != null) {
-            totalMarketValue = priceSnapshot.getCurrentPrice().multiply(BigDecimal.valueOf(stockInfo.getListCount()));
+            totalMarketValue = priceSnapshot.getCurrentPrice().multiply(BigDecimal.valueOf(stock.getListCount()));
             marketValueTier = customValueTierThresholdService.resolveTier(sortedTiers, totalMarketValue);
         }
-
         return new StockSectorListItem(
-                stockInfo.getStockCode(),
-                stockInfo.getMarketType(),
-                stockInfo.getStockName(),
-                stockCategory.getAlias(),
+                stock.getStockCode(),
+                stock.getMarketType(),
+                stock.getStockName(),
+                alias,
                 totalMarketValue,
                 marketValueTier,
-                stockInfo.getIndustryName(),
+                stock.getIndustryId() == null ? stock.getIndustryName() : industryNameById.get(stock.getIndustryId()),
                 parent == null ? null : parent.getName(),
-                category.getName(),
-                category.getId());
+                sector == null ? null : sector.getName(),
+                sector == null ? null : sector.getId());
+    }
+
+    private void requireOwnedSector(Long sectorId, Long userId) {
+        if (customSectorRepository.findByIdAndUserId(sectorId, userId).isEmpty()) {
+            throw new NotFoundException(ErrorCode.CATEGORY_NOT_FOUND, sectorId);
+        }
+    }
+
+    private void requireActiveStock(String stockCode) {
+        StockInfo stock = stockInfoCacheService.getCache().get(stockCode);
+        if (stock == null || !stock.isActiveAndOrdinary()) {
+            throw new NotFoundException(ErrorCode.STOCK_CATEGORY_NOT_FOUND, stockCode);
+        }
     }
 }

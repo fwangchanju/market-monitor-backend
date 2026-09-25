@@ -6,5 +6,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface CustomValueTierThresholdRepository extends JpaRepository<CustomValueTierThreshold, Long> {
 
+    List<CustomValueTierThreshold> findAllByUserIdOrderByThresholdValueAsc(Long userId);
+
+    void deleteAllByUserId(Long userId);
+
     List<CustomValueTierThreshold> findAllByOrderByThresholdValueAsc();
 }

@@ -3,16 +3,13 @@ package dev.eolmae.marketmonitor.domain.custom.dto;
 import java.util.List;
 
 public record SectorDeletePreview(
-        String categoryName,
-        boolean deletable,
-        List<StockSectorItem> blockingStocks,
-        List<String> deletableCategories) {
+        String sectorName, boolean deletable, List<StockSectorItem> blockingStocks, List<String> deletableSectors) {
 
-    public static SectorDeletePreview blocked(String categoryName, List<StockSectorItem> blockingStocks) {
-        return new SectorDeletePreview(categoryName, false, blockingStocks, List.of());
+    public static SectorDeletePreview blocked(String sectorName, List<StockSectorItem> blockingStocks) {
+        return new SectorDeletePreview(sectorName, false, blockingStocks, List.of());
     }
 
-    public static SectorDeletePreview deletable(String categoryName, List<String> deletableCategories) {
-        return new SectorDeletePreview(categoryName, true, List.of(), deletableCategories);
+    public static SectorDeletePreview deletable(String sectorName, List<String> deletableSectors) {
+        return new SectorDeletePreview(sectorName, true, List.of(), deletableSectors);
     }
 }

@@ -1,8 +1,9 @@
 package dev.eolmae.marketmonitor.domain.custom.service;
 
+import dev.eolmae.marketmonitor.common.exception.BadRequestException;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.NotFoundException;
-import dev.eolmae.marketmonitor.domain.custom.dto.SectorTreeNode;
+import dev.eolmae.marketmonitor.domain.auth.service.CurrentUser;
 import dev.eolmae.marketmonitor.domain.custom.dto.SnapshotItem;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomSector;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomSnapshot;
@@ -13,7 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 카테고리 버전(백업) 저장/덮어쓰기/불러오기/삭제. */
+/** 로그인 사용자의 전체 커스텀 데이터 스냅샷을 관리한다. */
 @Service
 @Transactional
 @RequiredArgsConstructor
@@ -25,61 +26,77 @@ public class CustomSnapshotService {
 
     @Transactional(readOnly = true)
     public List<SnapshotItem> getVersions() {
-        return customSnapshotRepository.findAllByOrderByCreatedAtDesc().stream()
+        Long userId = CurrentUser.requireId();
+        return customSnapshotRepository.findAllByUserIdOrderByCreatedAtDesc(userId).stream()
+                .filter(snapshot -> customSectorTreeService.isCurrentSnapshotFormat(snapshot.getSnapshotJson()))
                 .map(this::toItem)
                 .toList();
     }
 
-    /** 현재 라이브 트리가 매칭 중인 버전. 저장 이력이 없다면 버전은 존재하지 않는다.
-     * 카테고리에 태깅된 version_id가 있어도 그 버전이 이후 삭제됐을 수 있기 때문에(삭제 로직 참고) 버전 테이블 실제 존재 여부까지 확인 */
     @Transactional(readOnly = true)
     public SnapshotItem currentVersion() {
-        Long versionId = customSectorRepository
-                .findFirstByOrderByIdAsc()
-                .map(CustomSector::getVersionId)
+        Long userId = CurrentUser.requireId();
+        Long snapshotId = customSectorRepository
+                .findFirstByUserIdOrderByIdAsc(userId)
+                .map(CustomSector::getSnapshotId)
                 .orElse(null);
-        if (versionId == null) {
+        if (snapshotId == null) {
             return null;
         }
-        return customSnapshotRepository.findById(versionId).map(this::toItem).orElse(null);
+        return customSnapshotRepository
+                .findByIdAndUserId(snapshotId, userId)
+                .filter(snapshot -> customSectorTreeService.isCurrentSnapshotFormat(snapshot.getSnapshotJson()))
+                .map(this::toItem)
+                .orElse(null);
     }
 
     public SnapshotItem save(String label) {
-        String snapshotJson = customSectorTreeService.serializeCurrentSnapshot();
-        CustomSnapshot saved = customSnapshotRepository.save(CustomSnapshot.create(label, snapshotJson));
-        tagLiveCategories(saved.getId());
+        Long userId = CurrentUser.requireId();
+        String snapshotJson = customSectorTreeService.serializeCurrentSnapshot(userId);
+        CustomSnapshot saved = customSnapshotRepository.save(CustomSnapshot.create(userId, label, snapshotJson));
+        tagLiveCategories(userId, saved.getId());
         return toItem(saved);
     }
 
-    public SnapshotItem overwrite(Long versionId, String label) {
-        CustomSnapshot version = customSnapshotRepository
-                .findById(versionId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.VERSION_NOT_FOUND, versionId));
-        String snapshotJson = customSectorTreeService.serializeCurrentSnapshot();
-        version.overwrite(label, snapshotJson);
-        tagLiveCategories(versionId);
-        return toItem(version);
+    public SnapshotItem overwrite(Long snapshotId, String label) {
+        Long userId = CurrentUser.requireId();
+        CustomSnapshot snapshot = findOwnedSnapshot(snapshotId, userId);
+        if (!customSectorTreeService.isCurrentSnapshotFormat(snapshot.getSnapshotJson())) {
+            throw new BadRequestException(ErrorCode.SNAPSHOT_FORMAT_UNSUPPORTED);
+        }
+        String snapshotJson = customSectorTreeService.serializeCurrentSnapshot(userId);
+        snapshot.overwrite(label, snapshotJson);
+        tagLiveCategories(userId, snapshotId);
+        return toItem(snapshot);
     }
 
-    public void restore(Long versionId) {
-        CustomSnapshot version = customSnapshotRepository
-                .findById(versionId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.VERSION_NOT_FOUND, versionId));
-        List<SectorTreeNode> tree = customSectorTreeService.parseJson(version.getSnapshotJson());
-        customSectorTreeService.restore(tree, versionId);
+    public void restore(Long snapshotId) {
+        Long userId = CurrentUser.requireId();
+        CustomSnapshot snapshot = findOwnedSnapshot(snapshotId, userId);
+        if (!customSectorTreeService.isCurrentSnapshotFormat(snapshot.getSnapshotJson())) {
+            throw new BadRequestException(ErrorCode.SNAPSHOT_FORMAT_UNSUPPORTED);
+        }
+        customSectorTreeService.restore(snapshot.getSnapshotJson(), userId, snapshotId);
     }
 
-    /** 라이브 카테고리의 version_id는 정리하지 않는다
-     * 삭제할 때마다 카테고리 전체를 버전을 변경하는(null) 행위를 하지 않기 위함 */
-    public void delete(Long versionId) {
-        customSnapshotRepository.deleteById(versionId);
+    public void delete(Long snapshotId) {
+        Long userId = CurrentUser.requireId();
+        findOwnedSnapshot(snapshotId, userId);
+        customSnapshotRepository.deleteByIdAndUserId(snapshotId, userId);
     }
 
-    private void tagLiveCategories(Long versionId) {
-        customSectorRepository.findAll().forEach(category -> category.tagVersion(versionId));
+    private CustomSnapshot findOwnedSnapshot(Long snapshotId, Long userId) {
+        return customSnapshotRepository
+                .findByIdAndUserId(snapshotId, userId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.SNAPSHOT_NOT_FOUND, snapshotId));
     }
 
-    private SnapshotItem toItem(CustomSnapshot version) {
-        return new SnapshotItem(version.getId(), version.getLabel(), version.getCreatedAt(), version.getUpdatedAt());
+    private void tagLiveCategories(Long userId, Long snapshotId) {
+        customSectorRepository.findAllByUserId(userId).forEach(sector -> sector.tagSnapshot(snapshotId));
+    }
+
+    private SnapshotItem toItem(CustomSnapshot snapshot) {
+        return new SnapshotItem(
+                snapshot.getId(), snapshot.getLabel(), snapshot.getCreatedAt(), snapshot.getUpdatedAt());
     }
 }

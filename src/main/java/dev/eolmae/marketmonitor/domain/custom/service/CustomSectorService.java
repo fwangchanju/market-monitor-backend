@@ -1,9 +1,9 @@
 package dev.eolmae.marketmonitor.domain.custom.service;
 
-import dev.eolmae.marketmonitor.common.event.StockInfoSyncedEvent;
 import dev.eolmae.marketmonitor.common.exception.ConflictException;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.NotFoundException;
+import dev.eolmae.marketmonitor.domain.auth.service.CurrentUser;
 import dev.eolmae.marketmonitor.domain.custom.dto.SectorDeletePreview;
 import dev.eolmae.marketmonitor.domain.custom.dto.SectorItem;
 import dev.eolmae.marketmonitor.domain.custom.dto.StockSectorItem;
@@ -12,19 +12,14 @@ import dev.eolmae.marketmonitor.domain.custom.entity.CustomStockSector;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomSectorRepository;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomStockSectorRepository;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
-import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,146 +30,59 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class CustomSectorService {
 
-    private static final String UNCATEGORIZED = "미분류";
-
     private final CustomSectorRepository customSectorRepository;
     private final CustomStockSectorRepository customStockSectorRepository;
-    private final StockInfoRepository stockInfoRepository;
     private final StockInfoCacheService stockInfoCacheService;
 
     @Transactional(readOnly = true)
     public List<SectorItem> getCategories() {
-        return findAllCategories().stream().map(this::toItem).toList();
-    }
-
-    /** stock -> marketmap 순환 의존을 피하려고 이벤트로 수신(StockInfoSyncedEvent 참고).
-     * 이벤트 payload(신규 종목)에 더해, "활성 일반주인데 아직 custom_stock_sector에 배정 행이
-     * 없는 종목"도 직접 계산해서 함께 채운다 — 이미 stock_info에 있던 종목이 나중에 일반주가 되는
-     * 경우(ETF로 등록됐다가 marketCode가 바뀌는 등)는 이벤트에 실리지 않아 배정을 영영 못 받기
-     * 때문이다. StockInfoCollector가 이벤트에 신규 종목만 싣는 것은 그대로 둔다. */
-    @EventListener
-    public void onStockInfoSynced(StockInfoSyncedEvent event) {
-        List<StockInfoSyncedEvent.NewStock> stocks = new ArrayList<>(event.newStocks());
-        stocks.addAll(findMissingAssignments(event.newStocks()));
-        syncStockCategories(stocks);
-    }
-
-    /** stockInfoCacheService가 아니라 StockInfoRepository를 직접 조회한다 — evict가 커밋 후로
-     * 밀리면(2-4) 이 시점의 캐시엔 방금 저장된 신규 종목이 아직 없을 수 있다.
-     * 계산 방식은 CustomSectorTreeService.findStocksMissingAfterRestore()와 동일하다. */
-    private List<StockInfoSyncedEvent.NewStock> findMissingAssignments(List<StockInfoSyncedEvent.NewStock> newStocks) {
-        Set<String> alreadyHandled =
-                newStocks.stream().map(StockInfoSyncedEvent.NewStock::stockCode).collect(Collectors.toSet());
-        Set<String> assignedStockCodes = customStockSectorRepository.findAll().stream()
-                .map(CustomStockSector::getStockCode)
-                .collect(Collectors.toSet());
-
-        return stockInfoRepository.findByActiveTrue().stream()
-                .filter(StockInfo::isActiveAndOrdinary)
-                .filter(stockInfo -> !alreadyHandled.contains(stockInfo.getStockCode()))
-                .filter(stockInfo -> !assignedStockCodes.contains(stockInfo.getStockCode()))
-                .map(stockInfo ->
-                        new StockInfoSyncedEvent.NewStock(stockInfo.getStockCode(), normalizeCategoryName(stockInfo)))
+        return findAllCategories(CurrentUser.requireId()).stream()
+                .map(this::toItem)
                 .toList();
-    }
-
-    private String normalizeCategoryName(StockInfo stockInfo) {
-        String categoryName = stockInfo.getIndustryName();
-        if (categoryName == null || categoryName.isBlank()) {
-            return UNCATEGORIZED;
-        }
-        return categoryName;
-    }
-
-    /** 버전 복원(CustomSectorTreeService.restore) 후 스냅샷에 없던(=배정이 빠진) 종목을 채워넣는 진입점.
-     * 실제 로직은 라이브 동기화(onStockInfoSynced)와 동일한 syncStockCategories를 그대로 재사용한다. */
-    public void restoreMissingStockCategories(List<StockInfoSyncedEvent.NewStock> stocks) {
-        syncStockCategories(stocks);
-    }
-
-    /** 주어진 종목 중 카테고리명이 아직 없는 것만 최상위 카테고리로 생성한 뒤 custom_stock_sector에 배정한다. */
-    private void syncStockCategories(List<StockInfoSyncedEvent.NewStock> stocks) {
-        if (stocks.isEmpty()) {
-            return;
-        }
-
-        Set<String> categoryNames =
-                stocks.stream().map(StockInfoSyncedEvent.NewStock::categoryName).collect(Collectors.toSet());
-        Map<String, CustomSector> categoryByName = createMissingCategories(categoryNames);
-        createNewStockCategories(stocks, categoryByName);
-    }
-
-    private void createNewStockCategories(
-            List<StockInfoSyncedEvent.NewStock> newStocks, Map<String, CustomSector> categoryByName) {
-        List<CustomStockSector> newStockCategories = newStocks.stream()
-                .map(stock -> CustomStockSector.create(
-                        stock.stockCode(),
-                        categoryByName.get(stock.categoryName()).getId()))
-                .toList();
-        customStockSectorRepository.saveAll(newStockCategories);
-    }
-
-    /** 기존 + 신규 생성분을 합친 이름별 맵을 리턴해서, 호출부가 다시 전체 조회할 필요가 없게 한다. */
-    private Map<String, CustomSector> createMissingCategories(Set<String> categoryNames) {
-        Map<String, CustomSector> existingByName =
-                findAllCategories().stream().collect(Collectors.toMap(CustomSector::getName, Function.identity()));
-
-        categoryNames.stream()
-                .filter(name -> !existingByName.containsKey(name))
-                .map(CustomSector::createParent)
-                .forEach(category -> {
-                    customSectorRepository.save(category);
-                    existingByName.put(category.getName(), category);
-                });
-
-        return existingByName;
     }
 
     public SectorItem createParent(String name) {
-        if (customSectorRepository.existsByName(name)) {
+        Long userId = CurrentUser.requireId();
+        if (customSectorRepository.existsByUserIdAndName(userId, name)) {
             throw new ConflictException(ErrorCode.CATEGORY_NAME_DUPLICATE, name);
         }
-        CustomSector category = CustomSector.createParent(name);
+        CustomSector category = CustomSector.createParent(userId, name);
         return toItem(customSectorRepository.save(category));
     }
 
     public SectorItem createChild(String name, Long parentId) {
-        if (customSectorRepository.existsByName(name)) {
+        Long userId = CurrentUser.requireId();
+        if (customSectorRepository.existsByUserIdAndName(userId, name)) {
             throw new ConflictException(ErrorCode.CATEGORY_NAME_DUPLICATE, name);
         }
         CustomSector parent = customSectorRepository
-                .findById(parentId)
+                .findByIdAndUserId(parentId, userId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.CATEGORY_NOT_FOUND, parentId));
-        CustomSector category = CustomSector.createChild(name, parent);
+        CustomSector category = CustomSector.createChild(userId, name, parent);
         return toItem(customSectorRepository.save(category));
     }
 
     public void exclude(Long categoryId) {
-        CustomSector target = customSectorRepository
-                .findById(categoryId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.CATEGORY_NOT_FOUND, categoryId));
+        CustomSector target = findOwnedCategory(categoryId, CurrentUser.requireId());
         target.exclude();
     }
 
     public void include(Long categoryId) {
-        CustomSector target = customSectorRepository
-                .findById(categoryId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.CATEGORY_NOT_FOUND, categoryId));
+        CustomSector target = findOwnedCategory(categoryId, CurrentUser.requireId());
         target.include();
     }
 
     public void resetExcludes() {
-        findAllCategories().forEach(CustomSector::include);
+        findAllCategories(CurrentUser.requireId()).forEach(CustomSector::include);
     }
 
     public void rename(Long categoryId, String name) {
-        CustomSector target = customSectorRepository
-                .findById(categoryId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.CATEGORY_NOT_FOUND, categoryId));
+        Long userId = CurrentUser.requireId();
+        CustomSector target = findOwnedCategory(categoryId, userId);
         if (target.getName().equals(name)) {
             return;
         }
-        if (customSectorRepository.existsByName(name)) {
+        if (customSectorRepository.existsByUserIdAndName(userId, name)) {
             throw new ConflictException(ErrorCode.CATEGORY_NAME_DUPLICATE, name);
         }
         target.rename(name);
@@ -212,12 +120,14 @@ public class CustomSectorService {
 
     @Transactional(readOnly = true)
     public SectorDeletePreview deletePreview(Long categoryId) {
+        Long userId = CurrentUser.requireId();
         CategoryMaps maps = getCategoryMaps();
         Map<Long, CustomSector> categoryById = maps.categoryById();
         CustomSector target = findCategory(categoryId, categoryById);
 
         List<Long> subCategoryIds = collectSubCategoryIds(categoryId, maps.categoryByParentId());
-        List<CustomStockSector> stockCategories = customStockSectorRepository.findBySectorIdIn(subCategoryIds);
+        List<CustomStockSector> stockCategories =
+                customStockSectorRepository.findByUserIdAndSectorIdIn(userId, subCategoryIds);
         List<CustomStockSector> blockingStockCategories = findBlockingStockCategories(stockCategories);
         if (!blockingStockCategories.isEmpty()) {
             return SectorDeletePreview.blocked(
@@ -228,12 +138,14 @@ public class CustomSectorService {
     }
 
     public void delete(Long categoryId) {
+        Long userId = CurrentUser.requireId();
         CategoryMaps maps = getCategoryMaps();
         Map<Long, CustomSector> categoryById = maps.categoryById();
         findCategory(categoryId, categoryById);
 
         List<Long> subCategoryIds = collectSubCategoryIds(categoryId, maps.categoryByParentId());
-        List<CustomStockSector> stockCategories = customStockSectorRepository.findBySectorIdIn(subCategoryIds);
+        List<CustomStockSector> stockCategories =
+                customStockSectorRepository.findByUserIdAndSectorIdIn(userId, subCategoryIds);
         if (!findBlockingStockCategories(stockCategories).isEmpty()) {
             throw new ConflictException(ErrorCode.CATEGORY_HAS_ASSIGNED_STOCK, categoryId);
         }
@@ -242,7 +154,7 @@ public class CustomSectorService {
         // custom_sector를 가리키는 FK라 카테고리 삭제 전에 먼저 지워야 한다(결정 1).
         if (!stockCategories.isEmpty()) {
             log.info("[카테고리삭제] 비활성 배정 행 삭제 | categoryId={}|count={}", categoryId, stockCategories.size());
-            customStockSectorRepository.deleteBySectorIdIn(subCategoryIds);
+            customStockSectorRepository.deleteByUserIdAndSectorIdIn(userId, subCategoryIds);
         }
 
         List<CustomSector> subCategories = subCategoryIds.stream()
@@ -258,7 +170,7 @@ public class CustomSectorService {
             Map<Long, CustomSector> categoryById, Map<Long, List<CustomSector>> categoryByParentId) {}
 
     private CategoryMaps getCategoryMaps() {
-        List<CustomSector> categories = findAllCategories();
+        List<CustomSector> categories = findAllCategories(CurrentUser.requireId());
         Map<Long, CustomSector> categoryById = new HashMap<>();
         Map<Long, List<CustomSector>> categoryByParentId = new HashMap<>();
         for (CustomSector category : categories) {
@@ -270,8 +182,14 @@ public class CustomSectorService {
         return new CategoryMaps(categoryById, categoryByParentId);
     }
 
-    private List<CustomSector> findAllCategories() {
-        return customSectorRepository.findAll();
+    private List<CustomSector> findAllCategories(Long userId) {
+        return customSectorRepository.findAllByUserId(userId);
+    }
+
+    private CustomSector findOwnedCategory(Long categoryId, Long userId) {
+        return customSectorRepository
+                .findByIdAndUserId(categoryId, userId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.CATEGORY_NOT_FOUND, categoryId));
     }
 
     private CustomSector findCategory(Long categoryId, Map<Long, CustomSector> categoryById) {

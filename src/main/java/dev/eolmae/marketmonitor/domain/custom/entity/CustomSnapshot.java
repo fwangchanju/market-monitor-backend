@@ -24,6 +24,9 @@ public class CustomSnapshot {
     @Column(nullable = false, length = 50)
     private String label;
 
+    @Column(name = "user_id", nullable = false)
+    private Long userId;
+
     @Column(name = "snapshot_json", nullable = false)
     @JdbcTypeCode(SqlTypes.JSON)
     private String snapshotJson;
@@ -36,8 +39,9 @@ public class CustomSnapshot {
 
     protected CustomSnapshot() {}
 
-    public static CustomSnapshot create(String label, String snapshotJson) {
+    public static CustomSnapshot create(Long userId, String label, String snapshotJson) {
         var entity = new CustomSnapshot();
+        entity.userId = userId;
         entity.label = label;
         entity.snapshotJson = snapshotJson;
         LocalDateTime now = LocalDateTime.now(Zone.KST.zoneId());

@@ -35,6 +35,9 @@ public class StockInfo {
     @Column(name = "industry_name", length = 50)
     private String industryName;
 
+    @Column(name = "industry_id")
+    private Long industryId;
+
     @Column(nullable = false)
     private Long listCount;
 
@@ -74,6 +77,20 @@ public class StockInfo {
         return entity;
     }
 
+    public static StockInfo create(
+            String stockCode,
+            String stockName,
+            Market marketType,
+            String marketCode,
+            String industryName,
+            Long industryId,
+            Long listCount,
+            BigDecimal lastPrice) {
+        StockInfo entity = create(stockCode, stockName, marketType, marketCode, industryName, listCount, lastPrice);
+        entity.industryId = industryId;
+        return entity;
+    }
+
     public void update(
             String stockName,
             Market marketType,
@@ -89,6 +106,18 @@ public class StockInfo {
         this.lastPrice = lastPrice;
         this.active = true;
         this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
+    }
+
+    public void update(
+            String stockName,
+            Market marketType,
+            String marketCode,
+            String industryName,
+            Long industryId,
+            Long listCount,
+            BigDecimal lastPrice) {
+        update(stockName, marketType, marketCode, industryName, listCount, lastPrice);
+        this.industryId = industryId;
     }
 
     public void markInactive() {

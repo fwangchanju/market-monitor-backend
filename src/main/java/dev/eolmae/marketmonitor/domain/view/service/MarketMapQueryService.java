@@ -1,16 +1,21 @@
 package dev.eolmae.marketmonitor.domain.view.service;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
+import dev.eolmae.marketmonitor.domain.auth.service.CurrentUser;
 import dev.eolmae.marketmonitor.domain.custom.dto.CustomValueTierItem;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomSector;
+import dev.eolmae.marketmonitor.domain.custom.entity.CustomStockAlias;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomStockSector;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomValueTierThreshold;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomSectorRepository;
+import dev.eolmae.marketmonitor.domain.custom.repository.CustomStockAliasRepository;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomStockSectorRepository;
 import dev.eolmae.marketmonitor.domain.custom.service.CustomValueTierThresholdService;
 import dev.eolmae.marketmonitor.domain.custom.service.SectorTierAggregationService;
+import dev.eolmae.marketmonitor.domain.stock.entity.IndustryInfo;
 import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
+import dev.eolmae.marketmonitor.domain.stock.repository.IndustryInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketOverviewSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceCacheService;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceCacheService.CachedStockPrice;
@@ -57,15 +62,18 @@ public class MarketMapQueryService {
     private static final Long NO_CATEGORY_ID = 0L;
 
     private static final int TOP_N = 2;
+    private static final long TEMPORARY_LEGACY_OWNER_ID = 999999L;
 
     private final StockInfoCacheService stockInfoCacheService;
     private final SectorPriceSnapshotService sectorPriceSnapshotService;
     private final SectorPriceCacheService sectorPriceCacheService;
     private final CustomSectorRepository customSectorRepository;
     private final CustomStockSectorRepository customStockSectorRepository;
+    private final CustomStockAliasRepository customStockAliasRepository;
     private final SectorTierAggregationService sectorTierAggregationService;
     private final CustomValueTierThresholdService customValueTierThresholdService;
     private final MarketOverviewSnapshotRepository marketOverviewSnapshotRepository;
+    private final IndustryInfoRepository industryInfoRepository;
 
     /** 기본 마켓맵: stock_info 카테고리 그대로(override 없이) 기준, 자식 없는 1뎁스 노드로 감싸서 반환
      * (getCustomMarketMap과 응답 모양 통일). snapshotTime이 없으면 최신, 있으면 그 시각 그대로(결정 4). */
@@ -79,12 +87,20 @@ public class MarketMapQueryService {
     private MarketMapResponse buildDefaultMarketMap(List<Market> markets, LocalDateTime latestSnapshotTime) {
         List<StockInfo> candidates = filterCandidates(markets);
         Map<String, CachedStockPrice> priceMap = findPriceByStockCode(markets, latestSnapshotTime);
-        List<CustomValueTierThreshold> sortedTiers = customValueTierThresholdService.findAllSortedAscending();
+        List<CustomValueTierThreshold> sortedTiers = customValueTierThresholdService.findDefaultSortedAscending();
+        Set<Long> industryIds = candidates.stream()
+                .map(StockInfo::getIndustryId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, String> industryNameById = industryIds.isEmpty()
+                ? Map.of()
+                : industryInfoRepository.findAllById(industryIds).stream()
+                        .collect(Collectors.toMap(IndustryInfo::getId, IndustryInfo::getName));
 
         Map<String, List<MarketMapItem>> grouped = candidates.stream()
                 .filter(stockInfo -> priceMap.containsKey(stockInfo.getStockCode()))
                 .collect(Collectors.groupingBy(
-                        stockInfo -> normalizeCategoryName(stockInfo.getIndustryName()),
+                        stockInfo -> normalizeCategoryName(industryName(stockInfo, industryNameById)),
                         Collectors.mapping(
                                 stockInfo ->
                                         toMarketMapItem(stockInfo, priceMap.get(stockInfo.getStockCode()), sortedTiers),
@@ -106,9 +122,10 @@ public class MarketMapQueryService {
     /** 커스텀 마켓맵: 어드민이 구성한 카테고리 트리 기준. 트리에 배정 안 된 종목은 stock_info 카테고리로
      * 묶은 노드를 같은 레벨에 섞어서 반환. snapshotTime이 없으면 최신, 있으면 그 시각 그대로(결정 4). */
     public MarketMapResponse getCustomMarketMap(MarketQuery marketQuery, LocalDateTime snapshotTime) {
+        Long userId = CurrentUser.requireId();
         List<Market> markets = marketQuery.toMarkets();
         return resolveSnapshotTime(markets, snapshotTime)
-                .map(resolvedSnapshotTime -> buildCustomMarketMap(markets, resolvedSnapshotTime))
+                .map(resolvedSnapshotTime -> buildCustomMarketMap(markets, resolvedSnapshotTime, userId))
                 .orElseGet(MarketMapResponse::empty);
     }
 
@@ -122,11 +139,6 @@ public class MarketMapQueryService {
         boolean allMarketsHaveSnapshot =
                 markets.stream().allMatch(market -> sectorPriceSnapshotService.existsSnapshot(market, snapshotTime));
         return allMarketsHaveSnapshot ? Optional.of(snapshotTime) : Optional.empty();
-    }
-
-    private MarketMapResponse buildCustomMarketMap(List<Market> markets, LocalDateTime latestSnapshotTime) {
-        List<MarketMapCategoryNode> tree = buildCategoryTree(markets, latestSnapshotTime);
-        return new MarketMapResponse(latestSnapshotTime, tree, findSingleMarketOverview(markets, latestSnapshotTime));
     }
 
     /**
@@ -144,7 +156,7 @@ public class MarketMapQueryService {
                 toChangeRateByMarket(findOverviewsBySnapshotTime(snapshotTime));
         Map<Market, BigDecimal> beforeIndexChangeRateByMarket =
                 toChangeRateByMarket(findOverviewsBySnapshotTime(snapshotTime.minusMinutes(beforeMinutes)));
-        Map<Long, CustomSector> categoryById = findCategoryById();
+        Map<Long, CustomSector> categoryById = findCategoryById(customDataUserId());
 
         return new SnapshotResponse<>(
                 snapshotTime,
@@ -256,8 +268,9 @@ public class MarketMapQueryService {
             boolean sectorFilter) {
         SnapshotResponse<CategoryChangeRateMarketRanking> ranking =
                 getCategoryChangeRates(marketQuery, snapshotTime, beforeMinutes);
-        Set<Long> excludedTierIds = excludedTierIds();
-        Map<Long, CustomSector> categoryById = findCategoryById();
+        Long userId = customDataUserId();
+        Set<Long> excludedTierIds = excludedTierIds(userId);
+        Map<Long, CustomSector> categoryById = findCategoryById(userId);
         return ranking.items().stream()
                 .map(marketRanking -> toCategoryRankingSummary(
                         marketRanking, excludedTierIds, averageMode, sectorFilter, categoryById))
@@ -278,8 +291,9 @@ public class MarketMapQueryService {
             boolean sectorFilter) {
         SnapshotResponse<CategoryChangeRateMarketRanking> ranking =
                 getCategoryChangeRates(marketQuery, snapshotTime, beforeMinutes);
-        Set<Long> excludedTierIds = excludedTierIds();
-        Map<Long, CustomSector> categoryById = findCategoryById();
+        Long userId = customDataUserId();
+        Set<Long> excludedTierIds = excludedTierIds(userId);
+        Map<Long, CustomSector> categoryById = findCategoryById(userId);
         return ranking.items().stream()
                 .map(marketRanking -> toCategoryRankingSummaryByChangeRate(
                         marketRanking, excludedTierIds, averageMode, sectorFilter, categoryById))
@@ -320,8 +334,9 @@ public class MarketMapQueryService {
                     return merged;
                 }));
 
-        Map<Long, CustomSector> categoryById = findCategoryById();
-        Set<Long> excludedTierIds = excludedTierIds();
+        Long userId = customDataUserId();
+        Map<Long, CustomSector> categoryById = findCategoryById(userId);
+        Set<Long> excludedTierIds = excludedTierIds(userId);
 
         return mergedByCategoryId.entrySet().stream()
                 .filter(entry -> categoryById.containsKey(entry.getKey()))
@@ -335,8 +350,8 @@ public class MarketMapQueryService {
                 .toList();
     }
 
-    private Map<Long, CustomSector> findCategoryById() {
-        return customSectorRepository.findAll().stream()
+    private Map<Long, CustomSector> findCategoryById(Long userId) {
+        return customSectorRepository.findAllByUserId(userId).stream()
                 .collect(Collectors.toMap(CustomSector::getId, Function.identity()));
     }
 
@@ -352,8 +367,8 @@ public class MarketMapQueryService {
         return category != null && !category.isExcluded();
     }
 
-    private Set<Long> excludedTierIds() {
-        return customValueTierThresholdService.getValueTiers().stream()
+    private Set<Long> excludedTierIds(Long userId) {
+        return customValueTierThresholdService.getValueTiers(userId).stream()
                 .filter(CustomValueTierItem::isExcludedByDefault)
                 .map(CustomValueTierItem::id)
                 .collect(Collectors.toSet());
@@ -469,12 +484,19 @@ public class MarketMapQueryService {
         if (sectorPriceSnapshotService.notExistsSnapshot(market, snapshotTime)) {
             return List.of();
         }
-        return buildCategoryTree(List.of(market), snapshotTime);
+        return buildCategoryTree(List.of(market), snapshotTime, customDataUserId());
     }
 
-    private List<MarketMapCategoryNode> buildCategoryTree(List<Market> markets, LocalDateTime latestSnapshotTime) {
+    private MarketMapResponse buildCustomMarketMap(
+            List<Market> markets, LocalDateTime latestSnapshotTime, Long userId) {
+        List<MarketMapCategoryNode> tree = buildCategoryTree(markets, latestSnapshotTime, userId);
+        return new MarketMapResponse(latestSnapshotTime, tree, findSingleMarketOverview(markets, latestSnapshotTime));
+    }
+
+    private List<MarketMapCategoryNode> buildCategoryTree(
+            List<Market> markets, LocalDateTime latestSnapshotTime, Long userId) {
         List<StockInfo> candidates = filterCandidates(markets);
-        List<CustomSector> categories = customSectorRepository.findAll();
+        List<CustomSector> categories = customSectorRepository.findAllByUserId(userId);
         Map<Long, List<CustomSector>> childrenByParentId = new HashMap<>();
         for (CustomSector category : categories) {
             Long parentKey = category.hasNoParent() ? NO_PARENT_KEY : category.getParentId();
@@ -482,11 +504,14 @@ public class MarketMapQueryService {
                     .computeIfAbsent(parentKey, key -> new ArrayList<>())
                     .add(category);
         }
-        Map<String, CustomStockSector> stockCategoryMap = findStockCategoryMap();
+        Map<String, CustomStockSector> stockCategoryMap = findStockCategoryMap(userId);
+        Map<String, String> aliasByStockCode = customStockAliasRepository.findAllByIdUserId(userId).stream()
+                .collect(Collectors.toMap(CustomStockAlias::getStockCode, CustomStockAlias::getAlias));
         Map<String, CachedStockPrice> priceMap = findPriceByStockCode(markets, latestSnapshotTime);
-        List<CustomValueTierThreshold> sortedTiers = customValueTierThresholdService.findAllSortedAscending();
+        List<CustomValueTierThreshold> sortedTiers = customValueTierThresholdService.findAllSortedAscending(userId);
 
         Map<Long, List<MarketMapItem>> itemsByCategoryId = candidates.stream()
+                .filter(stockInfo -> stockCategoryMap.containsKey(stockInfo.getStockCode()))
                 .filter(stockInfo -> priceMap.containsKey(stockInfo.getStockCode()))
                 .collect(Collectors.groupingBy(
                         stockInfo ->
@@ -495,7 +520,7 @@ public class MarketMapQueryService {
                                 stockInfo -> toMarketMapItem(
                                         stockInfo,
                                         priceMap.get(stockInfo.getStockCode()),
-                                        stockCategoryMap,
+                                        aliasByStockCode.get(stockInfo.getStockCode()),
                                         sortedTiers),
                                 Collectors.toList())));
 
@@ -548,8 +573,15 @@ public class MarketMapQueryService {
         return categoryName;
     }
 
-    private Map<String, CustomStockSector> findStockCategoryMap() {
-        return customStockSectorRepository.findAll().stream()
+    private String industryName(StockInfo stockInfo, Map<Long, String> industryNameById) {
+        if (stockInfo.getIndustryId() == null) {
+            return stockInfo.getIndustryName();
+        }
+        return industryNameById.get(stockInfo.getIndustryId());
+    }
+
+    private Map<String, CustomStockSector> findStockCategoryMap(Long userId) {
+        return customStockSectorRepository.findAllByUserId(userId).stream()
                 .collect(Collectors.toMap(CustomStockSector::getStockCode, Function.identity()));
     }
 
@@ -557,15 +589,6 @@ public class MarketMapQueryService {
     private MarketMapItem toMarketMapItem(
             StockInfo stockInfo, CachedStockPrice cachedPrice, List<CustomValueTierThreshold> sortedTiers) {
         return toMarketMapItem(stockInfo, cachedPrice, (String) null, sortedTiers);
-    }
-
-    /** 커스텀 마켓맵용: custom_stock_sector에 배정된 alias(없으면 null)를 같이 실어 보낸다 */
-    private MarketMapItem toMarketMapItem(
-            StockInfo stockInfo,
-            CachedStockPrice cachedPrice,
-            Map<String, CustomStockSector> stockCategoryMap,
-            List<CustomValueTierThreshold> sortedTiers) {
-        return toMarketMapItem(stockInfo, cachedPrice, resolveAlias(stockInfo, stockCategoryMap), sortedTiers);
     }
 
     private MarketMapItem toMarketMapItem(
@@ -589,14 +612,8 @@ public class MarketMapQueryService {
                 cachedPrice.snapshotTime());
     }
 
-    /** 배정된 alias가 있으면 그 값, 없거나 빈 문자열이면 null */
-    private String resolveAlias(StockInfo stockInfo, Map<String, CustomStockSector> stockCategoryMap) {
-        CustomStockSector stockCategory = stockCategoryMap.get(stockInfo.getStockCode());
-        if (stockCategory == null
-                || stockCategory.getAlias() == null
-                || stockCategory.getAlias().isBlank()) {
-            return null;
-        }
-        return stockCategory.getAlias();
+    private Long customDataUserId() {
+        Long currentUserId = CurrentUser.currentId();
+        return currentUserId == null ? TEMPORARY_LEGACY_OWNER_ID : currentUserId;
     }
 }

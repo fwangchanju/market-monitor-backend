@@ -9,7 +9,6 @@ import dev.eolmae.marketmonitor.domain.stock.enums.RegisterBy;
 import dev.eolmae.marketmonitor.domain.stock.repository.WatchStockRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketmonitor.domain.stock.service.WatchStockBackfillService;
-import dev.eolmae.marketmonitor.domain.stock.service.WatchStockCacheService;
 import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import java.util.List;
 import java.util.Map;
@@ -28,7 +27,6 @@ public class HoldingsSyncService {
     private final KiwoomApiClient kiwoomApiClient;
     private final StockInfoCacheService stockInfoCacheService;
     private final WatchStockRepository watchStockRepository;
-    private final WatchStockCacheService watchStockCacheService;
     private final WatchStockBackfillService watchStockBackfillService;
 
     /**
@@ -45,7 +43,6 @@ public class HoldingsSyncService {
         if (response.holdings() == null || response.holdings().isEmpty()) {
             log.info("보유종목 없음 — HOLDINGS 전체 삭제");
             watchStockRepository.deleteByRegisterBy(RegisterBy.HOLDINGS);
-            watchStockCacheService.evict();
             return;
         }
 
@@ -89,7 +86,6 @@ public class HoldingsSyncService {
             }
         }
 
-        watchStockCacheService.evict();
         log.info("보유종목 동기화 완료: 종목수={}", sortedHoldings.size());
     }
 }

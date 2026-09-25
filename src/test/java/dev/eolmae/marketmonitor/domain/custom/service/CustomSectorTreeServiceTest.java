@@ -1,165 +1,99 @@
 package dev.eolmae.marketmonitor.domain.custom.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.tuple;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.eolmae.marketmonitor.common.enums.Market;
-import dev.eolmae.marketmonitor.common.event.StockInfoSyncedEvent;
-import dev.eolmae.marketmonitor.domain.custom.dto.SectorTreeNode;
+import dev.eolmae.marketmonitor.common.exception.BadRequestException;
+import dev.eolmae.marketmonitor.domain.custom.dto.CustomSnapshotPayload;
+import dev.eolmae.marketmonitor.domain.custom.entity.CustomScaleThreshold;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomSector;
+import dev.eolmae.marketmonitor.domain.custom.entity.CustomStockAlias;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomStockSector;
+import dev.eolmae.marketmonitor.domain.custom.entity.CustomValueTierThreshold;
+import dev.eolmae.marketmonitor.domain.custom.enums.ColorLabel;
+import dev.eolmae.marketmonitor.domain.custom.repository.CustomScaleThresholdRepository;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomSectorRepository;
+import dev.eolmae.marketmonitor.domain.custom.repository.CustomStockAliasRepository;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomStockSectorRepository;
-import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
-import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
+import dev.eolmae.marketmonitor.domain.custom.repository.CustomValueTierThresholdRepository;
+import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Map;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class CustomSectorTreeServiceTest {
 
-    private final CustomSectorRepository marketMapCategoryRepository = Mockito.mock(CustomSectorRepository.class);
-    private final CustomStockSectorRepository marketMapStockCategoryRepository =
-            Mockito.mock(CustomStockSectorRepository.class);
-    private final CustomSectorService marketMapCategoryService = Mockito.mock(CustomSectorService.class);
-    private final StockInfoCacheService stockInfoCacheService = Mockito.mock(StockInfoCacheService.class);
+    private static final long USER_ID = 41L;
+
+    private final CustomSectorRepository sectorRepository = Mockito.mock(CustomSectorRepository.class);
+    private final CustomStockSectorRepository stockSectorRepository = Mockito.mock(CustomStockSectorRepository.class);
+    private final CustomStockAliasRepository stockAliasRepository = Mockito.mock(CustomStockAliasRepository.class);
+    private final CustomScaleThresholdRepository scaleThresholdRepository =
+            Mockito.mock(CustomScaleThresholdRepository.class);
+    private final CustomValueTierThresholdRepository valueTierRepository =
+            Mockito.mock(CustomValueTierThresholdRepository.class);
+    private final StockInfoRepository stockInfoRepository = Mockito.mock(StockInfoRepository.class);
+    private final JdbcTemplate jdbcTemplate = Mockito.mock(JdbcTemplate.class);
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private final CustomSectorTreeService service = new CustomSectorTreeService(
-            marketMapCategoryRepository,
-            marketMapStockCategoryRepository,
-            marketMapCategoryService,
-            stockInfoCacheService,
-            new ObjectMapper());
+            sectorRepository,
+            stockSectorRepository,
+            stockAliasRepository,
+            scaleThresholdRepository,
+            valueTierRepository,
+            stockInfoRepository,
+            jdbcTemplate,
+            objectMapper);
 
     @Test
-    void buildTree_대분류_세부카테고리_직속종목_정확히_조립된다() {
-        CustomSector electronics = category(1L, null, "전기/전자");
-        CustomSector semiconductor = category(2L, 1L, "반도체");
-        CustomSector chemical = category(3L, null, "화학");
+    void serializeCurrentSnapshot_사용자_데이터_전체와_v2_버전을_저장한다() throws Exception {
+        CustomSector root = CustomSector.createParent(USER_ID, "산업");
+        ReflectionTestUtils.setField(root, "id", 10L);
+        CustomSector child = CustomSector.createChild(USER_ID, "반도체", root);
+        ReflectionTestUtils.setField(child, "id", 11L);
+        child.exclude();
 
-        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(electronics, semiconductor, chemical));
-        when(marketMapStockCategoryRepository.findAll())
-                .thenReturn(List.of(
-                        CustomStockSector.create("005930", 2L),
-                        CustomStockSector.create("000660", 2L),
-                        CustomStockSector.create("009150", 1L)));
+        when(sectorRepository.findAllByUserId(USER_ID)).thenReturn(List.of(root, child));
+        when(stockSectorRepository.findAllByUserId(USER_ID))
+                .thenReturn(List.of(CustomStockSector.create(USER_ID, "005930", 11L)));
+        when(stockAliasRepository.findAllByIdUserId(USER_ID))
+                .thenReturn(List.of(CustomStockAlias.create(USER_ID, "005930", "삼전")));
+        when(scaleThresholdRepository.findAllByUserId(USER_ID))
+                .thenReturn(List.of(CustomScaleThreshold.create(USER_ID, BigDecimal.ONE, "#ff0000", ColorLabel.RED)));
+        when(valueTierRepository.findAllByUserIdOrderByThresholdValueAsc(USER_ID))
+                .thenReturn(List.of(CustomValueTierThreshold.create(USER_ID, "대형주", 1000L, false)));
+        when(jdbcTemplate.queryForObject(Mockito.anyString(), Mockito.eq(String.class), Mockito.eq(USER_ID)))
+                .thenReturn("{\"showValue\":true}");
 
-        List<SectorTreeNode> tree = service.buildTree();
+        String json = service.serializeCurrentSnapshot(USER_ID);
+        CustomSnapshotPayload snapshot = objectMapper.readValue(json, CustomSnapshotPayload.class);
 
-        assertThat(tree).hasSize(2);
-        SectorTreeNode electronicsNode = tree.stream()
-                .filter(node -> node.categoryName().equals("전기/전자"))
-                .findFirst()
-                .orElseThrow();
-        assertThat(electronicsNode.stockCodes()).containsExactly("009150");
-        assertThat(electronicsNode.children()).hasSize(1);
-        assertThat(electronicsNode.children().get(0).categoryName()).isEqualTo("반도체");
-        assertThat(electronicsNode.children().get(0).stockCodes()).containsExactly("005930", "000660");
-
-        SectorTreeNode chemicalNode = tree.stream()
-                .filter(node -> node.categoryName().equals("화학"))
-                .findFirst()
-                .orElseThrow();
-        assertThat(chemicalNode.stockCodes()).isEmpty();
-        assertThat(chemicalNode.children()).isEmpty();
-    }
-
-    @Test
-    void toJson_parseJson_왕복해도_구조가_동일하다() {
-        List<SectorTreeNode> original = List.of(new SectorTreeNode(
-                "전기/전자",
-                List.of(new SectorTreeNode("반도체", List.of(), List.of("005930", "000660"))),
-                List.of("009150")));
-
-        String json = service.toJson(original);
-        List<SectorTreeNode> parsed = service.parseJson(json);
-
-        assertThat(parsed).isEqualTo(original);
+        assertThat(snapshot.snapshotVersion()).isEqualTo(2);
+        assertThat(snapshot.sectors())
+                .extracting(CustomSnapshotPayload.Sector::id, CustomSnapshotPayload.Sector::parentId)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(10L, null), org.assertj.core.groups.Tuple.tuple(11L, 10L));
+        assertThat(snapshot.assignments()).containsExactly(new CustomSnapshotPayload.StockAssignment("005930", 11L));
+        assertThat(snapshot.aliases()).containsExactly(new CustomSnapshotPayload.StockAlias("005930", "삼전"));
+        assertThat(snapshot.scaleThresholds()).hasSize(1);
+        assertThat(snapshot.valueTierThresholds()).hasSize(1);
+        assertThat(snapshot.preferences()).containsEntry("showValue", true);
+        verify(sectorRepository).findAllByUserId(USER_ID);
+        verify(stockSectorRepository).findAllByUserId(USER_ID);
+        verify(stockAliasRepository).findAllByIdUserId(USER_ID);
     }
 
     @Test
-    void restore_라이브_테이블을_스냅샷으로_교체하고_스냅샷에_없는_활성_주권_종목을_채운다() {
-        stubCategorySaveWithGeneratedId(100L);
-        List<SectorTreeNode> tree = List.of(new SectorTreeNode("반도체", List.of(), List.of("005930")));
-        // insertNode가 스냅샷대로 복원한 이후 상태를 흉내낸 것: 005930만 배정돼 있고, 000660은 스냅샷 저장 이후 신규 상장된 걸로 가정
-        when(marketMapStockCategoryRepository.findAll()).thenReturn(List.of(CustomStockSector.create("005930", 100L)));
-        StockInfo samsung = stockInfo("005930", "반도체", true, true);
-        StockInfo skHynix = stockInfo("000660", "반도체", true, true);
-        when(stockInfoCacheService.getCache()).thenReturn(Map.of("005930", samsung, "000660", skHynix));
+    void old_snapshot_버전은_현재_형식으로_인정하지_않고_복원도_거부한다() {
+        String legacySnapshot = "{\"snapshotVersion\":1,\"sectors\":[]}";
 
-        service.restore(tree, 1L);
-
-        verify(marketMapStockCategoryRepository).deleteAllInBatch();
-        verify(marketMapCategoryRepository).deleteAllInBatch();
-
-        ArgumentCaptor<List<StockInfoSyncedEvent.NewStock>> missingCaptor = ArgumentCaptor.forClass(List.class);
-        verify(marketMapCategoryService).restoreMissingStockCategories(missingCaptor.capture());
-        assertThat(missingCaptor.getValue())
-                .extracting(StockInfoSyncedEvent.NewStock::stockCode, StockInfoSyncedEvent.NewStock::categoryName)
-                .containsExactly(tuple("000660", "반도체"));
-    }
-
-    @Test
-    void restore_스냅샷에_없는_활성_주권_종목이_없으면_배정_채우기를_빈_리스트로_호출한다() {
-        stubCategorySaveWithGeneratedId(100L);
-        List<SectorTreeNode> tree = List.of(new SectorTreeNode("반도체", List.of(), List.of("005930")));
-        when(marketMapStockCategoryRepository.findAll()).thenReturn(List.of(CustomStockSector.create("005930", 100L)));
-        StockInfo samsung = stockInfo("005930", "반도체", true, true);
-        when(stockInfoCacheService.getCache()).thenReturn(Map.of("005930", samsung));
-
-        service.restore(tree, 1L);
-
-        verify(marketMapCategoryService).restoreMissingStockCategories(List.of());
-    }
-
-    @Test
-    void restore_비활성이거나_비주권인_종목은_배정_채우기_대상에서_제외한다() {
-        stubCategorySaveWithGeneratedId(100L);
-        List<SectorTreeNode> tree = List.of(new SectorTreeNode("반도체", List.of(), List.of("005930")));
-        when(marketMapStockCategoryRepository.findAll()).thenReturn(List.of(CustomStockSector.create("005930", 100L)));
-        StockInfo samsung = stockInfo("005930", "반도체", true, true);
-        StockInfo delisted = stockInfo("999999", "반도체", false, true);
-        StockInfo etf = stockInfo("888888", "ETF", true, false);
-        when(stockInfoCacheService.getCache()).thenReturn(Map.of("005930", samsung, "999999", delisted, "888888", etf));
-
-        service.restore(tree, 1L);
-
-        verify(marketMapCategoryService).restoreMissingStockCategories(List.of());
-    }
-
-    private void stubCategorySaveWithGeneratedId(Long id) {
-        // IDENTITY 전략은 insert 시점에 즉시 id가 채워지므로, save가 그 시점을 흉내내도록 stub
-        when(marketMapCategoryRepository.save(Mockito.any())).thenAnswer(invocation -> {
-            CustomSector saved = invocation.getArgument(0);
-            ReflectionTestUtils.setField(saved, "id", id);
-            return saved;
-        });
-    }
-
-    private StockInfo stockInfo(String stockCode, String categoryName, boolean active, boolean ordinary) {
-        StockInfo stockInfo = StockInfo.create(
-                stockCode, stockCode + "-종목", Market.KOSPI, ordinary ? "0" : "8", categoryName, 100L, BigDecimal.TEN);
-        if (!active) {
-            stockInfo.markInactive();
-        }
-        return stockInfo;
-    }
-
-    private CustomSector category(Long id, Long parentId, String name) {
-        CustomSector category = parentId == null ? CustomSector.createParent(name) : categoryWithParent(parentId, name);
-        ReflectionTestUtils.setField(category, "id", id);
-        return category;
-    }
-
-    private CustomSector categoryWithParent(Long parentId, String name) {
-        CustomSector parent = CustomSector.createParent("parent-placeholder");
-        ReflectionTestUtils.setField(parent, "id", parentId);
-        return CustomSector.createChild(name, parent);
+        assertThat(service.isCurrentSnapshotFormat(legacySnapshot)).isFalse();
+        assertThatThrownBy(() -> service.parseSnapshot(legacySnapshot)).isInstanceOf(BadRequestException.class);
     }
 }

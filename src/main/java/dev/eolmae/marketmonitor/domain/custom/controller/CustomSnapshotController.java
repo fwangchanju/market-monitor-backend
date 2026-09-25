@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@RequestMapping("/api/admin/market-map/versions")
+@RequestMapping({"/api/custom/snapshots", "/api/admin/market-map/versions"})
 @RestController
 @RequiredArgsConstructor
 public class CustomSnapshotController {

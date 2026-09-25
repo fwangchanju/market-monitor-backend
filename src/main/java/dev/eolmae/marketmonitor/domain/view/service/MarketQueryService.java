@@ -21,8 +21,8 @@ import dev.eolmae.marketmonitor.domain.stock.repository.ProgramTradingHistoryRep
 import dev.eolmae.marketmonitor.domain.stock.repository.ProgramTradingRankingSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.ShortSellingDailyHistoryRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
+import dev.eolmae.marketmonitor.domain.stock.repository.WatchStockRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
-import dev.eolmae.marketmonitor.domain.stock.service.WatchStockCacheService;
 import dev.eolmae.marketmonitor.domain.view.dto.IndexContributionItem;
 import dev.eolmae.marketmonitor.domain.view.dto.IntradayInvestorSummaryItem;
 import dev.eolmae.marketmonitor.domain.view.dto.InvestorTradingSummaryItem;
@@ -82,7 +82,7 @@ public class MarketQueryService {
     @SuppressWarnings("UnusedVariable")
     private final ShortSellingDailyHistoryRepository shortSellingDailyHistoryRepository;
 
-    private final WatchStockCacheService watchStockCacheService;
+    private final WatchStockRepository watchStockRepository;
     private final StockInfoCacheService stockInfoCacheService;
 
     private static final int RANKING_LIMIT = 10;
@@ -105,35 +105,8 @@ public class MarketQueryService {
                 getProgramTradingRankings(
                         summaryDefaults.market(), summaryDefaults.ranking(), summaryDefaults.amtQty()),
                 getIndexContribution(summaryDefaults.market()),
-                getMainShortSellingHistory(),
-                getMainProgramTradingHistory());
-    }
-
-    /** 관심종목 중 대표 종목의 공매도 추이 반환 — 대표 종목 없으면 빈 값 */
-    private StockHistoryResponse<ShortSellingHistoryItem> getMainShortSellingHistory() {
-        String mainStockCode = findMainStockCode();
-        if (mainStockCode == null) {
-            return StockHistoryResponse.empty();
-        }
-        return getShortSellingHistory(mainStockCode);
-    }
-
-    /** 관심종목 중 대표 종목의 프로그램매매 추이(장중) 반환 — 대표 종목 없으면 빈 값 */
-    private StockHistoryResponse<ProgramTradingHistoryItem> getMainProgramTradingHistory() {
-        String mainStockCode = findMainStockCode();
-        if (mainStockCode == null) {
-            return StockHistoryResponse.empty();
-        }
-        return getProgramTradingHistory(mainStockCode);
-    }
-
-    /** 관심종목 중 대표 종목 코드 반환 — 등록된 게 없으면 null */
-    private String findMainStockCode() {
-        return getWatchStocks().stream()
-                .filter(WatchStockResponse::isMain)
-                .map(WatchStockResponse::stockCode)
-                .findFirst()
-                .orElse(null);
+                StockHistoryResponse.empty(),
+                StockHistoryResponse.empty());
     }
 
     /** 대시보드 요약: 시장 종합 현황 (지수/등락/상하한가) */
@@ -298,7 +271,7 @@ public class MarketQueryService {
 
     /** 관심종목 목록 반환 */
     public List<WatchStockResponse> getWatchStocks() {
-        List<WatchStock> watchStockCache = watchStockCacheService.getCache();
+        List<WatchStock> watchStockCache = watchStockRepository.findAll();
         Map<String, StockInfo> stockInfoCache = stockInfoCacheService.getCache();
         boolean isPrimaryRegistered = watchStockCache.stream().anyMatch(WatchStock::isPrimary);
 

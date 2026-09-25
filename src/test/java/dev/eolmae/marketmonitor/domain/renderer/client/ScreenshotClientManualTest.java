@@ -2,7 +2,11 @@ package dev.eolmae.marketmonitor.domain.renderer.client;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.eolmae.marketmonitor.domain.auth.properties.AuthProperties;
+import dev.eolmae.marketmonitor.domain.auth.service.AppJwtService;
 import dev.eolmae.marketmonitor.domain.notification.enums.RenderTarget;
+import dev.eolmae.marketmonitor.domain.notification.properties.MarketMonitorProperties;
 import dev.eolmae.marketmonitor.domain.renderer.properties.RendererProperties;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -23,7 +27,11 @@ class ScreenshotClientManualTest {
     @Test
     void capturesNonEmptyImages() {
         String rendererUrl = System.getenv().getOrDefault("RENDERER_URL", "http://market-monitor-renderer:3000");
-        var client = new ScreenshotClient(new RendererProperties(rendererUrl), RestClient.create());
+        var client = new ScreenshotClient(
+                new RendererProperties(rendererUrl, false),
+                new MarketMonitorProperties(rendererUrl, 999999L),
+                new AppJwtService(new AuthProperties(), new ObjectMapper()),
+                RestClient.create());
 
         assertThat(client.capture(RenderTarget.MARKET_SUMMARY.path(), RenderTarget.MARKET_SUMMARY.selector()))
                 .isNotEmpty();

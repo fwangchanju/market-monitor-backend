@@ -35,6 +35,9 @@ public class LegacyCustomStockSectorController {
         return new SnapshotResponse<>(
                 response.snapshotTime(),
                 response.items().stream()
+                        // 구 프론트는 categoryId를 non-null로 파싱한다. 미배정 종목(신규 상장 등)은
+                        // sectorId가 null이라 신 /api/custom에서만 노출하고 여기서는 제외한다.
+                        .filter(item -> item.sectorId() != null)
                         .map(item -> new LegacyStockSectorListItem(
                                 item.stockCode(),
                                 item.market(),

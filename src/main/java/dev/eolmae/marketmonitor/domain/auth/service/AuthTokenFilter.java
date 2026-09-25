@@ -25,10 +25,15 @@ public class AuthTokenFilter extends OncePerRequestFilter {
 
     private final AppJwtService appJwtService;
     private final AllowedIpAccessService allowedIpAccessService;
+    private final LegacyCompatibilityBackfillState backfillState;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
+        if (isApiRequest(request) && !backfillState.isComplete()) {
+            response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Service startup is in progress.");
+            return;
+        }
         String token = bearerToken(request);
         if (token == null && request.getCookies() != null) {
             token = Arrays.stream(request.getCookies())
@@ -72,6 +77,11 @@ public class AuthTokenFilter extends OncePerRequestFilter {
                 || "/api/map/excluded-categories".equals(path)
                 || path.startsWith("/api/map/excluded-categories/");
         return adminRoute || customMapRoute || customMapMutation;
+    }
+
+    private boolean isApiRequest(HttpServletRequest request) {
+        String path = request.getServletPath();
+        return "/api".equals(path) || path.startsWith("/api/");
     }
 
     private String bearerToken(HttpServletRequest request) {

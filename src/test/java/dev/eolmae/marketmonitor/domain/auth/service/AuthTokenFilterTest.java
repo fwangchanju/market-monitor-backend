@@ -25,11 +25,13 @@ class AuthTokenFilterTest {
 
     private final AppJwtService appJwtService = mock(AppJwtService.class);
     private final AllowedIpAccessService allowedIpAccessService = mock(AllowedIpAccessService.class);
-    private final AuthTokenFilter filter = new AuthTokenFilter(appJwtService, allowedIpAccessService);
+    private final LegacyCompatibilityBackfillState backfillState = new LegacyCompatibilityBackfillState();
+    private final AuthTokenFilter filter = new AuthTokenFilter(appJwtService, allowedIpAccessService, backfillState);
 
     @BeforeEach
     void clearSecurityContextBeforeEach() {
         SecurityContextHolder.clearContext();
+        backfillState.markComplete();
     }
 
     @AfterEach
@@ -110,6 +112,19 @@ class AuthTokenFilterTest {
 
         filter.doFilter(request, new MockHttpServletResponse(), new MockFilterChain());
 
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verifyNoInteractions(allowedIpAccessService);
+    }
+
+    @Test
+    void apiRequestsWaitUntilTheStartupBackfillCompletes() throws Exception {
+        LegacyCompatibilityBackfillState pendingBackfill = new LegacyCompatibilityBackfillState();
+        AuthTokenFilter pendingFilter = new AuthTokenFilter(appJwtService, allowedIpAccessService, pendingBackfill);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        pendingFilter.doFilter(request("/api/map"), response, new MockFilterChain());
+
+        assertThat(response.getStatus()).isEqualTo(503);
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
         verifyNoInteractions(allowedIpAccessService);
     }

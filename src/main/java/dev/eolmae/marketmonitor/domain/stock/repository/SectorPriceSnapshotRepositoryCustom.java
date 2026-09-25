@@ -21,20 +21,10 @@ public interface SectorPriceSnapshotRepositoryCustom {
      * 반환한다. */
     long deleteSnapshotsBefore(LocalDateTime cutoff, List<MarketSnapshotTime> retainedSnapshotTimes);
 
-    /** deleteSnapshotsBefore와 같은 조건의 삭제 대상 현황 — 드라이런 로그 및 실제 삭제 전 확인용.
-     * 보존 시각 표본과 보존 날짜수까지 함께 집계한다. */
-    SnapshotRetentionSummary summarizeSnapshotsToDelete(
-            LocalDateTime cutoff, List<MarketSnapshotTime> retainedSnapshotTimes, int sampleSize);
+    /** cutoff 이전 행이 하나라도 있는지 — 보존 목록이 통째로 비었을 때 전량 삭제를 막는 안전장치용 가벼운
+     * 존재 확인. */
+    boolean existsBefore(LocalDateTime cutoff);
 
     /** 보존 윈도우 안 후보 하나 — 어느 마켓의 몇 시 스냅샷인지. */
     record MarketSnapshotTime(Market market, LocalDateTime snapshotTime) {}
-
-    record SnapshotRetentionSummary(
-            long targetCount,
-            long totalCountBeforeCutoff,
-            LocalDateTime minSnapshotTime,
-            LocalDateTime maxSnapshotTime,
-            List<LocalTime> sampleSnapshotTimes,
-            List<MarketSnapshotTime> retainedSampleSnapshotTimes,
-            int retainedDateCount) {}
 }

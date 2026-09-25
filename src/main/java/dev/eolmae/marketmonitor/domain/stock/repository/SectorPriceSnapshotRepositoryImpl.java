@@ -2,14 +2,12 @@ package dev.eolmae.marketmonitor.domain.stock.repository;
 
 import static dev.eolmae.marketmonitor.domain.stock.entity.QSectorPriceSnapshot.sectorPriceSnapshot;
 
-import com.querydsl.core.Tuple;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.core.types.dsl.NumberExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import dev.eolmae.marketmonitor.common.enums.Market;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -57,54 +55,13 @@ public class SectorPriceSnapshotRepositoryImpl implements SectorPriceSnapshotRep
     }
 
     @Override
-    public SnapshotRetentionSummary summarizeSnapshotsToDelete(
-            LocalDateTime cutoff, List<MarketSnapshotTime> retainedSnapshotTimes, int sampleSize) {
-        BooleanExpression targetCondition = targetPredicate(cutoff, retainedSnapshotTimes);
-
-        Tuple aggregate = queryFactory
-                .select(
-                        sectorPriceSnapshot.count(),
-                        sectorPriceSnapshot.snapshotTime.min(),
-                        sectorPriceSnapshot.snapshotTime.max())
-                .from(sectorPriceSnapshot)
-                .where(targetCondition)
-                .fetchOne();
-
-        long totalCountBeforeCutoff = queryFactory
-                .select(sectorPriceSnapshot.count())
+    public boolean existsBefore(LocalDateTime cutoff) {
+        Integer exists = queryFactory
+                .selectOne()
                 .from(sectorPriceSnapshot)
                 .where(sectorPriceSnapshot.snapshotTime.before(cutoff))
-                .fetchOne();
-
-        // 삭제 대상에 등장하는 서로 다른 시각(HH:mm)별로 대표 시각을 하나씩 뽑아 표본으로 삼는다.
-        List<LocalTime> sampleSnapshotTimes = queryFactory
-                .select(sectorPriceSnapshot.snapshotTime.min())
-                .from(sectorPriceSnapshot)
-                .where(targetCondition)
-                .groupBy(sectorPriceSnapshot.snapshotTime.hour(), sectorPriceSnapshot.snapshotTime.minute())
-                .limit(sampleSize)
-                .fetch()
-                .stream()
-                .map(LocalDateTime::toLocalTime)
-                .toList();
-
-        List<MarketSnapshotTime> retainedSampleSnapshotTimes = retainedSnapshotTimes.stream()
-                .sorted(Comparator.comparing(MarketSnapshotTime::snapshotTime).reversed())
-                .limit(sampleSize)
-                .toList();
-        int retainedDateCount = (int) retainedSnapshotTimes.stream()
-                .map(retained -> retained.snapshotTime().toLocalDate())
-                .distinct()
-                .count();
-
-        return new SnapshotRetentionSummary(
-                aggregate.get(sectorPriceSnapshot.count()),
-                totalCountBeforeCutoff,
-                aggregate.get(sectorPriceSnapshot.snapshotTime.min()),
-                aggregate.get(sectorPriceSnapshot.snapshotTime.max()),
-                sampleSnapshotTimes,
-                retainedSampleSnapshotTimes,
-                retainedDateCount);
+                .fetchFirst();
+        return exists != null;
     }
 
     // cutoff 이전이면서 retainedSnapshotTimes(순수 자바 함수가 보존 윈도우에서 고른 (마켓,시각))에 없는 행 —

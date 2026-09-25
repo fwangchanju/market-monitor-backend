@@ -9,7 +9,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -29,15 +28,12 @@ public class SnapshotRetentionScheduler {
     private final SectorPriceSnapshotService sectorPriceSnapshotService;
     private final EscalationPublisher escalationPublisher;
 
-    @Value("${market-monitor.retention.dry-run:true}")
-    private boolean dryRun;
-
     @Scheduled(cron = "0 0 4 * * *", zone = KST_ZONE_ID)
     public void cleanupSnapshots() {
         LocalDateTime cutoff = calculateCutoff(KstClock.now().toLocalDate());
-        log.info("스냅샷 정리 배치 시작: cutoff={}, dryRun={}", cutoff, dryRun);
+        log.info("스냅샷 정리 배치 시작: cutoff={}", cutoff);
 
-        run("섹터가격스냅샷정리", () -> sectorPriceSnapshotService.cleanupSnapshotsBefore(cutoff, dryRun));
+        run("섹터가격스냅샷정리", () -> sectorPriceSnapshotService.cleanupSnapshotsBefore(cutoff));
 
         log.info("스냅샷 정리 배치 종료");
     }

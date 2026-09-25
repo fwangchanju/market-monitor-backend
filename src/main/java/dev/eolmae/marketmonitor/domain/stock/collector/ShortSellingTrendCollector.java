@@ -8,7 +8,7 @@ import dev.eolmae.marketmonitor.domain.stock.dto.ShortSellingTrendResponse;
 import dev.eolmae.marketmonitor.domain.stock.entity.ShortSellingDailyHistory;
 import dev.eolmae.marketmonitor.domain.stock.entity.WatchStock;
 import dev.eolmae.marketmonitor.domain.stock.repository.ShortSellingDailyHistoryRepository;
-import dev.eolmae.marketmonitor.domain.stock.service.WatchStockCacheService;
+import dev.eolmae.marketmonitor.domain.stock.repository.WatchStockRepository;
 import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -33,7 +33,7 @@ public class ShortSellingTrendCollector {
 
     private final KiwoomApiClient kiwoomApiClient;
     private final ShortSellingDailyHistoryRepository shortSellingRepository;
-    private final WatchStockCacheService watchStockCacheService;
+    private final WatchStockRepository watchStockRepository;
     private final TransactionTemplate transactionTemplate;
 
     /**
@@ -42,7 +42,7 @@ public class ShortSellingTrendCollector {
      */
     public void collect(LocalDateTime snapshotTime) {
         LocalDate snapshotDate = snapshotTime.toLocalDate();
-        List<WatchStock> watchStocks = watchStockCacheService.getCache();
+        List<WatchStock> watchStocks = watchStockRepository.findAll();
         for (WatchStock watchStock : watchStocks) {
             transactionTemplate.executeWithoutResult(status -> collectForStock(watchStock, snapshotDate));
         }

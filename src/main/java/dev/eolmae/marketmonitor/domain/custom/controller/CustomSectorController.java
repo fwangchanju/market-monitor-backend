@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-@RequestMapping("/api/admin/market-map/categories")
+@RequestMapping("/api/custom/sectors")
 @RestController
 @RequiredArgsConstructor
 public class CustomSectorController {
@@ -45,7 +45,7 @@ public class CustomSectorController {
 
     @PatchMapping("/{id}/parent")
     public void reparent(@PathVariable Long id, @RequestBody ReparentRequest request) {
-        customSectorService.reparent(id, request.categoryId());
+        customSectorService.reparent(id, request.parentId());
     }
 
     @GetMapping("/{id}/delete-preview")

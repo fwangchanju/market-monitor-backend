@@ -8,7 +8,7 @@ import dev.eolmae.marketmonitor.domain.stock.entity.ProgramTradingHistory;
 import dev.eolmae.marketmonitor.domain.stock.entity.WatchStock;
 import dev.eolmae.marketmonitor.domain.stock.enums.StexType;
 import dev.eolmae.marketmonitor.domain.stock.repository.ProgramTradingHistoryRepository;
-import dev.eolmae.marketmonitor.domain.stock.service.WatchStockCacheService;
+import dev.eolmae.marketmonitor.domain.stock.repository.WatchStockRepository;
 import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -39,7 +39,7 @@ public class ProgramTradeIntradayCollector {
 
     private final KiwoomApiClient kiwoomApiClient;
     private final ProgramTradingHistoryRepository historyRepository;
-    private final WatchStockCacheService watchStockCacheService;
+    private final WatchStockRepository watchStockRepository;
     private final TransactionTemplate transactionTemplate;
 
     /**
@@ -47,7 +47,7 @@ public class ProgramTradeIntradayCollector {
      * 던져(catch 안 함) 호출부가 한 곳에서만 escalate.
      */
     public void collect(LocalDateTime snapshotTime) {
-        List<WatchStock> watchStocks = watchStockCacheService.getCache();
+        List<WatchStock> watchStocks = watchStockRepository.findAll();
         for (WatchStock watchStock : watchStocks) {
             transactionTemplate.executeWithoutResult(status -> collectForStock(watchStock, snapshotTime));
         }

@@ -1,0 +1,42 @@
+# These rules apply to shell commands requested outside the sandbox.
+prefix_rule(
+    pattern = ["gh", "pr", "merge"],
+    decision = "forbidden",
+    justification = "The user handles PR merges.",
+    match = ["gh pr merge 123"],
+)
+
+prefix_rule(
+    pattern = ["gh", "workflow", "run"],
+    decision = "forbidden",
+    justification = "The user handles manual workflow runs.",
+    match = ["gh workflow run deploy.yml"],
+)
+
+prefix_rule(
+    pattern = ["git", "commit"],
+    decision = "prompt",
+    justification = "Ask the user before committing.",
+    match = ["git commit -m docs"],
+)
+
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "prompt",
+    justification = "Ask the user before pushing.",
+    match = ["git push origin branch"],
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", "create"],
+    decision = "prompt",
+    justification = "Ask the user before creating a PR.",
+    match = ["gh pr create --draft"],
+)
+
+prefix_rule(
+    pattern = ["gh", "pr", "edit"],
+    decision = "prompt",
+    justification = "Ask the user before editing a PR.",
+    match = ["gh pr edit 123"],
+)

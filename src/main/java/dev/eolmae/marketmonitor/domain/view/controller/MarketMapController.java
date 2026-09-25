@@ -43,12 +43,12 @@ public class MarketMapController {
 
     @GetMapping("/value-tiers")
     public List<CustomValueTierItem> getValueTiers() {
-        return customValueTierThresholdService.getValueTiers();
+        return customValueTierThresholdService.getDefaultValueTiers();
     }
 
     @GetMapping("/scale")
     public CustomScaleResponse getScale() {
-        return customScaleService.getScale();
+        return customScaleService.getDefaultScale();
     }
 
     @PostMapping("/excluded-categories/{categoryId}")

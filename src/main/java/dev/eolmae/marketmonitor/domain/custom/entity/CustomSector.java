@@ -15,6 +15,8 @@ import lombok.Getter;
 @Getter
 public class CustomSector {
 
+    private static final Long LEGACY_OWNER_ID = 999999L;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -23,7 +25,10 @@ public class CustomSector {
     private Long parentId;
 
     @Column(name = "snapshot_id")
-    private Long versionId;
+    private Long snapshotId;
+
+    @Column(name = "user_id", nullable = false)
+    private Long userId;
 
     @Column(nullable = false, length = 50)
     private String name;
@@ -42,8 +47,9 @@ public class CustomSector {
 
     protected CustomSector() {}
 
-    public static CustomSector createParent(String name) {
+    public static CustomSector createParent(Long userId, String name) {
         var entity = new CustomSector();
+        entity.userId = userId;
         entity.name = name;
         entity.parentId = null;
         entity.depth = 0;
@@ -54,8 +60,13 @@ public class CustomSector {
         return entity;
     }
 
-    public static CustomSector createChild(String name, CustomSector parent) {
+    public static CustomSector createParent(String name) {
+        return createParent(LEGACY_OWNER_ID, name);
+    }
+
+    public static CustomSector createChild(Long userId, String name, CustomSector parent) {
         var entity = new CustomSector();
+        entity.userId = userId;
         entity.name = name;
         entity.parentId = parent.id;
         entity.depth = parent.depth + 1;
@@ -66,8 +77,16 @@ public class CustomSector {
         return entity;
     }
 
-    public void tagVersion(Long versionId) {
-        this.versionId = versionId;
+    public static CustomSector createChild(String name, CustomSector parent) {
+        return createChild(parent.userId, name, parent);
+    }
+
+    public static CustomSector createDefaultParent(Long userId, String name) {
+        return createParent(userId, name);
+    }
+
+    public void tagSnapshot(Long snapshotId) {
+        this.snapshotId = snapshotId;
         this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
     }
 

@@ -1,5 +1,6 @@
 package dev.eolmae.marketmonitor.domain.custom.service;
 
+import dev.eolmae.marketmonitor.domain.auth.service.CurrentUser;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomValueTierThreshold;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomValueTierThresholdRepository;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryTierBreakdown;
@@ -29,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class SectorTierAggregationService {
 
     private static final int SCALE = 4;
+    private static final long LEGACY_OWNER_ID = 999999L;
 
     private final CustomValueTierThresholdRepository customValueTierThresholdRepository;
 
@@ -37,8 +39,11 @@ public class SectorTierAggregationService {
      * items가 하나도 없는 카테고리(자신과 하위 전부 빈 경우)는 결과 맵에
      * 아예 없다. */
     public Map<Long, List<CategoryTierBreakdown>> aggregateByCategory(List<MarketMapCategoryNode> tree) {
-        Map<String, CustomValueTierThreshold> tierByLabel = customValueTierThresholdRepository.findAll().stream()
-                .collect(Collectors.toMap(CustomValueTierThreshold::getLabel, Function.identity()));
+        Long currentUserId = CurrentUser.currentId();
+        Long userId = currentUserId == null ? LEGACY_OWNER_ID : currentUserId;
+        Map<String, CustomValueTierThreshold> tierByLabel =
+                customValueTierThresholdRepository.findAllByUserIdOrderByThresholdValueAsc(userId).stream()
+                        .collect(Collectors.toMap(CustomValueTierThreshold::getLabel, Function.identity()));
         Map<Long, List<CategoryTierBreakdown>> breakdownsByCategoryId = new HashMap<>();
         collectBreakdowns(tree, tierByLabel, breakdownsByCategoryId);
         return breakdownsByCategoryId;

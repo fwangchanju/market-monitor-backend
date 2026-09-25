@@ -28,6 +28,9 @@ public class CustomScaleThreshold {
     @Column(name = "threshold_percent", nullable = false, precision = 5, scale = 2)
     private BigDecimal thresholdPercent;
 
+    @Column(name = "user_id", nullable = false)
+    private Long userId;
+
     @Column(nullable = false, length = 7)
     private String color;
 
@@ -43,8 +46,10 @@ public class CustomScaleThreshold {
 
     protected CustomScaleThreshold() {}
 
-    public static CustomScaleThreshold create(BigDecimal thresholdPercent, String color, ColorLabel colorLabel) {
+    public static CustomScaleThreshold create(
+            Long userId, BigDecimal thresholdPercent, String color, ColorLabel colorLabel) {
         var entity = new CustomScaleThreshold();
+        entity.userId = userId;
         entity.thresholdPercent = thresholdPercent;
         entity.color = color;
         entity.colorLabel = colorLabel;

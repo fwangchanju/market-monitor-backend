@@ -4,16 +4,21 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
+import dev.eolmae.marketmonitor.domain.access.enums.Role;
+import dev.eolmae.marketmonitor.domain.auth.service.AuthenticatedUserPrincipal;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomSector;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomStockSector;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomValueTierThreshold;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomSectorRepository;
+import dev.eolmae.marketmonitor.domain.custom.repository.CustomStockAliasRepository;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomStockSectorRepository;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomValueTierThresholdRepository;
 import dev.eolmae.marketmonitor.domain.custom.service.CustomValueTierThresholdService;
 import dev.eolmae.marketmonitor.domain.custom.service.SectorTierAggregationService;
+import dev.eolmae.marketmonitor.domain.stock.entity.IndustryInfo;
 import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
+import dev.eolmae.marketmonitor.domain.stock.repository.IndustryInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketOverviewSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.SectorPriceSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceCacheService;
@@ -36,12 +41,20 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class MarketMapQueryServiceTest {
+
+    private static final long LEGACY_OWNER_ID = 999999L;
 
     private final StockInfoCacheService stockInfoCacheService = Mockito.mock(StockInfoCacheService.class);
     private final SectorPriceSnapshotRepository sectorPriceSnapshotRepository =
@@ -50,19 +63,23 @@ class MarketMapQueryServiceTest {
     private final CustomSectorRepository marketMapCategoryRepository = Mockito.mock(CustomSectorRepository.class);
     private final CustomStockSectorRepository marketMapStockCategoryRepository =
             Mockito.mock(CustomStockSectorRepository.class);
+    private final CustomStockAliasRepository customStockAliasRepository =
+            Mockito.mock(CustomStockAliasRepository.class);
     // 구간 리포지토리 하나를 합산 클래스·구간 서비스가 같이 본다 — 트리 기반 랭킹은 이 둘이 같은 구간
     // 목록을 보는 것을 전제로 한다(합산 클래스는 findAll()로 라벨→id, 구간 서비스는
     // findAllByOrderByThresholdValueAsc()로 종목의 구간을 정한다).
     private final CustomValueTierThresholdRepository marketValueTierThresholdRepository =
             Mockito.mock(CustomValueTierThresholdRepository.class);
+    private final JdbcTemplate jdbcTemplate = Mockito.mock(JdbcTemplate.class);
     private final SectorTierAggregationService categoryTierAggregationService =
             new SectorTierAggregationService(marketValueTierThresholdRepository);
     // mock 대신 진짜 객체를 쓴다 — resolveTier가 실제로 실행돼야 트리 기반 테스트의 종목이 의도한 구간에
     // 들어간다(5-1).
     private final CustomValueTierThresholdService marketValueTierThresholdService =
-            new CustomValueTierThresholdService(marketValueTierThresholdRepository);
+            new CustomValueTierThresholdService(marketValueTierThresholdRepository, jdbcTemplate);
     private final MarketOverviewSnapshotRepository marketOverviewSnapshotRepository =
             Mockito.mock(MarketOverviewSnapshotRepository.class);
+    private final IndustryInfoRepository industryInfoRepository = Mockito.mock(IndustryInfoRepository.class);
     private final SectorPriceSnapshotService sectorPriceSnapshotService =
             new SectorPriceSnapshotService(sectorPriceSnapshotRepository);
     private final MarketMapQueryService service = new MarketMapQueryService(
@@ -71,15 +88,33 @@ class MarketMapQueryServiceTest {
             sectorPriceCacheService,
             marketMapCategoryRepository,
             marketMapStockCategoryRepository,
+            customStockAliasRepository,
             categoryTierAggregationService,
             marketValueTierThresholdService,
-            marketOverviewSnapshotRepository);
+            marketOverviewSnapshotRepository,
+            industryInfoRepository);
 
     // 구간 스텁 공통 셋업 — 진짜 구간 서비스로 바뀌면서 트리를 빌드하는 모든 테스트에 구간이 필요해졌다
     // (5-1). 구간이 여럿 필요한 테스트는 이 기본값을 자기 stubTierThresholds 호출로 덮어쓴다.
     @BeforeEach
     void stubDefaultTier() {
+        var principal = new AuthenticatedUserPrincipal(LEGACY_OWNER_ID, Role.ADMIN);
+        SecurityContextHolder.getContext()
+                .setAuthentication(
+                        new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
+        Mockito.doAnswer(invocation -> marketMapCategoryRepository.findAll())
+                .when(marketMapCategoryRepository)
+                .findAllByUserId(ArgumentMatchers.anyLong());
+        Mockito.doAnswer(invocation -> marketMapStockCategoryRepository.findAll())
+                .when(marketMapStockCategoryRepository)
+                .findAllByUserId(ArgumentMatchers.anyLong());
+        Mockito.doReturn(List.of()).when(customStockAliasRepository).findAllByIdUserId(ArgumentMatchers.anyLong());
         stubTierThresholds(tierThreshold(10L, "대형", 0L, false));
+    }
+
+    @AfterEach
+    void clearAuthentication() {
+        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -148,14 +183,20 @@ class MarketMapQueryServiceTest {
     }
 
     @Test
-    void getDefaultMarketMap_stock_info_카테고리_그대로_1뎁스_노드로_묶인다() {
+    void getDefaultMarketMap_industry_info_id로_업종을_찾아_1뎁스_노드로_묶는다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
 
-        // 기본 마켓맵은 custom_sector를 아예 안 쓰므로, 매칭되는 카테고리가 없어도(예: 종목 업종이
-        // 나중에 바뀌어 자동생성된 카테고리가 없는 경우) 조회 자체가 깨지면 안 됨을 검증
+        // 기본 마켓맵은 custom_sector를 쓰지 않고 industry_info를 조회한다.
         StockInfo samsung = stockInfo("005930", "삼성전자", "반도체", 100L, BigDecimal.TEN);
         StockInfo skHynix = stockInfo("000660", "SK하이닉스", "반도체", 50L, BigDecimal.valueOf(20));
         StockInfo lgChem = stockInfo("051910", "LG화학", "", 500L, BigDecimal.ONE);
+        ReflectionTestUtils.setField(samsung, "industryName", "구 업종명");
+        ReflectionTestUtils.setField(skHynix, "industryName", "구 업종명");
+        ReflectionTestUtils.setField(samsung, "industryId", 7L);
+        ReflectionTestUtils.setField(skHynix, "industryId", 7L);
+        IndustryInfo currentIndustry = IndustryInfo.create("반도체");
+        ReflectionTestUtils.setField(currentIndustry, "id", 7L);
+        when(industryInfoRepository.findAllById(Mockito.<Iterable<Long>>any())).thenReturn(List.of(currentIndustry));
 
         Map<String, StockInfo> stockInfoCache = List.of(samsung, skHynix, lgChem).stream()
                 .collect(Collectors.toMap(StockInfo::getStockCode, Function.identity()));
@@ -939,6 +980,11 @@ class MarketMapQueryServiceTest {
         when(marketValueTierThresholdRepository.findAll()).thenReturn(List.of(tiers));
         when(marketValueTierThresholdRepository.findAllByOrderByThresholdValueAsc())
                 .thenReturn(sorted);
+        when(marketValueTierThresholdRepository.findAllByUserIdOrderByThresholdValueAsc(999999L))
+                .thenReturn(sorted);
+        Mockito.doReturn(sorted)
+                .when(jdbcTemplate)
+                .query(ArgumentMatchers.anyString(), ArgumentMatchers.<RowMapper<CustomValueTierThreshold>>any());
     }
 
     private CustomValueTierThreshold tierThreshold(

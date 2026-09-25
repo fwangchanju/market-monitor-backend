@@ -1,25 +1,32 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
-import dev.eolmae.marketmonitor.common.event.StockInfoSyncedEvent;
+import dev.eolmae.marketmonitor.common.event.IndustryInfoCreatedEvent;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.common.util.Strings;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.StockInfoRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.StockInfoResponse;
+import dev.eolmae.marketmonitor.domain.stock.entity.IndustryInfo;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.enums.StockMarketCode;
+import dev.eolmae.marketmonitor.domain.stock.repository.IndustryInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketmonitor.domain.stock.util.KiwoomValueParser;
 import java.math.BigDecimal;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -30,13 +37,12 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 @RequiredArgsConstructor
 public class StockInfoCollector {
 
-    // ka10099: 종목정보 리스트 (종목정보 카테고리)
-    private static final String UNCATEGORIZED = "미분류";
-
     private final KiwoomApiClient kiwoomApiClient;
     private final StockInfoRepository stockInfoRepository;
+    private final IndustryInfoRepository industryInfoRepository;
     private final StockInfoCacheService stockInfoCacheService;
     private final ApplicationEventPublisher eventPublisher;
+    private final JdbcTemplate jdbcTemplate;
 
     @Transactional
     public void sync() {
@@ -51,6 +57,8 @@ public class StockInfoCollector {
         }
 
         int fetchedCount = fetchedStocks.size();
+
+        Map<String, IndustryInfo> industryByName = syncIndustryInfo(fetchedStocks.values());
 
         for (StockInfo existing : stockInfoRepository.findAll()) {
             FetchStockInfo fetched = fetchedStocks.remove(existing.getStockCode());
@@ -68,6 +76,7 @@ public class StockInfoCollector {
                     fetched.market(),
                     fetched.marketCode(),
                     fetched.categoryName(),
+                    industryId(fetched, industryByName),
                     fetched.listCount(),
                     fetched.lastPrice());
         }
@@ -80,6 +89,7 @@ public class StockInfoCollector {
                         fetched.market(),
                         fetched.marketCode(),
                         fetched.categoryName(),
+                        industryId(fetched, industryByName),
                         fetched.listCount(),
                         fetched.lastPrice()))
                 .toList();
@@ -88,16 +98,48 @@ public class StockInfoCollector {
         // 있다 — 그래서 evict는 이 트랜잭션이 커밋된 뒤로 미룬다.
         evictCacheAfterCommit();
 
-        // 마켓맵은 주권(코스피/코스닥)만 다루므로 ELW/ETF 등은 이벤트 발행 단계에서 제외 (stock_info 저장 자체는 종류 무관하게 전부 유지)
-        List<StockInfoSyncedEvent.NewStock> newStockEvents = newStocks.stream()
-                .filter(stock -> StockMarketCode.isOrdinaryShare(stock.getMarketCode()))
-                .map(stock -> new StockInfoSyncedEvent.NewStock(
-                        stock.getStockCode(),
-                        stock.getIndustryName().isBlank() ? UNCATEGORIZED : stock.getIndustryName()))
-                .toList();
-        eventPublisher.publishEvent(new StockInfoSyncedEvent(newStockEvents));
-
         log.info("종목 정보 동기화 완료: 조회 종목 수={}", fetchedCount);
+    }
+
+    private Map<String, IndustryInfo> syncIndustryInfo(Iterable<FetchStockInfo> fetchedStocks) {
+        Set<String> industryNames = new HashSet<>();
+        for (FetchStockInfo fetched : fetchedStocks) {
+            if (StockMarketCode.isOrdinaryShare(fetched.marketCode())
+                    && fetched.categoryName() != null
+                    && !fetched.categoryName().isBlank()) {
+                industryNames.add(fetched.categoryName());
+            }
+        }
+        if (industryNames.isEmpty()) {
+            return Map.of();
+        }
+
+        Set<String> existingNames = industryInfoRepository.findByNameIn(industryNames).stream()
+                .map(IndustryInfo::getName)
+                .collect(Collectors.toSet());
+        for (String name : industryNames.stream().sorted().toList()) {
+            if (existingNames.contains(name)) {
+                continue;
+            }
+            List<String> insertedNames = jdbcTemplate.query(
+                    "INSERT INTO industry_info (name) VALUES (?) ON CONFLICT (name) DO NOTHING RETURNING name",
+                    (resultSet, rowNumber) -> resultSet.getString("name"),
+                    name);
+            insertedNames.forEach(
+                    insertedName -> eventPublisher.publishEvent(new IndustryInfoCreatedEvent(insertedName)));
+        }
+        return industryInfoRepository.findByNameIn(industryNames).stream()
+                .collect(Collectors.toMap(IndustryInfo::getName, Function.identity()));
+    }
+
+    private Long industryId(FetchStockInfo fetched, Map<String, IndustryInfo> industryByName) {
+        if (!StockMarketCode.isOrdinaryShare(fetched.marketCode())
+                || fetched.categoryName() == null
+                || fetched.categoryName().isBlank()) {
+            return null;
+        }
+        IndustryInfo industry = industryByName.get(fetched.categoryName());
+        return industry == null ? null : industry.getId();
     }
 
     // StockInfoCollectorTest처럼 활성 트랜잭션 없이 도는 단위 테스트에서는

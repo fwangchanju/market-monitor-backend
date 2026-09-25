@@ -29,7 +29,7 @@ public class ApplicationConfig {
     @Bean(CACHE_MANAGER)
     @Primary
     public CacheManager cacheManager() {
-        return new CaffeineCacheManager(CacheKey.STOCK_INFO, CacheKey.WATCH_STOCK);
+        return new CaffeineCacheManager(CacheKey.STOCK_INFO);
     }
 
     /** IP 화이트리스트 체크용 캐시. 수동 DB 편집 반영을 위한 짧은 TTL(10초)만 두고, 등록/삭제 시 즉시 evict됨. */

@@ -83,6 +83,8 @@
   - 프론트 파일명(`marketMapAdmin.ts`, `useMarketMapAdmin` 등) → custom, 옛 페이지 `/admin/market-map`
     (`MarketMapAdminPage`) 삭제
   - 백엔드 테스트의 mock 변수 이름(`marketMapCategoryRepository` 등)을 클래스 이름(`customSectorRepository`)에 맞춘다
+- `auth.frontend-url`과 `market-monitor.base-url`(캡처 페이지 주소)은 운영에서 같은 사이트 주소다. 지금은
+  prod에서 전자가 후자를 참조하게만 해뒀다 — 로컬은 백엔드 8081·프론트 5173이라 값이 달라 속성 하나로 합칠지는 정리 PR에서 정한다
 
 **선행 조건**: 코드 정비(CI·테스트·버그 수정·문서) 완료. 안전망도 문서도 없는 상태에서 인증과 데이터
 마이그레이션 같은 위험한 작업을 하지 않는다.

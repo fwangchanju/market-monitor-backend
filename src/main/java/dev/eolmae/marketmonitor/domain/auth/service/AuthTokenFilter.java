@@ -22,6 +22,7 @@ public class AuthTokenFilter extends OncePerRequestFilter {
     private static final String ACCESS_COOKIE = "mm_access";
     private static final String LEGACY_OWNER_IP_HEADER = "X-Real-IP";
     private static final long LEGACY_OWNER_ID = 999999L;
+    private static final String CAPTURE_TOKEN_HEADER = "X-Capture-Token";
 
     private final AppJwtService appJwtService;
     private final AllowedIpAccessService allowedIpAccessService;
@@ -32,6 +33,11 @@ public class AuthTokenFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         if (isApiRequest(request) && !backfillState.isComplete()) {
             response.sendError(HttpServletResponse.SC_SERVICE_UNAVAILABLE, "Service startup is in progress.");
+            return;
+        }
+        String captureToken = request.getHeader(CAPTURE_TOKEN_HEADER);
+        if (captureToken != null) {
+            authenticateCaptureToken(captureToken, request, response, filterChain);
             return;
         }
         String token = bearerToken(request);
@@ -66,17 +72,49 @@ public class AuthTokenFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
+    // 캡처 토큰은 렌더러가 /capture 본문으로만 전달하는 소유자 읽기 전용 인증이다. 쿠키에서는 절대
+    // 읽지 않고, 전용 헤더로만 받는다. GET 조회만 허용하고 관리자 API·토큰 재발급·로그아웃은 거부한다.
+    private void authenticateCaptureToken(
+            String captureToken, HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+            throws ServletException, IOException {
+        AuthenticatedUserPrincipal principal = appJwtService.parseCaptureToken(captureToken);
+        if (principal == null) {
+            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid or expired capture token.");
+            return;
+        }
+        if (!isCaptureTokenAllowedRoute(request)) {
+            response.sendError(HttpServletResponse.SC_FORBIDDEN, "Capture token is not allowed for this request.");
+            return;
+        }
+        SecurityContextHolder.getContext()
+                .setAuthentication(
+                        new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
+        filterChain.doFilter(request, response);
+    }
+
+    private boolean isCaptureTokenAllowedRoute(HttpServletRequest request) {
+        if (!"GET".equalsIgnoreCase(request.getMethod())) {
+            return false;
+        }
+        String path = request.getServletPath();
+        boolean tokenLifecycleRoute = "/api/auth/refresh".equals(path) || "/api/auth/logout".equals(path);
+        return !isAdminRoute(path) && !tokenLifecycleRoute;
+    }
+
     private boolean isLegacyAdminRoute(HttpServletRequest request) {
         String path = request.getServletPath();
-        boolean adminRoute = "/api/admin".equals(path)
-                || path.startsWith("/api/admin/")
-                || "/api/watch-stocks".equals(path)
-                || path.startsWith("/api/watch-stocks/");
         boolean customMapRoute = "/api/map".equals(path) && "true".equals(request.getParameter("isCustom"));
         boolean customMapMutation = "/api/map/reset".equals(path)
                 || "/api/map/excluded-categories".equals(path)
                 || path.startsWith("/api/map/excluded-categories/");
-        return adminRoute || customMapRoute || customMapMutation;
+        return isAdminRoute(path) || customMapRoute || customMapMutation;
+    }
+
+    private boolean isAdminRoute(String path) {
+        return "/api/admin".equals(path)
+                || path.startsWith("/api/admin/")
+                || "/api/watch-stocks".equals(path)
+                || path.startsWith("/api/watch-stocks/");
     }
 
     private boolean isApiRequest(HttpServletRequest request) {

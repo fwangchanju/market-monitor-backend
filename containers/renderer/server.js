@@ -17,6 +17,7 @@ const MAX_CONSECUTIVE_FAILURES = 3
 const RECYCLE_AFTER_CAPTURES = 200
 const SHUTDOWN_GRACE_MS = 5000
 const CAPTURE_READY_TIMEOUT_MS = 20000
+const CAPTURE_TOKEN_HEADER = 'X-Capture-Token'
 
 // 죽은 Chromium이 남긴 SingletonLock 등이 재시작 후에도 남아 있지 않도록, 기동 시 한 번 지운다 —
 // process.exit(1) + restart: always는 컨테이너 파일시스템을 보존하므로 이 정리가 없으면 다음
@@ -61,9 +62,10 @@ app.get('/health', (req, res) => {
   })
 })
 
-// path: BASE_URL 뒤에 붙일 프론트 경로(쿼리 포함 가능), selector: 캡처할 요소들의 CSS 셀렉터
+// path: BASE_URL 뒤에 붙일 프론트 경로(쿼리 포함 가능), selector: 캡처할 요소들의 CSS 셀렉터,
+// token: 있으면 이번 캡처에만 소유자 인증 헤더를 실어 보낸다(선택 필드 — 없는 백엔드도 그대로 동작).
 app.post('/capture', (req, res) => {
-  const { path, selector } = req.body
+  const { path, selector, token } = req.body
 
   if (!path || !selector) {
     res.status(400).json({ error: 'path와 selector는 필수입니다' })
@@ -78,7 +80,7 @@ app.post('/capture', (req, res) => {
       error.isQueueTimeout = true
       throw error
     }
-    return handleCapture(path, selector)
+    return handleCapture(path, selector, token)
   })
   // 이번 요청이 실패해도 다음 요청이 대기열에서 계속 이어지도록, 체인 자체는 항상 성공으로 막는다.
   queueTail = turn.then(
@@ -107,13 +109,17 @@ app.post('/capture', (req, res) => {
   )
 })
 
-async function handleCapture(path, selector) {
+async function handleCapture(path, selector, token) {
   const page = await acquirePage()
 
   try {
     if (CAPTURE_USER && CAPTURE_PASS) {
       const credentials = Buffer.from(`${CAPTURE_USER}:${CAPTURE_PASS}`).toString('base64')
       await page.setExtraHTTPHeaders({ Authorization: `Basic ${credentials}` })
+    }
+
+    if (token) {
+      await registerCaptureTokenRoute(page, token)
     }
 
     await page.goto(BASE_URL + path, { waitUntil: 'networkidle', timeout: 30000 })
@@ -130,8 +136,26 @@ async function handleCapture(path, selector) {
 
     return images
   } finally {
+    if (token) {
+      // 이 페이지에만 건 라우팅이므로 컨텍스트 전체 쿠키·헤더에는 소유자 인증이 남지 않는다. page.close()가
+      // 라우팅도 함께 폐기하지만, 다음 캡처에 절대 새어 나가지 않도록 명시적으로도 해제한다.
+      await withTimeout(page.unrouteAll(), CLEANUP_TIMEOUT_MS)
+    }
     await withTimeout(page.close(), CLEANUP_TIMEOUT_MS)
   }
+}
+
+// 캡처 대상 page에만 라우팅을 걸어, 같은 출처(BASE_URL)의 /api/ 요청에만 소유자 캡처 토큰 헤더를 얹는다.
+// 컨텍스트는 여러 캡처가 공유하므로(launchPersistentContext) 컨텍스트 전체 쿠키·헤더에는 절대 넣지 않는다.
+// 토큰은 로그에 남기지 않는다.
+async function registerCaptureTokenRoute(page, token) {
+  const sameOrigin = new URL(BASE_URL).origin
+  await page.route(
+    (url) => url.origin === sameOrigin && url.pathname.startsWith('/api/'),
+    async (route) => {
+      await route.continue({ headers: { ...route.request().headers(), [CAPTURE_TOKEN_HEADER]: token } })
+    },
+  )
 }
 
 // 매 요청 시작에 컨텍스트가 살아 있는지 확인한다 — 없으면(최초 요청, 이전 실패로 버려짐, 재활용 직후)

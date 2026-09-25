@@ -15,6 +15,7 @@ import dev.eolmae.marketmonitor.domain.custom.repository.CustomStockSectorReposi
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomValueTierThresholdRepository;
 import dev.eolmae.marketmonitor.domain.custom.service.CustomValueTierThresholdService;
 import dev.eolmae.marketmonitor.domain.custom.service.SectorTierAggregationService;
+import dev.eolmae.marketmonitor.domain.notification.properties.MarketMonitorProperties;
 import dev.eolmae.marketmonitor.domain.stock.entity.IndustryInfo;
 import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
@@ -55,6 +56,9 @@ import org.springframework.test.util.ReflectionTestUtils;
 class MarketMapQueryServiceTest {
 
     private static final long LEGACY_OWNER_ID = 999999L;
+    // 로그인 사용자(LEGACY_OWNER_ID)와 다른 값으로 둬서, 비로그인일 때 실제로 이 프로퍼티 값을
+    // 읽는지(하드코딩된 값이 우연히 일치하는 게 아닌지)를 구분해 검증한다.
+    private static final long OWNER_PROPERTY_USER_ID = 555555L;
 
     private final StockInfoCacheService stockInfoCacheService = Mockito.mock(StockInfoCacheService.class);
     private final SectorPriceSnapshotRepository sectorPriceSnapshotRepository =
@@ -82,6 +86,8 @@ class MarketMapQueryServiceTest {
     private final IndustryInfoRepository industryInfoRepository = Mockito.mock(IndustryInfoRepository.class);
     private final SectorPriceSnapshotService sectorPriceSnapshotService =
             new SectorPriceSnapshotService(sectorPriceSnapshotRepository);
+    private final MarketMonitorProperties marketMonitorProperties =
+            new MarketMonitorProperties("http://localhost:8081", OWNER_PROPERTY_USER_ID);
     private final MarketMapQueryService service = new MarketMapQueryService(
             stockInfoCacheService,
             sectorPriceSnapshotService,
@@ -92,7 +98,8 @@ class MarketMapQueryServiceTest {
             categoryTierAggregationService,
             marketValueTierThresholdService,
             marketOverviewSnapshotRepository,
-            industryInfoRepository);
+            industryInfoRepository,
+            marketMonitorProperties);
 
     // 구간 스텁 공통 셋업 — 진짜 구간 서비스로 바뀌면서 트리를 빌드하는 모든 테스트에 구간이 필요해졌다
     // (5-1). 구간이 여럿 필요한 테스트는 이 기본값을 자기 stubTierThresholds 호출로 덮어쓴다.
@@ -115,6 +122,15 @@ class MarketMapQueryServiceTest {
     @AfterEach
     void clearAuthentication() {
         SecurityContextHolder.clearContext();
+    }
+
+    @Test
+    void customDataUserId_비로그인이면_market_monitor_owner_user_id_프로퍼티_값을_사용한다() {
+        SecurityContextHolder.clearContext();
+
+        Long userId = ReflectionTestUtils.invokeMethod(service, "customDataUserId");
+
+        assertThat(userId).isEqualTo(OWNER_PROPERTY_USER_ID);
     }
 
     @Test

@@ -1,9 +1,12 @@
 package dev.eolmae.marketmonitor.domain.renderer.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
+import dev.eolmae.marketmonitor.domain.auth.service.AppJwtService;
+import dev.eolmae.marketmonitor.domain.notification.properties.MarketMonitorProperties;
 import dev.eolmae.marketmonitor.domain.renderer.properties.RendererProperties;
 import java.util.Base64;
 import java.util.List;
@@ -21,6 +24,8 @@ import org.springframework.web.client.RestClient;
 public class ScreenshotClient {
 
     private final RendererProperties properties;
+    private final MarketMonitorProperties marketMonitorProperties;
+    private final AppJwtService appJwtService;
 
     @Qualifier("rendererRestClient")
     private final RestClient restClient;
@@ -41,7 +46,7 @@ public class ScreenshotClient {
                     .post()
                     .uri(properties.url() + "/capture")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(new CaptureRequest(path, selector))
+                    .body(new CaptureRequest(path, selector, captureToken()))
                     .retrieve()
                     .body(CaptureResponse.class);
         } catch (Exception e) {
@@ -49,9 +54,20 @@ public class ScreenshotClient {
         }
     }
 
+    // renderer.owner-capture-enabled가 false면(소유자 데이터 이관 전 기본값) 토큰 없이 예전과 동일하게
+    // 동작한다.
+    private String captureToken() {
+        if (!properties.ownerCaptureEnabled()) {
+            return null;
+        }
+        return appJwtService.issueCaptureToken(marketMonitorProperties.ownerUserId());
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     private record CaptureRequest(
             @JsonProperty("path") String path,
-            @JsonProperty("selector") String selector) {}
+            @JsonProperty("selector") String selector,
+            @JsonProperty("token") String token) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record CaptureResponse(List<ImageData> images) {

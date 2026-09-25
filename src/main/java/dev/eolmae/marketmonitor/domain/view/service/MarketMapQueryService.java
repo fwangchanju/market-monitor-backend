@@ -12,6 +12,7 @@ import dev.eolmae.marketmonitor.domain.custom.repository.CustomStockAliasReposit
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomStockSectorRepository;
 import dev.eolmae.marketmonitor.domain.custom.service.CustomValueTierThresholdService;
 import dev.eolmae.marketmonitor.domain.custom.service.SectorTierAggregationService;
+import dev.eolmae.marketmonitor.domain.notification.properties.MarketMonitorProperties;
 import dev.eolmae.marketmonitor.domain.stock.entity.IndustryInfo;
 import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
@@ -62,7 +63,6 @@ public class MarketMapQueryService {
     private static final Long NO_CATEGORY_ID = 0L;
 
     private static final int TOP_N = 2;
-    private static final long TEMPORARY_LEGACY_OWNER_ID = 999999L;
 
     private final StockInfoCacheService stockInfoCacheService;
     private final SectorPriceSnapshotService sectorPriceSnapshotService;
@@ -74,6 +74,7 @@ public class MarketMapQueryService {
     private final CustomValueTierThresholdService customValueTierThresholdService;
     private final MarketOverviewSnapshotRepository marketOverviewSnapshotRepository;
     private final IndustryInfoRepository industryInfoRepository;
+    private final MarketMonitorProperties marketMonitorProperties;
 
     /** 기본 마켓맵: stock_info 카테고리 그대로(override 없이) 기준, 자식 없는 1뎁스 노드로 감싸서 반환
      * (getCustomMarketMap과 응답 모양 통일). snapshotTime이 없으면 최신, 있으면 그 시각 그대로(결정 4). */
@@ -614,6 +615,6 @@ public class MarketMapQueryService {
 
     private Long customDataUserId() {
         Long currentUserId = CurrentUser.currentId();
-        return currentUserId == null ? TEMPORARY_LEGACY_OWNER_ID : currentUserId;
+        return currentUserId == null ? marketMonitorProperties.ownerUserId() : currentUserId;
     }
 }

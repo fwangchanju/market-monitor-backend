@@ -3,7 +3,6 @@ package dev.eolmae.marketmonitor.domain.stock.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -13,7 +12,6 @@ import static org.mockito.Mockito.when;
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.domain.stock.repository.SectorPriceSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.SectorPriceSnapshotRepositoryCustom.MarketSnapshotTime;
-import dev.eolmae.marketmonitor.domain.stock.repository.SectorPriceSnapshotRepositoryCustom.SnapshotRetentionSummary;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
@@ -30,20 +28,7 @@ class SectorPriceSnapshotServiceTest {
             new SectorPriceSnapshotService(sectorPriceSnapshotRepository);
 
     @Test
-    void cleanupSnapshotsBefore_드라이런이면_삭제_메서드를_호출하지_않는다() {
-        LocalDateTime cutoff = LocalDateTime.of(2026, 8, 10, 0, 0);
-        when(sectorPriceSnapshotRepository.findMarketSnapshotTimesInWindow(cutoff, WINDOW_START, WINDOW_END))
-                .thenReturn(List.of());
-        when(sectorPriceSnapshotRepository.summarizeSnapshotsToDelete(eq(cutoff), any(), anyInt()))
-                .thenReturn(emptySummary());
-
-        sectorPriceSnapshotService.cleanupSnapshotsBefore(cutoff, true);
-
-        verify(sectorPriceSnapshotRepository, never()).deleteSnapshotsBefore(any(), any());
-    }
-
-    @Test
-    void cleanupSnapshotsBefore_실삭제_모드면_보존_대상을_넘겨_삭제_메서드를_호출한다() {
+    void cleanupSnapshotsBefore_보존_대상을_넘겨_삭제_메서드를_호출한다() {
         LocalDateTime cutoff = LocalDateTime.of(2026, 8, 10, 0, 0);
         LocalDateTime kospiTime = LocalDateTime.of(2026, 8, 9, 15, 35);
         LocalDateTime kospiEarlier = LocalDateTime.of(2026, 8, 9, 15, 30);
@@ -51,10 +36,8 @@ class SectorPriceSnapshotServiceTest {
                 .thenReturn(List.of(
                         new MarketSnapshotTime(Market.KOSPI, kospiEarlier),
                         new MarketSnapshotTime(Market.KOSPI, kospiTime)));
-        when(sectorPriceSnapshotRepository.summarizeSnapshotsToDelete(eq(cutoff), any(), anyInt()))
-                .thenReturn(emptySummary());
 
-        sectorPriceSnapshotService.cleanupSnapshotsBefore(cutoff, false);
+        sectorPriceSnapshotService.cleanupSnapshotsBefore(cutoff);
 
         // 두 후보 중 늦은 시각(15:35)만 보존 대상으로 넘어간다.
         verify(sectorPriceSnapshotRepository)
@@ -128,14 +111,13 @@ class SectorPriceSnapshotServiceTest {
     // "cutoff 이전 전부"로 무너진다. 이 레포엔 DB 테스트가 없어 그 고장이 빌드에서 안 걸리므로 서비스가
     // 스스로 막아야 한다.
     @Test
-    void cleanupSnapshotsBefore_보존할_스냅샷이_하나도_없으면_삭제하지_않고_예외를_던진다() {
+    void cleanupSnapshotsBefore_보존할_스냅샷이_하나도_없고_cutoff_이전에_행이_있으면_삭제하지_않고_예외를_던진다() {
         LocalDateTime cutoff = LocalDateTime.of(2026, 8, 10, 0, 0);
         when(sectorPriceSnapshotRepository.findMarketSnapshotTimesInWindow(cutoff, WINDOW_START, WINDOW_END))
                 .thenReturn(List.of());
-        when(sectorPriceSnapshotRepository.summarizeSnapshotsToDelete(eq(cutoff), any(), anyInt()))
-                .thenReturn(summaryWithRowsBeforeCutoff());
+        when(sectorPriceSnapshotRepository.existsBefore(cutoff)).thenReturn(true);
 
-        assertThatThrownBy(() -> sectorPriceSnapshotService.cleanupSnapshotsBefore(cutoff, false))
+        assertThatThrownBy(() -> sectorPriceSnapshotService.cleanupSnapshotsBefore(cutoff))
                 .isInstanceOf(IllegalStateException.class);
 
         verify(sectorPriceSnapshotRepository, never()).deleteSnapshotsBefore(any(), any());
@@ -147,19 +129,10 @@ class SectorPriceSnapshotServiceTest {
         LocalDateTime cutoff = LocalDateTime.of(2026, 8, 10, 0, 0);
         when(sectorPriceSnapshotRepository.findMarketSnapshotTimesInWindow(cutoff, WINDOW_START, WINDOW_END))
                 .thenReturn(List.of());
-        when(sectorPriceSnapshotRepository.summarizeSnapshotsToDelete(eq(cutoff), any(), anyInt()))
-                .thenReturn(emptySummary());
+        when(sectorPriceSnapshotRepository.existsBefore(cutoff)).thenReturn(false);
 
-        sectorPriceSnapshotService.cleanupSnapshotsBefore(cutoff, false);
+        sectorPriceSnapshotService.cleanupSnapshotsBefore(cutoff);
 
         verify(sectorPriceSnapshotRepository).deleteSnapshotsBefore(eq(cutoff), eq(List.of()));
-    }
-
-    private SnapshotRetentionSummary emptySummary() {
-        return new SnapshotRetentionSummary(0, 0, null, null, List.of(), List.of(), 0);
-    }
-
-    private SnapshotRetentionSummary summaryWithRowsBeforeCutoff() {
-        return new SnapshotRetentionSummary(1_000, 1_000, null, null, List.of(), List.of(), 0);
     }
 }

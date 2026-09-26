@@ -1,23 +1,36 @@
+CREATE TABLE users (
+    id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
+    issuer VARCHAR(255),
+    sub VARCHAR(255),
+    email VARCHAR(320),
+    role VARCHAR(20) NOT NULL DEFAULT 'USER',
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_users PRIMARY KEY (id),
+    CONSTRAINT uk_users_issuer_sub UNIQUE (issuer, sub),
+    CONSTRAINT ck_users_role CHECK (role IN ('USER', 'ADMIN'))
+);
+
+CREATE TABLE industry_info (
+    id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    CONSTRAINT pk_industry_info PRIMARY KEY (id),
+    CONSTRAINT uk_industry_info_name UNIQUE (name)
+);
+
 CREATE TABLE stock_info (
     stock_code VARCHAR(20) NOT NULL,
     stock_name VARCHAR(100) NOT NULL,
     market_type VARCHAR(20) NOT NULL,
     market_code VARCHAR(5),
-    industry_name VARCHAR(50),
     list_count BIGINT NOT NULL,
     last_price DECIMAL(19,2),
     active BOOLEAN NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_stock_info PRIMARY KEY (stock_code)
-);
-
-CREATE TABLE allowed_ip (
-    ip VARCHAR(45) NOT NULL,
-    role VARCHAR(20) NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_allowed_ip PRIMARY KEY (ip)
+    industry_id BIGINT,
+    CONSTRAINT pk_stock_info PRIMARY KEY (stock_code),
+    CONSTRAINT fk_stock_info_industry FOREIGN KEY (industry_id) REFERENCES industry_info (id)
 );
 
 CREATE TABLE custom_snapshot (
@@ -26,7 +39,10 @@ CREATE TABLE custom_snapshot (
     snapshot_json JSONB NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_custom_snapshot PRIMARY KEY (id)
+    user_id BIGINT NOT NULL,
+    CONSTRAINT pk_custom_snapshot PRIMARY KEY (id),
+    CONSTRAINT uk_custom_snapshot_id_user UNIQUE (id, user_id),
+    CONSTRAINT fk_custom_snapshot_user FOREIGN KEY (user_id) REFERENCES users (id) DEFERRABLE INITIALLY DEFERRED
 );
 
 CREATE TABLE custom_sector (
@@ -38,21 +54,28 @@ CREATE TABLE custom_sector (
     is_excluded BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    user_id BIGINT NOT NULL,
     CONSTRAINT pk_custom_sector PRIMARY KEY (id),
-    CONSTRAINT uk_custom_sector_name UNIQUE (name),
-    CONSTRAINT fk_custom_sector_parent FOREIGN KEY (parent_id) REFERENCES custom_sector (id),
-    CONSTRAINT fk_custom_sector_snapshot FOREIGN KEY (snapshot_id) REFERENCES custom_snapshot (id) ON DELETE SET NULL
+    CONSTRAINT uk_custom_sector_user_name UNIQUE (user_id, name),
+    CONSTRAINT uk_custom_sector_id_user UNIQUE (id, user_id),
+    CONSTRAINT fk_custom_sector_user FOREIGN KEY (user_id) REFERENCES users (id) DEFERRABLE INITIALLY DEFERRED,
+    CONSTRAINT fk_custom_sector_parent_user FOREIGN KEY (parent_id, user_id)
+        REFERENCES custom_sector (id, user_id) DEFERRABLE INITIALLY DEFERRED,
+    CONSTRAINT fk_custom_sector_snapshot_user FOREIGN KEY (snapshot_id, user_id)
+        REFERENCES custom_snapshot (id, user_id) ON DELETE SET NULL (snapshot_id) DEFERRABLE INITIALLY DEFERRED
 );
 
 CREATE TABLE custom_stock_sector (
     stock_code VARCHAR(20) NOT NULL,
     sector_id BIGINT NOT NULL,
-    alias VARCHAR(50),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_custom_stock_sector PRIMARY KEY (stock_code),
+    user_id BIGINT NOT NULL,
+    CONSTRAINT pk_custom_stock_sector PRIMARY KEY (user_id, stock_code),
     CONSTRAINT fk_custom_stock_sector_stock FOREIGN KEY (stock_code) REFERENCES stock_info (stock_code),
-    CONSTRAINT fk_custom_stock_sector_sector FOREIGN KEY (sector_id) REFERENCES custom_sector (id)
+    CONSTRAINT fk_custom_stock_sector_user FOREIGN KEY (user_id) REFERENCES users (id) DEFERRABLE INITIALLY DEFERRED,
+    CONSTRAINT fk_custom_stock_sector_sector_user FOREIGN KEY (sector_id, user_id)
+        REFERENCES custom_sector (id, user_id) DEFERRABLE INITIALLY DEFERRED
 );
 
 CREATE TABLE custom_scale_threshold (
@@ -62,17 +85,10 @@ CREATE TABLE custom_scale_threshold (
     color_label VARCHAR(20),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    user_id BIGINT NOT NULL,
     CONSTRAINT pk_custom_scale_threshold PRIMARY KEY (id),
-    CONSTRAINT uk_custom_scale_threshold_percent UNIQUE (threshold_percent)
-);
-
-CREATE TABLE admin_token (
-    token VARCHAR(64) NOT NULL,
-    last_ip VARCHAR(45),
-    label VARCHAR(50),
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_admin_token PRIMARY KEY (token)
+    CONSTRAINT uk_custom_scale_threshold_user_percent UNIQUE (user_id, threshold_percent),
+    CONSTRAINT fk_custom_scale_threshold_user FOREIGN KEY (user_id) REFERENCES users (id) DEFERRABLE INITIALLY DEFERRED
 );
 
 CREATE TABLE watch_stock (
@@ -243,8 +259,41 @@ CREATE TABLE custom_value_tier_threshold (
     is_excluded_by_default BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    user_id BIGINT NOT NULL,
     CONSTRAINT pk_custom_value_tier_threshold PRIMARY KEY (id),
-    CONSTRAINT uk_custom_value_tier_threshold_label UNIQUE (label)
+    CONSTRAINT uk_custom_value_tier_threshold_user_label UNIQUE (user_id, label),
+    CONSTRAINT fk_custom_value_tier_threshold_user FOREIGN KEY (user_id) REFERENCES users (id) DEFERRABLE INITIALLY DEFERRED
+);
+
+CREATE TABLE custom_stock_alias (
+    user_id BIGINT NOT NULL,
+    stock_code VARCHAR(20) NOT NULL,
+    alias VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_custom_stock_alias PRIMARY KEY (user_id, stock_code),
+    CONSTRAINT fk_custom_stock_alias_stock FOREIGN KEY (stock_code) REFERENCES stock_info (stock_code),
+    CONSTRAINT fk_custom_stock_alias_user FOREIGN KEY (user_id) REFERENCES users (id) DEFERRABLE INITIALLY DEFERRED
+);
+
+CREATE TABLE user_preference (
+    user_id BIGINT NOT NULL,
+    payload JSONB NOT NULL DEFAULT '{}'::JSONB,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_user_preference PRIMARY KEY (user_id),
+    CONSTRAINT fk_user_preference_user FOREIGN KEY (user_id) REFERENCES users (id) DEFERRABLE INITIALLY DEFERRED
+);
+
+CREATE TABLE user_refresh_token (
+    id BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
+    user_id BIGINT NOT NULL,
+    token_hash VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    revoked_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_user_refresh_token PRIMARY KEY (id),
+    CONSTRAINT uk_user_refresh_token_hash UNIQUE (token_hash),
+    CONSTRAINT fk_user_refresh_token_user FOREIGN KEY (user_id) REFERENCES users (id) DEFERRABLE INITIALLY DEFERRED
 );
 
 CREATE INDEX idx_market_overview_snapshot_time ON market_overview_snapshot (snapshot_time);
@@ -256,3 +305,9 @@ CREATE INDEX idx_program_trading_daily_stock_date ON program_trading_daily (stoc
 CREATE INDEX idx_short_selling_daily_stock_date ON short_selling_daily (stock_code, trade_date DESC);
 CREATE INDEX idx_index_contribution_ranking_snapshot_time ON index_contribution_ranking_snapshot (snapshot_time);
 CREATE INDEX idx_sector_price_snapshot_time ON sector_price_snapshot (snapshot_time);
+CREATE INDEX idx_stock_info_industry_id ON stock_info (industry_id);
+CREATE INDEX idx_custom_sector_user_parent ON custom_sector (user_id, parent_id);
+CREATE INDEX idx_custom_sector_user_snapshot ON custom_sector (user_id, snapshot_id);
+CREATE INDEX idx_custom_snapshot_user_id ON custom_snapshot (user_id, id);
+CREATE INDEX idx_custom_stock_sector_user_sector ON custom_stock_sector (user_id, sector_id);
+CREATE INDEX idx_user_refresh_token_user_expiry ON user_refresh_token (user_id, expires_at);

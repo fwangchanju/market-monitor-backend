@@ -33,10 +33,12 @@ class SectorTierAggregationServiceTest {
 
     private final CustomValueTierThresholdRepository marketValueTierThresholdRepository =
             mock(CustomValueTierThresholdRepository.class);
+    private final CustomValueTierThresholdService customValueTierThresholdService =
+            new CustomValueTierThresholdService(marketValueTierThresholdRepository);
     private final MarketMonitorProperties marketMonitorProperties =
             new MarketMonitorProperties("http://localhost:8081", OWNER_PROPERTY_USER_ID);
     private final SectorTierAggregationService service =
-            new SectorTierAggregationService(marketValueTierThresholdRepository, marketMonitorProperties);
+            new SectorTierAggregationService(customValueTierThresholdService, marketMonitorProperties);
 
     @BeforeEach
     void stubAuthentication() {

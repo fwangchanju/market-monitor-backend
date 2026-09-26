@@ -2,7 +2,6 @@ package dev.eolmae.marketmonitor.domain.custom.service;
 
 import dev.eolmae.marketmonitor.domain.auth.service.CurrentUser;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomValueTierThreshold;
-import dev.eolmae.marketmonitor.domain.custom.repository.CustomValueTierThresholdRepository;
 import dev.eolmae.marketmonitor.domain.notification.properties.MarketMonitorProperties;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryTierBreakdown;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
@@ -32,17 +31,19 @@ public class SectorTierAggregationService {
 
     private static final int SCALE = 4;
 
-    private final CustomValueTierThresholdRepository customValueTierThresholdRepository;
+    private final CustomValueTierThresholdService customValueTierThresholdService;
     private final MarketMonitorProperties marketMonitorProperties;
 
     /** 트리(하위 카테고리 재귀 포함)를 카테고리 id별 시가총액 구간별 등락률 원시 합계로 묶는다 —
      * 카테고리 id → 구간별 원시 합계 맵을 돌려준다.
      * items가 하나도 없는 카테고리(자신과 하위 전부 빈 경우)는 결과 맵에
-     * 아예 없다. */
+     * 아예 없다. 리포지토리를 직접 보지 않고 CustomValueTierThresholdService를 거치는 이유 —
+     * 사용자가 구간을 하나도 설정하지 않은 경우(가입 직후 등) 서비스가 백엔드 상수로 폴백해주는데,
+     * 리포지토리를 직접 호출하면 그 폴백 없이 빈 목록을 받아 아래 toBreakdown에서 널 참조가 난다. */
     public Map<Long, List<CategoryTierBreakdown>> aggregateByCategory(List<MarketMapCategoryNode> tree) {
         Long userId = marketMonitorProperties.userIdOrOwner(CurrentUser.currentId());
         Map<String, CustomValueTierThreshold> tierByLabel =
-                customValueTierThresholdRepository.findAllByUserIdOrderByThresholdValueAsc(userId).stream()
+                customValueTierThresholdService.findAllSortedAscending(userId).stream()
                         .collect(Collectors.toMap(CustomValueTierThreshold::getLabel, Function.identity()));
         Map<Long, List<CategoryTierBreakdown>> breakdownsByCategoryId = new HashMap<>();
         collectBreakdowns(tree, tierByLabel, breakdownsByCategoryId);

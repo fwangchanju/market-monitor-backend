@@ -317,5 +317,5 @@ classpath에 없으면 시작 자체를 거부한다. 그래서 브랜치에서 
 
 이 두 규칙은 배포·롤백 플로우가 성립하기 위한 전제 조건이라 예외를 두지 않는다.
 
-`V1__create_schema.sql`을 계속 고쳐쓰는 현재 방침과 그 리스크는 `docs/decisions.md`와
-`docs/operations.md`를 참고한다.
+스키마 변경은 새 버전 파일(V2부터)로 추가한다. V1을 고쳐쓰던 과도기와 예외 절차는 `docs/decisions.md`와
+`docs/operations.md`의 Flyway 항목을 참고한다.

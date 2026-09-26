@@ -120,22 +120,64 @@ DB 마이그레이션이 끼어 있으면 이미지 롤백만으로는 부족하
 
 ---
 
-## Flyway `V1__create_schema.sql`을 수정했을 때
+## Flyway
 
-이 프로젝트는 새 버전 파일을 추가하지 않고 `V1`을 계속 고쳐쓰고 있다(이유는 `docs/decisions.md`).
+스키마 변경은 **새 버전 파일(V2, V3 …)**로 추가한다. 배포할 때 앱이 뜨면서 Flyway가 자동 적용하므로
+서버에서 할 일은 없다. 2026-09-26에 그때까지의 변경을 V1 하나로 합쳤다(`docs/decisions.md`).
 
-`spring.flyway.validate-on-migrate`가 기본값 `true`이므로, 이미 `V1`이 적용된 운영 DB에서는
-checksum 불일치로 앱이 기동하지 않는다.
+`docs/rules/process.md`의 마이그레이션 규칙대로 **하위호환 추가만** 하고, 스키마 PR을 먼저 병합·배포한다.
+그래야 롤백한 옛 이미지도 새 스키마에서 뜬다.
 
-대응 순서:
+### 이미 적용된 V1을 다시 고쳐야 할 때 (예외)
 
-1. 운영 DB의 `flyway_schema_history`에서 해당 버전 행의 checksum을 새 파일 기준으로 갱신하거나,
-   그 행을 삭제하고 `baseline`을 다시 잡는다
-2. 스키마 자체의 실제 변경분은 별도로 DB에 반영해야 한다. `V1` 파일을 고친다고 이미 만들어진
-   테이블이 바뀌지는 않는다
-3. 배포 후 `/actuator/health`로 기동을 확인한다
+V1을 고치면 운영 DB의 checksum과 달라져 앱이 기동하지 않는다(`validate-on-migrate`). 순서:
 
-릴리즈 브랜치 운용을 시작하면 이 방식을 끝내고 정식 버전 분리로 전환한다(`docs/decisions.md`).
+1. PR 병합
+2. 서버에서 `~/scripts/flyway-cli.sh repair` — main을 받아 V1 checksum을 새 파일에 맞춘다. **스키마는
+   바꾸지 않는다**
+3. 없어진 버전 파일의 이력 행을 지운다: `DELETE FROM flyway_schema_history WHERE version = 'N';`
+4. 배포
+5. V1에서 빠진 테이블·컬럼은 운영 DB에서 SQL로 직접 맞춘다(Flyway는 이미 적용된 V1을 다시 실행하지
+   않는다). 옛 코드가 아직 그 테이블을 쓰고 있으면 **배포 뒤에** 실행한다
+
+`flyway-cli.sh info`로 이력을 확인할 수 있다.
+
+---
+
+## 인증과 공개 범위
+
+사이트는 공개돼 있다. nginx는 요청 제한만 걸고(IP당 20r/s·버스트 50, `/api/auth/`는 10r/m·버스트 20)
+그대로 넘긴다. 권한은 백엔드(Spring Security)가 판정한다.
+
+| 요청 | 누가 |
+|---|---|
+| 정적 페이지, 기본 지도·섹터 | 누구나 |
+| `/api/custom/**`, `isCustom=true` | 로그인 사용자, 자기 데이터만 |
+| `/api/admin/**`, `/api/watch-stocks/**` | `users.role = ADMIN` |
+
+관리자 권한은 DB에서 직접 준다: `UPDATE users SET role = 'ADMIN' WHERE id = ?;` 역할은 토큰에 담기므로
+대상 사용자가 다시 로그인해야 적용된다.
+
+### 필요한 환경변수 (`~/env/market-monitor.env`)
+
+| 변수 | 쓰임 |
+|---|---|
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google 로그인 |
+| `AUTH_JWT_SECRET` | 토큰 서명 키, 32바이트 이상. **바꾸면 전원 로그아웃** |
+| `OWNER_USER_ID` | 텔레그램 캡처·캡션을 누구의 데이터로 만들지 |
+| `RENDERER_OWNER_CAPTURE_ENABLED` | `true`면 렌더러에 소유자 캡처 토큰을 넘긴다 |
+
+환경변수는 컨테이너를 새로 만들 때만 읽힌다. 파일을 고친 뒤 배포(또는 `docker compose up -d`)해야 반영된다.
+로그인 복귀 주소는 `application-prod.properties`의 `market-monitor.base-url`을 따른다.
+
+Google Cloud 콘솔(Google Auth Platform): 앱은 게시(프로덕션) 상태다. 요청 범위가 `openid email profile`
+뿐이라 사용자 수 한도와 심사가 없다. 도메인을 바꾸면 리디렉션 URI와 브랜딩 링크를 같이 고친다
+(`docs/backlog.md`).
+
+### 롤백할 때
+
+2026-09-26 이전 이미지(IP 화이트리스트 시절)로는 되돌릴 수 없다. 그 코드가 쓰던 테이블
+(`allowed_ip`, `admin_token` 등)을 지웠기 때문에 `validate`에서 기동이 실패한다.
 
 ---
 

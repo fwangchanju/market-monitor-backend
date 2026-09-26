@@ -10,6 +10,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.SequenceGenerator;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.math.BigDecimal;
@@ -27,7 +28,11 @@ import lombok.Getter;
 public class SectorPriceSnapshot {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "sector_price_snapshot_id_seq")
+    @SequenceGenerator(
+            name = "sector_price_snapshot_id_seq",
+            sequenceName = "sector_price_snapshot_id_seq",
+            allocationSize = 500)
     private Long id;
 
     @Column(nullable = false, length = 20)

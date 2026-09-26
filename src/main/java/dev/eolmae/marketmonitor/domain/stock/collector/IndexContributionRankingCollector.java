@@ -89,7 +89,7 @@ public class IndexContributionRankingCollector {
 
         BigDecimal prevIndexValue = collectMarketOverview(market, mrktTp, indsCd, snapshotTime); // ka20001
         List<SectorPriceListResponse.StockItem> items =
-                collectSectorPrice(market, mrktTp, indsCd, snapshotTime); // ka20002
+                collectSectorPrice(market, mrktTp, indsCd, snapshotTime, stockInfoCache); // ka20002
 
         if (indexContributionRankingSnapshotRepository.existsBySnapshotTimeAndMarketType(snapshotTime, market)) {
             log.debug("지수기여도랭킹 이미 존재, 스킵: market={}, snapshotTime={}", market, snapshotTime);
@@ -131,7 +131,11 @@ public class IndexContributionRankingCollector {
     }
 
     private List<SectorPriceListResponse.StockItem> collectSectorPrice(
-            Market market, String mrktTp, String indsCd, LocalDateTime snapshotTime) {
+            Market market,
+            String mrktTp,
+            String indsCd,
+            LocalDateTime snapshotTime,
+            Map<String, StockInfo> stockInfoCache) {
 
         String stexTp = StexType.KRX_NXT.code(); // KRX+NXT 합산
         var request = new SectorPriceListRequest(mrktTp, indsCd, stexTp);
@@ -142,9 +146,17 @@ public class IndexContributionRankingCollector {
         }
 
         if (!sectorPriceSnapshotRepository.existsByMarketTypeAndSnapshotTime(market, snapshotTime)) {
+            List<SectorPriceSnapshot> entities = new ArrayList<>();
             for (SectorPriceListResponse.StockItem item : response.items()) {
-                sectorPriceSnapshotRepository.save(toSectorPriceEntity(market, snapshotTime, item));
+                // 화면·지수기여도는 코스피·코스닥 주권만 쓰므로 ELW·ETF 등과 stock_info에 없는 신규
+                // 상장 종목은 저장하지 않는다
+                StockInfo stockInfo = stockInfoCache.get(StockCode.removeSuffix(item.stkCd()));
+                if (stockInfo == null || !StockMarketCode.isOrdinaryShare(stockInfo.getMarketCode())) {
+                    continue;
+                }
+                entities.add(toSectorPriceEntity(market, snapshotTime, item));
             }
+            sectorPriceSnapshotRepository.saveAll(entities);
         }
 
         return response.items();

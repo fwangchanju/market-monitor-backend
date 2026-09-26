@@ -1,22 +1,36 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
+import dev.eolmae.marketmonitor.domain.stock.dto.SectorCurrentPriceRequest;
+import dev.eolmae.marketmonitor.domain.stock.dto.SectorCurrentPriceResponse;
+import dev.eolmae.marketmonitor.domain.stock.dto.SectorPriceListRequest;
+import dev.eolmae.marketmonitor.domain.stock.dto.SectorPriceListResponse;
+import dev.eolmae.marketmonitor.domain.stock.entity.SectorPriceSnapshot;
+import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.repository.IndexContributionRankingSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketOverviewSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.SectorPriceSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceCacheService;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
+import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.support.TransactionTemplate;
 
 // transactionTemplate을 mock해 collectForMarket(실제 수집)이 돌지 않게 막고, 마켓 트랜잭션 직후의
@@ -82,5 +96,61 @@ class IndexContributionRankingCollectorTest {
 
         verify(sectorPriceCacheService).getCache(Market.KOSPI, snapshotTime);
         verify(sectorPriceCacheService).getCache(Market.KOSDAQ, snapshotTime);
+    }
+
+    // 결정 1 — 저장 필터: stockInfoCache 조회 키는 접미사를 뗀 코드다. 접미사 있는 코드("005930_AL")를
+    // 그대로 넣어서 조회 키 실수를 잡는다. 주권 + ETF(marketCode="8") + 캐시에 없는 종목을 섞고
+    // saveAll에 주권만 넘어가는지 확인한다.
+    @Test
+    @SuppressWarnings("unchecked") // ArgumentCaptor.forClass(List.class)가 raw List를 요구한다
+    void collect_저장할_때_stockInfoCache에서_주권만_거른다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+
+        // executeWithoutResult가 콜백을 실제로 실행하게 함 — collectForMarket이 돌아야 저장 필터를 검증할 수 있다.
+        doAnswer(invocation -> {
+                    Consumer<TransactionStatus> action = invocation.getArgument(0);
+                    action.accept(null);
+                    return null;
+                })
+                .when(transactionTemplate)
+                .executeWithoutResult(any());
+
+        StockInfo ordinaryShare =
+                StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", 1L, 6_000_000_000L, BigDecimal.valueOf(70_000));
+        StockInfo etf = StockInfo.create(
+                "069500", "KODEX 200", Market.KOSPI, "8", null, 100_000_000L, BigDecimal.valueOf(30_000));
+        Map<String, StockInfo> stockInfoCache = Map.of("005930", ordinaryShare, "069500", etf);
+        when(stockInfoCacheService.getCache()).thenReturn(stockInfoCache);
+
+        SectorPriceListResponse.StockItem ordinaryItem =
+                new SectorPriceListResponse.StockItem("005930_AL", "삼성전자", "70100", "2", "100", "0.14");
+        SectorPriceListResponse.StockItem etfItem =
+                new SectorPriceListResponse.StockItem("069500_AL", "KODEX 200", "30100", "2", "100", "0.33");
+        SectorPriceListResponse.StockItem unknownItem =
+                new SectorPriceListResponse.StockItem("900110_AL", "미확인종목", "1000", "2", "10", "1.0");
+        var sectorPriceListResponse =
+                new SectorPriceListResponse("0", "정상", List.of(ordinaryItem, etfItem, unknownItem));
+        when(kiwoomApiClient.post(any(SectorPriceListRequest.class), eq(SectorPriceListResponse.class)))
+                .thenReturn(sectorPriceListResponse);
+
+        var sectorCurrentPriceResponse = new SectorCurrentPriceResponse(
+                "0", "정상", "1000", "2", "10", "0.1", "0", "0", "0", "0", "0", "0", "1", "0", "0", "0", "0", "0",
+                List.of());
+        when(kiwoomApiClient.post(any(SectorCurrentPriceRequest.class), eq(SectorCurrentPriceResponse.class)))
+                .thenReturn(sectorCurrentPriceResponse);
+
+        // 랭킹 단계는 건너뛴다 — 이 테스트의 관심사가 아니고, 건너뛰지 않으면 전일 시가총액 0 예외가 난다.
+        when(indexContributionRankingSnapshotRepository.existsBySnapshotTimeAndMarketType(any(), any()))
+                .thenReturn(true);
+
+        collector.collect(snapshotTime);
+
+        ArgumentCaptor<List<SectorPriceSnapshot>> captor = ArgumentCaptor.forClass(List.class);
+        verify(sectorPriceSnapshotRepository, Mockito.times(2)).saveAll(captor.capture());
+
+        for (List<SectorPriceSnapshot> saved : captor.getAllValues()) {
+            assertThat(saved).hasSize(1);
+            assertThat(saved.get(0).getStockCode()).isEqualTo("005930");
+        }
     }
 }

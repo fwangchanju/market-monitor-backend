@@ -32,9 +32,6 @@ public class StockInfo {
     @Column(length = 5)
     private String marketCode;
 
-    @Column(name = "industry_name", length = 50)
-    private String industryName;
-
     @Column(name = "industry_id")
     private Long industryId;
 
@@ -60,7 +57,7 @@ public class StockInfo {
             String stockName,
             Market marketType,
             String marketCode,
-            String industryName,
+            Long industryId,
             Long listCount,
             BigDecimal lastPrice) {
         var entity = new StockInfo();
@@ -68,7 +65,7 @@ public class StockInfo {
         entity.stockName = stockName;
         entity.marketType = marketType;
         entity.marketCode = marketCode;
-        entity.industryName = industryName;
+        entity.industryId = industryId;
         entity.listCount = listCount;
         entity.lastPrice = lastPrice;
         entity.active = true;
@@ -77,47 +74,21 @@ public class StockInfo {
         return entity;
     }
 
-    public static StockInfo create(
-            String stockCode,
-            String stockName,
-            Market marketType,
-            String marketCode,
-            String industryName,
-            Long industryId,
-            Long listCount,
-            BigDecimal lastPrice) {
-        StockInfo entity = create(stockCode, stockName, marketType, marketCode, industryName, listCount, lastPrice);
-        entity.industryId = industryId;
-        return entity;
-    }
-
     public void update(
             String stockName,
             Market marketType,
             String marketCode,
-            String industryName,
+            Long industryId,
             Long listCount,
             BigDecimal lastPrice) {
         this.stockName = stockName;
         this.marketType = marketType;
         this.marketCode = marketCode;
-        this.industryName = industryName;
+        this.industryId = industryId;
         this.listCount = listCount;
         this.lastPrice = lastPrice;
         this.active = true;
         this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
-    }
-
-    public void update(
-            String stockName,
-            Market marketType,
-            String marketCode,
-            String industryName,
-            Long industryId,
-            Long listCount,
-            BigDecimal lastPrice) {
-        update(stockName, marketType, marketCode, industryName, listCount, lastPrice);
-        this.industryId = industryId;
     }
 
     public void markInactive() {

@@ -149,10 +149,10 @@ class MarketMapQueryServiceTest {
                         CustomStockSector.create("009150", 1L),
                         CustomStockSector.create("051910", 3L)));
 
-        StockInfo samsung = stockInfo("005930", "삼성전자", null, 100L, BigDecimal.TEN);
-        StockInfo skHynix = stockInfo("000660", "SK하이닉스", null, 50L, BigDecimal.valueOf(20));
-        StockInfo lgElectronics = stockInfo("009150", "삼성전기", null, 200L, BigDecimal.valueOf(5));
-        StockInfo lgChem = stockInfo("051910", "LG화학", "화학", 500L, BigDecimal.ONE);
+        StockInfo samsung = stockInfo("005930", "삼성전자", 100L, BigDecimal.TEN);
+        StockInfo skHynix = stockInfo("000660", "SK하이닉스", 50L, BigDecimal.valueOf(20));
+        StockInfo lgElectronics = stockInfo("009150", "삼성전기", 200L, BigDecimal.valueOf(5));
+        StockInfo lgChem = stockInfo("051910", "LG화학", 500L, BigDecimal.ONE);
 
         Map<String, StockInfo> stockInfoCache = List.of(samsung, skHynix, lgElectronics, lgChem).stream()
                 .collect(Collectors.toMap(StockInfo::getStockCode, Function.identity()));
@@ -203,11 +203,9 @@ class MarketMapQueryServiceTest {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
 
         // 기본 마켓맵은 custom_sector를 쓰지 않고 industry_info를 조회한다.
-        StockInfo samsung = stockInfo("005930", "삼성전자", "반도체", 100L, BigDecimal.TEN);
-        StockInfo skHynix = stockInfo("000660", "SK하이닉스", "반도체", 50L, BigDecimal.valueOf(20));
-        StockInfo lgChem = stockInfo("051910", "LG화학", "", 500L, BigDecimal.ONE);
-        ReflectionTestUtils.setField(samsung, "industryName", "구 업종명");
-        ReflectionTestUtils.setField(skHynix, "industryName", "구 업종명");
+        StockInfo samsung = stockInfo("005930", "삼성전자", 100L, BigDecimal.TEN);
+        StockInfo skHynix = stockInfo("000660", "SK하이닉스", 50L, BigDecimal.valueOf(20));
+        StockInfo lgChem = stockInfo("051910", "LG화학", 500L, BigDecimal.ONE);
         ReflectionTestUtils.setField(samsung, "industryId", 7L);
         ReflectionTestUtils.setField(skHynix, "industryId", 7L);
         IndustryInfo currentIndustry = IndustryInfo.create("반도체");
@@ -262,7 +260,7 @@ class MarketMapQueryServiceTest {
         when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor, empty));
         when(marketMapStockCategoryRepository.findAll()).thenReturn(List.of(CustomStockSector.create("005930", 1L)));
 
-        StockInfo samsung = stockInfo("005930", "삼성전자", null, 100L, BigDecimal.TEN);
+        StockInfo samsung = stockInfo("005930", "삼성전자", 100L, BigDecimal.TEN);
         Map<String, StockInfo> stockInfoCache =
                 List.of(samsung).stream().collect(Collectors.toMap(StockInfo::getStockCode, Function.identity()));
         when(stockInfoCacheService.getCache()).thenReturn(stockInfoCache);
@@ -305,8 +303,8 @@ class MarketMapQueryServiceTest {
         when(marketMapStockCategoryRepository.findAll())
                 .thenReturn(List.of(CustomStockSector.create("009150", 1L), CustomStockSector.create("005930", 2L)));
 
-        StockInfo lgElectronics = stockInfo("009150", "삼성전기", null, 200L, BigDecimal.valueOf(5));
-        StockInfo samsung = stockInfo("005930", "삼성전자", null, 100L, BigDecimal.TEN);
+        StockInfo lgElectronics = stockInfo("009150", "삼성전기", 200L, BigDecimal.valueOf(5));
+        StockInfo samsung = stockInfo("005930", "삼성전자", 100L, BigDecimal.TEN);
         Map<String, StockInfo> stockInfoCache = List.of(lgElectronics, samsung).stream()
                 .collect(Collectors.toMap(StockInfo::getStockCode, Function.identity()));
         when(stockInfoCacheService.getCache()).thenReturn(stockInfoCache);
@@ -338,8 +336,8 @@ class MarketMapQueryServiceTest {
         when(marketMapStockCategoryRepository.findAll())
                 .thenReturn(List.of(CustomStockSector.create("005930", 1L), CustomStockSector.create("000660", 1L)));
 
-        StockInfo samsung = stockInfo("005930", "삼성전자", null, 100L, BigDecimal.TEN);
-        StockInfo skHynix = stockInfo("000660", "SK하이닉스", null, 50L, BigDecimal.valueOf(20));
+        StockInfo samsung = stockInfo("005930", "삼성전자", 100L, BigDecimal.TEN);
+        StockInfo skHynix = stockInfo("000660", "SK하이닉스", 50L, BigDecimal.valueOf(20));
         Map<String, StockInfo> stockInfoCache = List.of(samsung, skHynix).stream()
                 .collect(Collectors.toMap(StockInfo::getStockCode, Function.identity()));
         when(stockInfoCacheService.getCache()).thenReturn(stockInfoCache);
@@ -1071,9 +1069,8 @@ class MarketMapQueryServiceTest {
         return CustomSector.createChild(name, parent);
     }
 
-    private StockInfo stockInfo(
-            String stockCode, String stockName, String categoryName, Long listCount, BigDecimal lastPrice) {
-        return StockInfo.create(stockCode, stockName, Market.KOSPI, "0", categoryName, listCount, lastPrice);
+    private StockInfo stockInfo(String stockCode, String stockName, Long listCount, BigDecimal lastPrice) {
+        return StockInfo.create(stockCode, stockName, Market.KOSPI, "0", null, listCount, lastPrice);
     }
 
     private Map.Entry<String, CachedStockPrice> priceSnapshot(

@@ -21,9 +21,6 @@ public class CustomStockSector {
     @Column(name = "sector_id", nullable = false)
     private Long sectorId;
 
-    @Column(length = 50)
-    private String alias;
-
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
@@ -56,11 +53,6 @@ public class CustomStockSector {
 
     public void reassign(Long sectorId) {
         this.sectorId = sectorId;
-        this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
-    }
-
-    public void updateAlias(String alias) {
-        this.alias = alias;
         this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
     }
 }

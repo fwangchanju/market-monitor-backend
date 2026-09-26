@@ -75,7 +75,6 @@ public class StockInfoCollector {
                     fetched.stockName(),
                     fetched.market(),
                     fetched.marketCode(),
-                    fetched.categoryName(),
                     industryId(fetched, industryByName),
                     fetched.listCount(),
                     fetched.lastPrice());
@@ -88,7 +87,6 @@ public class StockInfoCollector {
                         fetched.stockName(),
                         fetched.market(),
                         fetched.marketCode(),
-                        fetched.categoryName(),
                         industryId(fetched, industryByName),
                         fetched.listCount(),
                         fetched.lastPrice()))

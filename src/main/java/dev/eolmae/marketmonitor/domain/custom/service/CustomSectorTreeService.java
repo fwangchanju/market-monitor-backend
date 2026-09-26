@@ -133,15 +133,6 @@ public class CustomSectorTreeService {
         customStockAliasRepository.saveAll(snapshot.aliases().stream()
                 .map(alias -> CustomStockAlias.create(userId, alias.stockCode(), alias.alias()))
                 .toList());
-        customStockSectorRepository.flush();
-        jdbcTemplate.update("UPDATE custom_stock_sector SET alias = NULL WHERE user_id = ?", userId);
-        for (CustomSnapshotPayload.StockAlias alias : snapshot.aliases()) {
-            jdbcTemplate.update(
-                    "UPDATE custom_stock_sector SET alias = ? WHERE user_id = ? AND stock_code = ?",
-                    alias.alias(),
-                    userId,
-                    alias.stockCode());
-        }
         customScaleThresholdRepository.saveAll(snapshot.scaleThresholds().stream()
                 .map(threshold -> CustomScaleThreshold.create(
                         userId, threshold.thresholdPercent(), threshold.color(), threshold.colorLabel()))

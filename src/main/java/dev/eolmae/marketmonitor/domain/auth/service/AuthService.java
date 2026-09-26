@@ -14,7 +14,6 @@ import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -54,7 +53,8 @@ public class AuthService {
     private final JdbcTemplate jdbcTemplate;
 
     @Transactional
-    public IssuedTokens loginWithGoogle(String code, String codeVerifier, String redirectUri, long requestStartedAt) {
+    public IssuedTokens loginWithGoogle(String code, String codeVerifier, String redirectUri) {
+        log.info("Google 로그인 콜백 진입");
         requireGoogleConfiguration();
         String idToken = exchangeCodeForIdToken(code, codeVerifier, redirectUri);
         Jwt googleUser = verifyGoogleIdToken(idToken);
@@ -79,18 +79,10 @@ public class AuthService {
                     RETURNING id
                     """, (resultSet, rowNumber) -> resultSet.getLong(1), issuer, subject, email);
             if (!insertedIds.isEmpty()) {
-                long userInsertedAt = System.nanoTime();
                 Long newUserId = insertedIds.getFirst();
-                log.info(
-                        "신규 가입 users INSERT 완료: userId={}, elapsedMs={}",
-                        newUserId,
-                        TimeUnit.NANOSECONDS.toMillis(userInsertedAt - requestStartedAt));
+                log.info("신규 가입 users INSERT 완료: userId={}", newUserId);
                 eventPublisher.publishEvent(new UserSignedUpEvent(newUserId));
-                long initializedAt = System.nanoTime();
-                log.info(
-                        "신규 가입 템플릿 복제 완료: userId={}, elapsedMs={}",
-                        newUserId,
-                        TimeUnit.NANOSECONDS.toMillis(initializedAt - userInsertedAt));
+                log.info("신규 가입 템플릿 복제 완료: userId={}", newUserId);
                 user = userAccountRepository.findById(newUserId).orElseThrow();
             } else {
                 user = userAccountRepository.findByIssuerAndSub(issuer, subject).orElseThrow();

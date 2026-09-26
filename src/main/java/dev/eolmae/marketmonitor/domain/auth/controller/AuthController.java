@@ -90,7 +90,6 @@ public class AuthController {
             @RequestParam String state,
             HttpServletRequest request,
             HttpServletResponse response) {
-        long requestStartedAt = System.nanoTime();
         String expectedState = cookie(request, STATE_COOKIE);
         String verifier = cookie(request, VERIFIER_COOKIE);
         if (expectedState == null
@@ -105,7 +104,7 @@ public class AuthController {
         expireCookie(response, VERIFIER_COOKIE, "/api/auth/google");
         String returnTo = decodedReturnTo(cookie(request, RETURN_TO_COOKIE));
         expireCookie(response, RETURN_TO_COOKIE, "/api/auth/google");
-        IssuedTokens tokens = authService.loginWithGoogle(code, verifier, callbackUri(), requestStartedAt);
+        IssuedTokens tokens = authService.loginWithGoogle(code, verifier, callbackUri());
         setTokens(response, tokens);
         return new RedirectView(authProperties.getFrontendUrl() + returnTo);
     }

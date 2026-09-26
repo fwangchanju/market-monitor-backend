@@ -4,14 +4,19 @@ import dev.eolmae.marketmonitor.common.enums.Zone;
 import jakarta.persistence.Column;
 import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
+import jakarta.persistence.PostLoad;
+import jakarta.persistence.PostPersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import java.time.LocalDateTime;
+import lombok.AccessLevel;
 import lombok.Getter;
+import org.springframework.data.domain.Persistable;
 
 @Entity
 @Table(name = "custom_stock_alias")
 @Getter
-public class CustomStockAlias {
+public class CustomStockAlias implements Persistable<CustomStockAliasId> {
 
     @EmbeddedId
     private CustomStockAliasId id;
@@ -24,6 +29,12 @@ public class CustomStockAlias {
 
     @Column(nullable = false)
     private LocalDateTime updatedAt;
+
+    // id를 앱이 직접 넣는 엔티티라 Spring Data는 새 객체도 기존 행으로 보고 merge한다(저장 전 행마다
+    // SELECT). 새로 만든 객체만 persist되게 해서 가입 복제·스냅샷 복원의 saveAll이 배치 INSERT로 나가게 한다.
+    @Transient
+    @Getter(AccessLevel.NONE)
+    private boolean newEntity = true;
 
     protected CustomStockAlias() {}
 
@@ -48,5 +59,16 @@ public class CustomStockAlias {
     public void updateAlias(String alias) {
         this.alias = alias;
         this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
+    }
+
+    @Override
+    public boolean isNew() {
+        return newEntity;
+    }
+
+    @PostLoad
+    @PostPersist
+    void markNotNew() {
+        this.newEntity = false;
     }
 }

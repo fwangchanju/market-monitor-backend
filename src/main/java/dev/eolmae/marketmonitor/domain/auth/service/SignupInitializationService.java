@@ -1,6 +1,22 @@
 package dev.eolmae.marketmonitor.domain.auth.service;
 
 import dev.eolmae.marketmonitor.common.event.UserSignedUpEvent;
+import dev.eolmae.marketmonitor.domain.custom.entity.CustomScaleThreshold;
+import dev.eolmae.marketmonitor.domain.custom.entity.CustomSector;
+import dev.eolmae.marketmonitor.domain.custom.entity.CustomStockAlias;
+import dev.eolmae.marketmonitor.domain.custom.entity.CustomStockSector;
+import dev.eolmae.marketmonitor.domain.custom.entity.CustomValueTierThreshold;
+import dev.eolmae.marketmonitor.domain.custom.entity.UserPreference;
+import dev.eolmae.marketmonitor.domain.custom.repository.CustomScaleThresholdRepository;
+import dev.eolmae.marketmonitor.domain.custom.repository.CustomSectorRepository;
+import dev.eolmae.marketmonitor.domain.custom.repository.CustomStockAliasRepository;
+import dev.eolmae.marketmonitor.domain.custom.repository.CustomStockSectorRepository;
+import dev.eolmae.marketmonitor.domain.custom.repository.CustomValueTierThresholdRepository;
+import dev.eolmae.marketmonitor.domain.custom.repository.UserPreferenceRepository;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.event.EventListener;
 import org.springframework.jdbc.core.ConnectionCallback;
@@ -16,7 +32,14 @@ public class SignupInitializationService {
     private static final long TEMPLATE_USER_ID = 1L;
 
     private final JdbcTemplate jdbcTemplate;
+    private final CustomSectorRepository customSectorRepository;
+    private final CustomStockSectorRepository customStockSectorRepository;
+    private final CustomStockAliasRepository customStockAliasRepository;
+    private final CustomScaleThresholdRepository customScaleThresholdRepository;
+    private final CustomValueTierThresholdRepository customValueTierThresholdRepository;
+    private final UserPreferenceRepository userPreferenceRepository;
 
+    /** 템플릿 계정(user_id = 1)의 커스텀 데이터를 신규 사용자에게 복제한다. 스냅샷 이력은 복제하지 않는다. */
     @EventListener
     @Transactional
     public void onUserSignedUp(UserSignedUpEvent event) {
@@ -30,67 +53,53 @@ public class SignupInitializationService {
             }
             return null;
         });
-        // 섹터의 ID는 새로 발급한다. 이름은 사용자별 유일하므로 부모와 종목 배정을 이름으로 재연결한다.
-        // snapshot_id는 과거 스냅샷을 복제하지 않으므로 비운다.
-        jdbcTemplate.update("""
-                INSERT INTO custom_sector (user_id, parent_id, name, depth, is_excluded, created_at, updated_at)
-                SELECT ?, NULL, source.name, source.depth, source.is_excluded, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                FROM custom_sector source
-                WHERE source.user_id = ?
-                ON CONFLICT (user_id, name) DO NOTHING
-                """, userId, TEMPLATE_USER_ID);
-        jdbcTemplate.update("""
-                UPDATE custom_sector target
-                SET parent_id = target_parent.id
-                FROM custom_sector source
-                JOIN custom_sector source_parent ON source_parent.id = source.parent_id
-                JOIN custom_sector target_parent ON target_parent.user_id = ?
-                    AND target_parent.name = source_parent.name
-                WHERE source.user_id = ?
-                    AND target.user_id = ?
-                    AND target.name = source.name
-                    AND target.parent_id IS NULL
-                """, userId, TEMPLATE_USER_ID, userId);
-        jdbcTemplate.update("""
-                INSERT INTO custom_stock_sector (user_id, stock_code, sector_id, created_at, updated_at)
-                SELECT ?, source.stock_code, target_sector.id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                FROM custom_stock_sector source
-                JOIN custom_sector source_sector ON source_sector.id = source.sector_id
-                JOIN custom_sector target_sector ON target_sector.user_id = ?
-                    AND target_sector.name = source_sector.name
-                WHERE source.user_id = ?
-                ON CONFLICT (user_id, stock_code) DO NOTHING
-                """, userId, userId, TEMPLATE_USER_ID);
-        jdbcTemplate.update("""
-                INSERT INTO custom_stock_alias (user_id, stock_code, alias, created_at, updated_at)
-                SELECT ?, source.stock_code, source.alias, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                FROM custom_stock_alias source
-                WHERE source.user_id = ?
-                ON CONFLICT (user_id, stock_code) DO NOTHING
-                """, userId, TEMPLATE_USER_ID);
-        jdbcTemplate.update("""
-                INSERT INTO custom_scale_threshold
-                    (user_id, threshold_percent, color, color_label, created_at, updated_at)
-                SELECT ?, source.threshold_percent, source.color, source.color_label,
-                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                FROM custom_scale_threshold source
-                WHERE source.user_id = ?
-                ON CONFLICT (user_id, threshold_percent) DO NOTHING
-                """, userId, TEMPLATE_USER_ID);
-        jdbcTemplate.update("""
-                INSERT INTO custom_value_tier_threshold
-                    (user_id, label, threshold_value, is_excluded_by_default, created_at, updated_at)
-                SELECT ?, source.label, source.threshold_value, source.is_excluded_by_default,
-                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                FROM custom_value_tier_threshold source
-                WHERE source.user_id = ?
-                ON CONFLICT (user_id, label) DO NOTHING
-                """, userId, TEMPLATE_USER_ID);
-        jdbcTemplate.update("""
-                INSERT INTO user_preference (user_id, payload, updated_at)
-                SELECT ?, COALESCE((SELECT payload FROM user_preference WHERE user_id = ?), '{}'::jsonb),
-                    CURRENT_TIMESTAMP
-                ON CONFLICT (user_id) DO NOTHING
-                """, userId, TEMPLATE_USER_ID);
+
+        Map<Long, CustomSector> sectorByTemplateId = copySectors(userId);
+        customStockSectorRepository.saveAll(customStockSectorRepository.findAllByIdUserId(TEMPLATE_USER_ID).stream()
+                .map(source -> CustomStockSector.create(
+                        userId,
+                        source.getStockCode(),
+                        sectorByTemplateId.get(source.getSectorId()).getId()))
+                .toList());
+        customStockAliasRepository.saveAll(customStockAliasRepository.findAllByIdUserId(TEMPLATE_USER_ID).stream()
+                .map(source -> CustomStockAlias.create(userId, source.getStockCode(), source.getAlias()))
+                .toList());
+        customScaleThresholdRepository.saveAll(customScaleThresholdRepository.findAllByUserId(TEMPLATE_USER_ID).stream()
+                .map(source -> CustomScaleThreshold.create(
+                        userId, source.getThresholdPercent(), source.getColor(), source.getColorLabel()))
+                .toList());
+        customValueTierThresholdRepository.saveAll(
+                customValueTierThresholdRepository.findAllByUserIdOrderByThresholdValueAsc(TEMPLATE_USER_ID).stream()
+                        .map(source -> CustomValueTierThreshold.create(
+                                userId, source.getLabel(), source.getThresholdValue(), source.isExcludedByDefault()))
+                        .toList());
+        copyPreference(userId);
+    }
+
+    // 부모가 먼저 저장돼야 자식이 새 부모 id를 받으므로 depth 순으로 저장한다. IDENTITY라 save 즉시 id가 나온다.
+    // 반환값은 템플릿 섹터 id → 새 섹터 — 종목 배정을 새 섹터에 연결할 때 쓴다.
+    private Map<Long, CustomSector> copySectors(Long userId) {
+        List<CustomSector> templateSectors = customSectorRepository.findAllByUserId(TEMPLATE_USER_ID).stream()
+                .sorted(Comparator.comparingInt(CustomSector::getDepth).thenComparing(CustomSector::getId))
+                .toList();
+        Map<Long, CustomSector> sectorByTemplateId = new HashMap<>();
+        for (CustomSector source : templateSectors) {
+            CustomSector copy = source.hasNoParent()
+                    ? CustomSector.createParent(userId, source.getName())
+                    : CustomSector.createChild(userId, source.getName(), sectorByTemplateId.get(source.getParentId()));
+            if (source.isExcluded()) {
+                copy.exclude();
+            }
+            sectorByTemplateId.put(source.getId(), customSectorRepository.save(copy));
+        }
+        return sectorByTemplateId;
+    }
+
+    private void copyPreference(Long userId) {
+        UserPreference preference = UserPreference.createEmpty(userId);
+        userPreferenceRepository
+                .findById(TEMPLATE_USER_ID)
+                .ifPresent(template -> preference.overwrite(template.getPayload()));
+        userPreferenceRepository.save(preference);
     }
 }

@@ -20,8 +20,6 @@ import lombok.Getter;
 @Getter
 public class CustomValueTierThreshold {
 
-    private static final Long LEGACY_OWNER_ID = 999999L;
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -45,10 +43,6 @@ public class CustomValueTierThreshold {
     private LocalDateTime updatedAt;
 
     protected CustomValueTierThreshold() {}
-
-    public static CustomValueTierThreshold create(String label, Long thresholdValue, boolean isExcludedByDefault) {
-        return create(LEGACY_OWNER_ID, label, thresholdValue, isExcludedByDefault);
-    }
 
     public static CustomValueTierThreshold create(
             Long userId, String label, Long thresholdValue, boolean isExcludedByDefault) {

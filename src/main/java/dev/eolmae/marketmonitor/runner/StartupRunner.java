@@ -1,8 +1,5 @@
 package dev.eolmae.marketmonitor.runner;
 
-import dev.eolmae.marketmonitor.domain.access.entity.AdminToken;
-import dev.eolmae.marketmonitor.domain.access.properties.AdminProperties;
-import dev.eolmae.marketmonitor.domain.access.repository.AdminTokenRepository;
 import dev.eolmae.marketmonitor.domain.stock.collector.HoldingsSyncService;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketmonitor.domain.stock.service.WatchStockBackfillService;
@@ -24,9 +21,6 @@ public class StartupRunner implements ApplicationRunner {
     @SuppressWarnings("UnusedVariable")
     private final WatchStockBackfillService watchStockBackfillService;
 
-    private final AdminTokenRepository adminTokenRepository;
-    private final AdminProperties adminProperties;
-
     @Override
     public void run(ApplicationArguments args) {
         // 1. 전종목 캐싱
@@ -34,9 +28,6 @@ public class StartupRunner implements ApplicationRunner {
 
         // 2·3·4. 보유종목 동기화/관심종목 캐시/백필: 관심종목 구조 정리 전까지 비활성화
         // syncHoldings();
-
-        // 5. 관리자 토큰 동기화
-        syncAdminTokens();
     }
 
     private void loadStockInfoCache() {
@@ -58,19 +49,6 @@ public class StartupRunner implements ApplicationRunner {
             log.info("[startup] 보유종목 동기화 완료");
         } catch (Exception e) {
             log.error("[startup] 보유종목 동기화 실패", e);
-        }
-    }
-
-    private void syncAdminTokens() {
-        try {
-            for (String token : adminProperties.tokens()) {
-                adminTokenRepository
-                        .findById(token)
-                        .ifPresentOrElse(existing -> {}, () -> adminTokenRepository.save(AdminToken.create(token)));
-            }
-            log.info("[startup] 관리자 토큰 동기화 완료");
-        } catch (Exception e) {
-            log.error("[startup] 관리자 토큰 동기화 실패", e);
         }
     }
 }

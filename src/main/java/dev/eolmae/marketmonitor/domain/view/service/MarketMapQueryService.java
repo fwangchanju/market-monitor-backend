@@ -576,7 +576,7 @@ public class MarketMapQueryService {
 
     private String industryName(StockInfo stockInfo, Map<Long, String> industryNameById) {
         if (stockInfo.getIndustryId() == null) {
-            return stockInfo.getIndustryName();
+            return null;
         }
         return industryNameById.get(stockInfo.getIndustryId());
     }
@@ -614,7 +614,6 @@ public class MarketMapQueryService {
     }
 
     private Long customDataUserId() {
-        Long currentUserId = CurrentUser.currentId();
-        return currentUserId == null ? marketMonitorProperties.ownerUserId() : currentUserId;
+        return marketMonitorProperties.userIdOrOwner(CurrentUser.currentId());
     }
 }

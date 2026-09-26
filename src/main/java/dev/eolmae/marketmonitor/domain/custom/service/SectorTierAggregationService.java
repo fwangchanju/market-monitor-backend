@@ -3,6 +3,7 @@ package dev.eolmae.marketmonitor.domain.custom.service;
 import dev.eolmae.marketmonitor.domain.auth.service.CurrentUser;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomValueTierThreshold;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomValueTierThresholdRepository;
+import dev.eolmae.marketmonitor.domain.notification.properties.MarketMonitorProperties;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryTierBreakdown;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapItem;
@@ -30,17 +31,16 @@ import org.springframework.transaction.annotation.Transactional;
 public class SectorTierAggregationService {
 
     private static final int SCALE = 4;
-    private static final long LEGACY_OWNER_ID = 999999L;
 
     private final CustomValueTierThresholdRepository customValueTierThresholdRepository;
+    private final MarketMonitorProperties marketMonitorProperties;
 
     /** 트리(하위 카테고리 재귀 포함)를 카테고리 id별 시가총액 구간별 등락률 원시 합계로 묶는다 —
      * 카테고리 id → 구간별 원시 합계 맵을 돌려준다.
      * items가 하나도 없는 카테고리(자신과 하위 전부 빈 경우)는 결과 맵에
      * 아예 없다. */
     public Map<Long, List<CategoryTierBreakdown>> aggregateByCategory(List<MarketMapCategoryNode> tree) {
-        Long currentUserId = CurrentUser.currentId();
-        Long userId = currentUserId == null ? LEGACY_OWNER_ID : currentUserId;
+        Long userId = marketMonitorProperties.userIdOrOwner(CurrentUser.currentId());
         Map<String, CustomValueTierThreshold> tierByLabel =
                 customValueTierThresholdRepository.findAllByUserIdOrderByThresholdValueAsc(userId).stream()
                         .collect(Collectors.toMap(CustomValueTierThreshold::getLabel, Function.identity()));

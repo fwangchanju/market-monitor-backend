@@ -1,7 +1,7 @@
 package dev.eolmae.marketmonitor.domain.auth.entity;
 
 import dev.eolmae.marketmonitor.common.enums.Zone;
-import dev.eolmae.marketmonitor.domain.access.enums.Role;
+import dev.eolmae.marketmonitor.domain.auth.enums.Role;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

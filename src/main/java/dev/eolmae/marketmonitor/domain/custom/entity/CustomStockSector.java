@@ -13,16 +13,11 @@ import lombok.Getter;
 @Getter
 public class CustomStockSector {
 
-    private static final Long LEGACY_OWNER_ID = 999999L;
-
     @EmbeddedId
     private CustomStockSectorId id;
 
     @Column(name = "sector_id", nullable = false)
     private Long sectorId;
-
-    @Column(length = 50)
-    private String alias;
 
     @Column(nullable = false)
     private LocalDateTime createdAt;
@@ -31,10 +26,6 @@ public class CustomStockSector {
     private LocalDateTime updatedAt;
 
     protected CustomStockSector() {}
-
-    public static CustomStockSector create(String stockCode, Long sectorId) {
-        return create(LEGACY_OWNER_ID, stockCode, sectorId);
-    }
 
     public static CustomStockSector create(Long userId, String stockCode, Long sectorId) {
         var entity = new CustomStockSector();
@@ -56,11 +47,6 @@ public class CustomStockSector {
 
     public void reassign(Long sectorId) {
         this.sectorId = sectorId;
-        this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
-    }
-
-    public void updateAlias(String alias) {
-        this.alias = alias;
         this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
     }
 }

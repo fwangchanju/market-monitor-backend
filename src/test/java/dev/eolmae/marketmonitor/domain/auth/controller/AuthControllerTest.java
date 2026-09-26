@@ -11,8 +11,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import dev.eolmae.marketmonitor.domain.access.enums.Role;
 import dev.eolmae.marketmonitor.domain.auth.dto.AuthSessionResponse;
+import dev.eolmae.marketmonitor.domain.auth.enums.Role;
 import dev.eolmae.marketmonitor.domain.auth.properties.AuthProperties;
 import dev.eolmae.marketmonitor.domain.auth.service.AppJwtService;
 import dev.eolmae.marketmonitor.domain.auth.service.AuthService;

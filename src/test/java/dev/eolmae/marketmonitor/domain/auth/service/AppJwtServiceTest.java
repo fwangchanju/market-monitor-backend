@@ -4,7 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.eolmae.marketmonitor.domain.access.enums.Role;
+import dev.eolmae.marketmonitor.domain.auth.enums.Role;
 import dev.eolmae.marketmonitor.domain.auth.properties.AuthProperties;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;

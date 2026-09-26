@@ -1,6 +1,6 @@
 package dev.eolmae.marketmonitor.domain.auth.service;
 
-import dev.eolmae.marketmonitor.domain.access.enums.Role;
+import dev.eolmae.marketmonitor.domain.auth.enums.Role;
 import java.util.Collection;
 import java.util.List;
 import org.springframework.security.core.GrantedAuthority;

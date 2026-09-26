@@ -7,7 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
-import dev.eolmae.marketmonitor.domain.access.enums.Role;
+import dev.eolmae.marketmonitor.domain.auth.enums.Role;
 import dev.eolmae.marketmonitor.domain.auth.service.AuthenticatedUserPrincipal;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomSector;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomSectorRepository;
@@ -58,7 +58,7 @@ class CustomStockSectorServiceTest {
             jdbcTemplate);
 
     private final CustomSector sector = CustomSector.createParent(USER_ID, "산업");
-    private final StockInfo stock = StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", "반도체", 100L, BigDecimal.TEN);
+    private final StockInfo stock = StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", null, 100L, BigDecimal.TEN);
 
     @BeforeEach
     void setUp() {
@@ -103,7 +103,5 @@ class CustomStockSectorServiceTest {
         service.updateAlias(stock.getStockCode(), "삼전");
 
         verify(jdbcTemplate).update(contains("INSERT INTO custom_stock_alias"), eq(USER_ID), eq("005930"), eq("삼전"));
-        verify(jdbcTemplate)
-                .update(contains("UPDATE custom_stock_sector SET alias"), eq("삼전"), eq(USER_ID), eq("005930"));
     }
 }

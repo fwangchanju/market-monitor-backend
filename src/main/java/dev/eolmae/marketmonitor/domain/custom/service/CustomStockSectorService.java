@@ -94,17 +94,13 @@ public class CustomStockSectorService {
         return new BulkAssignResponse(new ArrayList<>(remaining), sectorId);
     }
 
-    /** 별칭은 배정과 별도로 저장하고, 호환 기간에는 기존 배정 행에도 같은 값을 쓴다. */
+    /** 별칭은 custom_stock_alias에만 저장한다. */
     public void updateAlias(String stockCode, String alias) {
         Long userId = CurrentUser.requireId();
         requireActiveStock(stockCode);
         CustomStockAliasId id = new CustomStockAliasId(userId, stockCode);
         if (alias == null || alias.isBlank()) {
             customStockAliasRepository.deleteById(id);
-            jdbcTemplate.update(
-                    "UPDATE custom_stock_sector SET alias = NULL, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND stock_code = ?",
-                    userId,
-                    stockCode);
             return;
         }
         jdbcTemplate.update("""
@@ -113,11 +109,6 @@ public class CustomStockSectorService {
                 ON CONFLICT (user_id, stock_code)
                 DO UPDATE SET alias = EXCLUDED.alias, updated_at = CURRENT_TIMESTAMP
                 """, userId, stockCode, alias);
-        jdbcTemplate.update(
-                "UPDATE custom_stock_sector SET alias = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND stock_code = ?",
-                alias,
-                userId,
-                stockCode);
     }
 
     @Transactional(readOnly = true)
@@ -187,7 +178,7 @@ public class CustomStockSectorService {
                 alias,
                 totalMarketValue,
                 marketValueTier,
-                stock.getIndustryId() == null ? stock.getIndustryName() : industryNameById.get(stock.getIndustryId()),
+                stock.getIndustryId() == null ? null : industryNameById.get(stock.getIndustryId()),
                 parent == null ? null : parent.getName(),
                 sector == null ? null : sector.getName(),
                 sector == null ? null : sector.getId());

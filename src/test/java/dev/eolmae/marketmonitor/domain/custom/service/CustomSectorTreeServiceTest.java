@@ -13,20 +13,22 @@ import dev.eolmae.marketmonitor.domain.custom.entity.CustomSector;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomStockAlias;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomStockSector;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomValueTierThreshold;
+import dev.eolmae.marketmonitor.domain.custom.entity.UserPreference;
 import dev.eolmae.marketmonitor.domain.custom.enums.ColorLabel;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomScaleThresholdRepository;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomSectorRepository;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomStockAliasRepository;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomStockSectorRepository;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomValueTierThresholdRepository;
+import dev.eolmae.marketmonitor.domain.custom.repository.UserPreferenceRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 import org.mockito.Mockito;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class CustomSectorTreeServiceTest {
@@ -40,8 +42,8 @@ class CustomSectorTreeServiceTest {
             Mockito.mock(CustomScaleThresholdRepository.class);
     private final CustomValueTierThresholdRepository valueTierRepository =
             Mockito.mock(CustomValueTierThresholdRepository.class);
+    private final UserPreferenceRepository userPreferenceRepository = Mockito.mock(UserPreferenceRepository.class);
     private final StockInfoRepository stockInfoRepository = Mockito.mock(StockInfoRepository.class);
-    private final JdbcTemplate jdbcTemplate = Mockito.mock(JdbcTemplate.class);
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final CustomSectorTreeService service = new CustomSectorTreeService(
             sectorRepository,
@@ -49,8 +51,8 @@ class CustomSectorTreeServiceTest {
             stockAliasRepository,
             scaleThresholdRepository,
             valueTierRepository,
+            userPreferenceRepository,
             stockInfoRepository,
-            jdbcTemplate,
             objectMapper);
 
     @Test
@@ -70,8 +72,9 @@ class CustomSectorTreeServiceTest {
                 .thenReturn(List.of(CustomScaleThreshold.create(USER_ID, BigDecimal.ONE, "#ff0000", ColorLabel.RED)));
         when(valueTierRepository.findAllByUserIdOrderByThresholdValueAsc(USER_ID))
                 .thenReturn(List.of(CustomValueTierThreshold.create(USER_ID, "대형주", 1000L, false)));
-        when(jdbcTemplate.queryForObject(Mockito.anyString(), Mockito.eq(String.class), Mockito.eq(USER_ID)))
-                .thenReturn("{\"showValue\":true}");
+        UserPreference preference = UserPreference.createEmpty(USER_ID);
+        preference.overwrite("{\"showValue\":true}");
+        when(userPreferenceRepository.findById(USER_ID)).thenReturn(Optional.of(preference));
 
         String json = service.serializeCurrentSnapshot(USER_ID);
         CustomSnapshotPayload snapshot = objectMapper.readValue(json, CustomSnapshotPayload.class);

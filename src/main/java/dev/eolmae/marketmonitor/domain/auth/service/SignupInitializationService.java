@@ -1,5 +1,7 @@
 package dev.eolmae.marketmonitor.domain.auth.service;
 
+import dev.eolmae.marketmonitor.domain.custom.entity.UserPreference;
+import dev.eolmae.marketmonitor.domain.custom.repository.UserPreferenceRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -13,6 +15,7 @@ public class SignupInitializationService {
     static final long INDUSTRY_USER_SYNC_LOCK = 941270361L;
 
     private final JdbcTemplate jdbcTemplate;
+    private final UserPreferenceRepository userPreferenceRepository;
 
     @Transactional
     public void initialize(Long userId) {
@@ -33,28 +36,8 @@ public class SignupInitializationService {
                 FROM industry_info industry
                 ON CONFLICT (user_id, name) DO NOTHING
                 """, userId);
-        // INSERT ... SELECT + ON CONFLICT DO NOTHING — default_scale_threshold를 신규 사용자 기본값으로
-        // 복제. 동일한 이유로 QueryDSL로 표현 불가.
-        jdbcTemplate.update("""
-                INSERT INTO custom_scale_threshold
-                    (user_id, threshold_percent, color, color_label, created_at, updated_at)
-                SELECT ?, threshold_percent, color, color_label, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                FROM default_scale_threshold
-                ON CONFLICT (user_id, threshold_percent) DO NOTHING
-                """, userId);
-        // INSERT ... SELECT + ON CONFLICT DO NOTHING — default_value_tier_threshold를 신규 사용자
-        // 기본값으로 복제. 동일한 이유로 QueryDSL로 표현 불가.
-        jdbcTemplate.update("""
-                INSERT INTO custom_value_tier_threshold
-                    (user_id, label, threshold_value, is_excluded_by_default, created_at, updated_at)
-                SELECT ?, label, threshold_value, is_excluded_by_default, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                FROM default_value_tier_threshold
-                ON CONFLICT (user_id, label) DO NOTHING
-                """, userId);
-        // ON CONFLICT DO NOTHING + jsonb 리터럴('{}'::JSONB) — user_preference에 매핑된 JPA 엔티티가
-        // 없고, JSONB 캐스팅도 JPQL/QueryDSL 문법이 아니다.
-        jdbcTemplate.update(
-                "INSERT INTO user_preference (user_id, payload) VALUES (?, '{}'::JSONB) ON CONFLICT (user_id) DO NOTHING",
-                userId);
+        if (!userPreferenceRepository.existsById(userId)) {
+            userPreferenceRepository.save(UserPreference.createEmpty(userId));
+        }
     }
 }

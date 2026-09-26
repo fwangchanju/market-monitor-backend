@@ -43,8 +43,8 @@ class CustomStockSectorServiceTest {
     private final StockInfoCacheService stockInfoCacheService = Mockito.mock(StockInfoCacheService.class);
     private final SectorPriceSnapshotService sectorPriceSnapshotService =
             Mockito.mock(SectorPriceSnapshotService.class);
-    private final CustomValueTierThresholdService valueTierService = new CustomValueTierThresholdService(
-            Mockito.mock(CustomValueTierThresholdRepository.class), Mockito.mock(JdbcTemplate.class));
+    private final CustomValueTierThresholdService valueTierService =
+            new CustomValueTierThresholdService(Mockito.mock(CustomValueTierThresholdRepository.class));
     private final IndustryInfoRepository industryInfoRepository = Mockito.mock(IndustryInfoRepository.class);
     private final JdbcTemplate jdbcTemplate = Mockito.mock(JdbcTemplate.class);
     private final CustomStockSectorService service = new CustomStockSectorService(

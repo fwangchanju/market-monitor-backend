@@ -12,11 +12,13 @@ import dev.eolmae.marketmonitor.domain.custom.entity.CustomSector;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomStockAlias;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomStockSector;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomValueTierThreshold;
+import dev.eolmae.marketmonitor.domain.custom.entity.UserPreference;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomScaleThresholdRepository;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomSectorRepository;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomStockAliasRepository;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomStockSectorRepository;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomValueTierThresholdRepository;
+import dev.eolmae.marketmonitor.domain.custom.repository.UserPreferenceRepository;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
 import java.util.HashMap;
@@ -25,7 +27,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -42,8 +43,8 @@ public class CustomSectorTreeService {
     private final CustomStockAliasRepository customStockAliasRepository;
     private final CustomScaleThresholdRepository customScaleThresholdRepository;
     private final CustomValueTierThresholdRepository customValueTierThresholdRepository;
+    private final UserPreferenceRepository userPreferenceRepository;
     private final StockInfoRepository stockInfoRepository;
-    private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
 
     @Transactional(readOnly = true)
@@ -74,11 +75,10 @@ public class CustomSectorTreeService {
                         .map(threshold -> new CustomSnapshotPayload.ValueTierThreshold(
                                 threshold.getLabel(), threshold.getThresholdValue(), threshold.isExcludedByDefault()))
                         .toList();
-        // payload::TEXT — JSONB 캐스팅. user_preference에 매핑된 JPA 엔티티가 없고, JSONB 컬럼
-        // 자체도 JPQL/QueryDSL 문법으로 다룰 수 없다.
-        String preferencesJson = jdbcTemplate.queryForObject(
-                "SELECT payload::TEXT FROM user_preference WHERE user_id = ?", String.class, userId);
-        Map<String, Object> preferences = parsePreferences(preferencesJson);
+        Map<String, Object> preferences = userPreferenceRepository
+                .findById(userId)
+                .map(preference -> parsePreferences(preference.getPayload()))
+                .orElseGet(Map::of);
         return toJson(
                 new CustomSnapshotPayload(SNAPSHOT_VERSION, sectors, assignments, aliases, scales, tiers, preferences));
     }
@@ -208,11 +208,11 @@ public class CustomSectorTreeService {
     }
 
     private void updatePreferences(Long userId, Map<String, Object> preferences) {
-        // CAST(? AS JSONB) — 위와 동일한 이유(엔티티 없음 + JSONB 캐스팅)로 JdbcTemplate을 쓴다.
-        jdbcTemplate.update(
-                "UPDATE user_preference SET payload = CAST(? AS JSONB), updated_at = CURRENT_TIMESTAMP WHERE user_id = ?",
-                toJson(preferences == null ? Map.of() : preferences),
-                userId);
+        String payload = toJson(preferences == null ? Map.of() : preferences);
+        UserPreference preference =
+                userPreferenceRepository.findById(userId).orElseGet(() -> UserPreference.createEmpty(userId));
+        preference.overwrite(payload);
+        userPreferenceRepository.save(preference);
     }
 
     private String toJson(Object value) {

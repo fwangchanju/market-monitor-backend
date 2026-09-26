@@ -47,8 +47,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
 import org.mockito.Mockito;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -74,15 +72,14 @@ class MarketMapQueryServiceTest {
     // findAllByUserIdOrderByThresholdValueAsc()로 종목의 구간을 정한다).
     private final CustomValueTierThresholdRepository marketValueTierThresholdRepository =
             Mockito.mock(CustomValueTierThresholdRepository.class);
-    private final JdbcTemplate jdbcTemplate = Mockito.mock(JdbcTemplate.class);
     private final MarketMonitorProperties marketMonitorProperties =
             new MarketMonitorProperties("http://localhost:8081", OWNER_PROPERTY_USER_ID);
-    private final SectorTierAggregationService categoryTierAggregationService =
-            new SectorTierAggregationService(marketValueTierThresholdRepository, marketMonitorProperties);
     // mock 대신 진짜 객체를 쓴다 — resolveTier가 실제로 실행돼야 트리 기반 테스트의 종목이 의도한 구간에
     // 들어간다(5-1).
     private final CustomValueTierThresholdService marketValueTierThresholdService =
-            new CustomValueTierThresholdService(marketValueTierThresholdRepository, jdbcTemplate);
+            new CustomValueTierThresholdService(marketValueTierThresholdRepository);
+    private final SectorTierAggregationService categoryTierAggregationService =
+            new SectorTierAggregationService(marketValueTierThresholdService, marketMonitorProperties);
     private final MarketOverviewSnapshotRepository marketOverviewSnapshotRepository =
             Mockito.mock(MarketOverviewSnapshotRepository.class);
     private final IndustryInfoRepository industryInfoRepository = Mockito.mock(IndustryInfoRepository.class);
@@ -1020,9 +1017,6 @@ class MarketMapQueryServiceTest {
         when(marketValueTierThresholdRepository.findAll()).thenReturn(List.of(tiers));
         when(marketValueTierThresholdRepository.findAllByUserIdOrderByThresholdValueAsc(999999L))
                 .thenReturn(sorted);
-        Mockito.doReturn(sorted)
-                .when(jdbcTemplate)
-                .query(ArgumentMatchers.anyString(), ArgumentMatchers.<RowMapper<CustomValueTierThreshold>>any());
     }
 
     private CustomValueTierThreshold tierThreshold(

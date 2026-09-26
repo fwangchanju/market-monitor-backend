@@ -3,9 +3,9 @@ package dev.eolmae.marketmonitor.domain.custom.service;
 import dev.eolmae.marketmonitor.domain.auth.service.CurrentUser;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomValueTierThreshold;
 import dev.eolmae.marketmonitor.domain.notification.properties.MarketMonitorProperties;
-import dev.eolmae.marketmonitor.domain.view.dto.CategoryTierBreakdown;
-import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapItem;
+import dev.eolmae.marketmonitor.domain.view.dto.MarketMapSectorNode;
+import dev.eolmae.marketmonitor.domain.view.dto.SectorTierBreakdown;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotAverages;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -20,7 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 마켓맵 카테고리별(하위 카테고리 재귀 포함) × 시가총액 구간별 등락률 원시 합계(분자/분모) 계산.
+ * 마켓맵 섹터별(하위 섹터 재귀 포함) × 시가총액 구간별 등락률 원시 합계(분자/분모) 계산.
  * 트리 자체는 호출부가 MarketMapQueryService로 이미 만들어서 넘겨준다 — 이 서비스가 MarketMapQueryService를
  * 직접 의존하면, MarketMapQueryService가 이 결과를 받아 응답에 채워 넣을 때(반대 방향 의존) 순환 참조가 된다.
  */
@@ -34,31 +34,31 @@ public class SectorTierAggregationService {
     private final CustomValueTierThresholdService customValueTierThresholdService;
     private final MarketMonitorProperties marketMonitorProperties;
 
-    /** 트리(하위 카테고리 재귀 포함)를 카테고리 id별 시가총액 구간별 등락률 원시 합계로 묶는다 —
-     * 카테고리 id → 구간별 원시 합계 맵을 돌려준다.
-     * items가 하나도 없는 카테고리(자신과 하위 전부 빈 경우)는 결과 맵에
+    /** 트리(하위 섹터 재귀 포함)를 섹터 id별 시가총액 구간별 등락률 원시 합계로 묶는다 —
+     * 섹터 id → 구간별 원시 합계 맵을 돌려준다.
+     * items가 하나도 없는 섹터(자신과 하위 전부 빈 경우)는 결과 맵에
      * 아예 없다. 리포지토리를 직접 보지 않고 CustomValueTierThresholdService를 거치는 이유 —
      * 사용자가 구간을 하나도 설정하지 않은 경우(가입 직후 등) 서비스가 백엔드 상수로 폴백해주는데,
      * 리포지토리를 직접 호출하면 그 폴백 없이 빈 목록을 받아 아래 toBreakdown에서 널 참조가 난다. */
-    public Map<Long, List<CategoryTierBreakdown>> aggregateByCategory(List<MarketMapCategoryNode> tree) {
+    public Map<Long, List<SectorTierBreakdown>> aggregateBySector(List<MarketMapSectorNode> tree) {
         Long userId = marketMonitorProperties.userIdOrOwner(CurrentUser.currentId());
         Map<String, CustomValueTierThreshold> tierByLabel =
                 customValueTierThresholdService.findAllSortedAscending(userId).stream()
                         .collect(Collectors.toMap(CustomValueTierThreshold::getLabel, Function.identity()));
-        Map<Long, List<CategoryTierBreakdown>> breakdownsByCategoryId = new HashMap<>();
-        collectBreakdowns(tree, tierByLabel, breakdownsByCategoryId);
-        return breakdownsByCategoryId;
+        Map<Long, List<SectorTierBreakdown>> breakdownsBySectorId = new HashMap<>();
+        collectBreakdowns(tree, tierByLabel, breakdownsBySectorId);
+        return breakdownsBySectorId;
     }
 
     /** 전달받은 구간별 원시값을 전부 합산한 뒤 마지막에 한 번만 나눈 최종 가중/산술평균 — 화면 필터와
      * 무관하게 항상 전체 구간 기준이 필요한 호출부(텔레그램 캡션 등)용. 이미 나뉜 평균끼리 다시 평균내면
      * 구간별 종목 수/시총 비중을 알 수 없어 틀리기 때문에, 반드시 원시값 합산 후 나눗셈 순서를 지킨다. */
-    public SnapshotAverages combine(List<CategoryTierBreakdown> breakdowns) {
+    public SnapshotAverages combine(List<SectorTierBreakdown> breakdowns) {
         BigDecimal weightedSum = BigDecimal.ZERO;
         BigDecimal totalValue = BigDecimal.ZERO;
         BigDecimal simpleSum = BigDecimal.ZERO;
         int itemCount = 0;
-        for (CategoryTierBreakdown breakdown : breakdowns) {
+        for (SectorTierBreakdown breakdown : breakdowns) {
             weightedSum = weightedSum.add(breakdown.weightedSum());
             totalValue = totalValue.add(breakdown.totalValue());
             simpleSum = simpleSum.add(breakdown.simpleSum());
@@ -76,25 +76,25 @@ public class SectorTierAggregationService {
     }
 
     private void collectBreakdowns(
-            List<MarketMapCategoryNode> nodes,
+            List<MarketMapSectorNode> nodes,
             Map<String, CustomValueTierThreshold> tierByLabel,
-            Map<Long, List<CategoryTierBreakdown>> out) {
-        for (MarketMapCategoryNode node : nodes) {
+            Map<Long, List<SectorTierBreakdown>> out) {
+        for (MarketMapSectorNode node : nodes) {
             Map<String, List<MarketMapItem>> itemsByTierLabel =
                     collectItems(node).stream().collect(Collectors.groupingBy(MarketMapItem::marketValueTier));
-            List<CategoryTierBreakdown> breakdowns = itemsByTierLabel.entrySet().stream()
+            List<SectorTierBreakdown> breakdowns = itemsByTierLabel.entrySet().stream()
                     .map(entry -> toBreakdown(tierByLabel.get(entry.getKey()), entry.getValue()))
                     .toList();
             if (!breakdowns.isEmpty()) {
-                out.put(node.categoryId(), breakdowns);
+                out.put(node.sectorId(), breakdowns);
             }
             collectBreakdowns(node.children(), tierByLabel, out);
         }
     }
 
-    private CategoryTierBreakdown toBreakdown(CustomValueTierThreshold tier, List<MarketMapItem> items) {
+    private SectorTierBreakdown toBreakdown(CustomValueTierThreshold tier, List<MarketMapItem> items) {
         RawSums sums = computeRawSums(items);
-        return new CategoryTierBreakdown(
+        return new SectorTierBreakdown(
                 tier.getId(),
                 tier.getLabel(),
                 sums.weightedSum(),
@@ -103,9 +103,9 @@ public class SectorTierAggregationService {
                 sums.itemCount());
     }
 
-    private List<MarketMapItem> collectItems(MarketMapCategoryNode node) {
+    private List<MarketMapItem> collectItems(MarketMapSectorNode node) {
         List<MarketMapItem> items = new ArrayList<>(node.items());
-        for (MarketMapCategoryNode child : node.children()) {
+        for (MarketMapSectorNode child : node.children()) {
             items.addAll(collectItems(child));
         }
         return items;

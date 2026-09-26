@@ -96,7 +96,7 @@ public class CustomSectorTreeService {
         } catch (BadRequestException e) {
             throw e;
         } catch (JsonProcessingException e) {
-            throw new BadRequestException(ErrorCode.CATEGORY_TREE_PARSE_FAILED, e);
+            throw new BadRequestException(ErrorCode.SECTOR_TREE_PARSE_FAILED, e);
         }
     }
 
@@ -157,7 +157,7 @@ public class CustomSectorTreeService {
                     .filter(sector -> sector.parentId() == null || restored.containsKey(sector.parentId()))
                     .toList();
             if (ready.isEmpty()) {
-                throw new BadRequestException(ErrorCode.CATEGORY_TREE_PARSE_FAILED);
+                throw new BadRequestException(ErrorCode.SECTOR_TREE_PARSE_FAILED);
             }
             for (CustomSnapshotPayload.Sector sector : ready) {
                 CustomSector entity = sector.parentId() == null
@@ -192,7 +192,7 @@ public class CustomSectorTreeService {
                 .map(StockInfo::getStockCode)
                 .collect(Collectors.toSet());
         if (hasInvalidParent || hasInvalidAssignment || !existingStockCodes.containsAll(stockCodes)) {
-            throw new BadRequestException(ErrorCode.CATEGORY_TREE_PARSE_FAILED);
+            throw new BadRequestException(ErrorCode.SECTOR_TREE_PARSE_FAILED);
         }
     }
 
@@ -203,7 +203,7 @@ public class CustomSectorTreeService {
             }
             return objectMapper.readValue(json, new TypeReference<>() {});
         } catch (JsonProcessingException e) {
-            throw new BadRequestException(ErrorCode.CATEGORY_TREE_PARSE_FAILED, e);
+            throw new BadRequestException(ErrorCode.SECTOR_TREE_PARSE_FAILED, e);
         }
     }
 
@@ -219,7 +219,7 @@ public class CustomSectorTreeService {
         try {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException e) {
-            throw new BadRequestException(ErrorCode.CATEGORY_TREE_SERIALIZE_FAILED, e);
+            throw new BadRequestException(ErrorCode.SECTOR_TREE_SERIALIZE_FAILED, e);
         }
     }
 }

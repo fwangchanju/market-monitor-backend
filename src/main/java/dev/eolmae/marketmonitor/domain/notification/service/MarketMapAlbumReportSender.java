@@ -7,7 +7,7 @@ import dev.eolmae.marketmonitor.domain.notification.client.TelegramClient;
 import dev.eolmae.marketmonitor.domain.notification.enums.RenderTarget;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
 import dev.eolmae.marketmonitor.domain.renderer.client.ScreenshotClient;
-import dev.eolmae.marketmonitor.domain.view.dto.TopCategoryItem;
+import dev.eolmae.marketmonitor.domain.view.dto.TopSectorItem;
 import dev.eolmae.marketmonitor.domain.view.enums.AverageMode;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
@@ -32,13 +32,13 @@ public class MarketMapAlbumReportSender {
     private final ScreenshotClient screenshotClient;
     private final TelegramClient telegramClient;
     private final TelegramProperties telegramProperties;
-    private final CategoryRankingTextBuilder categoryRankingTextBuilder;
+    private final SectorRankingTextBuilder sectorRankingTextBuilder;
     private final MarketMapQueryService marketMapQueryService;
 
     public void send(LocalDateTime dataTime) {
         // 캡처 대상은 항상 두 마켓 고정이다. SectorTelegramReportSender처럼 랭킹 조회 결과로 마켓을
         // 고르면 안 된다 — 맵과 캡션이 같은 가격 행(sector_price_snapshot)을 쓰더라도, 한 마켓만 그
-        // 시각 가격 행이 없으면 병합 랭킹(getMergedTopCategoryRanking)은 "하나라도 비면 빈 목록"
+        // 시각 가격 행이 없으면 병합 랭킹(getMergedTopSectorRanking)은 "하나라도 비면 빈 목록"
         // 규칙에 걸려 통째로 빈다. 맵은 나머지 마켓만으로도 그려지므로, 그 조회 결과를 캡처 대상으로
         // 따르면 캡처를 한 장도 안 한 채 "캡처 실패"로 에스컬레이션한다.
         List<byte[]> images =
@@ -62,7 +62,7 @@ public class MarketMapAlbumReportSender {
                         RenderTarget.marketSegment(query),
                         telegramProperties.averageMode(),
                         telegramProperties.sectorFilter()),
-                RenderTarget.MARKET_MAP.selector());
+                RenderTarget.MAP.selector());
         if (images.isEmpty()) {
             throw new EscalateException(ErrorCode.SCREENSHOT_CAPTURE_FAILED);
         }
@@ -73,15 +73,15 @@ public class MarketMapAlbumReportSender {
 
     /** 캡션을 못 만들면 null — TelegramClient가 null/공백 캡션을 붙이지 않는다. */
     private String buildCaption(MarketQuery query, LocalDateTime dataTime) {
-        List<TopCategoryItem> topCategories = marketMapQueryService.getMergedTopCategoryRanking(
+        List<TopSectorItem> topSectors = marketMapQueryService.getMergedTopSectorRanking(
                 query, dataTime, telegramProperties.averageMode(), telegramProperties.sectorFilter());
         // 그 시각 데이터가 없거나(수집 실패) 요청 마켓 중 하나라도 합산이 비면 헤더만 덜렁 남는다.
         // 이미지는 이미 찍었으므로 캡션만 버리고 보낸다.
-        if (topCategories.isEmpty()) {
-            log.warn("{} 시각 병합 카테고리 랭킹이 비어 있어 맵 캡션 없이 발송", dataTime);
+        if (topSectors.isEmpty()) {
+            log.warn("{} 시각 병합 섹터 랭킹이 비어 있어 맵 캡션 없이 발송", dataTime);
             return null;
         }
-        return categoryRankingTextBuilder.buildMapCaption(topCategories);
+        return sectorRankingTextBuilder.buildMapCaption(topSectors);
     }
 
     private List<byte[]> capture(List<Market> markets, AverageMode averageMode, boolean sectorFilter) {
@@ -89,7 +89,7 @@ public class MarketMapAlbumReportSender {
                 .flatMap(market -> screenshotClient
                         .capture(
                                 mapPath(RenderTarget.marketSegment(market), averageMode, sectorFilter),
-                                RenderTarget.MARKET_MAP.selector())
+                                RenderTarget.MAP.selector())
                         .stream())
                 .toList();
     }
@@ -104,7 +104,7 @@ public class MarketMapAlbumReportSender {
     }
 
     private String mapPath(String marketSegment, AverageMode averageMode, boolean sectorFilter) {
-        return RenderTarget.MARKET_MAP.path() + "/" + marketSegment
+        return RenderTarget.MAP.path() + "/" + marketSegment
                 + "?avgMode=" + averageMode.queryValue()
                 + "&sectorFilter=" + sectorFilter;
     }

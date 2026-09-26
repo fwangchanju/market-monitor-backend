@@ -7,7 +7,7 @@ import dev.eolmae.marketmonitor.domain.notification.client.TelegramClient;
 import dev.eolmae.marketmonitor.domain.notification.enums.RenderTarget;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
 import dev.eolmae.marketmonitor.domain.renderer.client.ScreenshotClient;
-import dev.eolmae.marketmonitor.domain.view.dto.CategoryRankingSummary;
+import dev.eolmae.marketmonitor.domain.view.dto.SectorRankingSummary;
 import dev.eolmae.marketmonitor.domain.view.enums.AverageMode;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
@@ -18,7 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 /**
- * 두 마켓(KOSPI/KOSDAQ)의 섹터(카테고리 등락률) 이미지를 마켓별로 각각 별도 메시지로 보낸다 — 맵을
+ * 두 마켓(KOSPI/KOSDAQ)의 섹터 등락률 이미지를 마켓별로 각각 별도 메시지로 보낸다 — 맵을
  * 포함하지 않는 유일한 발송 경로다. {@link TelegramReportSender}를 상속하지 않는 독립 컴포넌트다.
  * 그 부모의 send()는 캡처 URL을 "?market=" 값만 붙여 만들고 "&beforeMinutes="를 붙이지 않으므로,
  * 상속하면 부모 send()를 통째로 오버라이드해야 해서 상속으로 얻는 것이 없다. 더 나쁜 것은 오버라이드를
@@ -32,36 +32,36 @@ public class SectorTelegramReportSender {
     private final ScreenshotClient screenshotClient;
     private final TelegramClient telegramClient;
     private final TelegramProperties telegramProperties;
-    private final CategoryRankingTextBuilder categoryRankingTextBuilder;
+    private final SectorRankingTextBuilder sectorRankingTextBuilder;
     private final MarketMapQueryService marketMapQueryService;
 
     public void send(LocalDateTime dataTime) {
         int beforeMinutes = telegramProperties.beforeMinutes();
         AverageMode averageMode = telegramProperties.averageMode();
         boolean sectorFilter = telegramProperties.sectorFilter();
-        List<CategoryRankingSummary> deltaRankings = marketMapQueryService.getTopCategoryRankings(
+        List<SectorRankingSummary> deltaRankings = marketMapQueryService.getTopSectorRankings(
                 MarketQuery.ALL_STOCK, dataTime, beforeMinutes, averageMode, sectorFilter);
         if (deltaRankings.isEmpty()) {
-            log.warn("{} 시각 카테고리 등락률 랭킹 조회가 비어 있어 섹터 발송을 건너뜀", dataTime);
+            log.warn("{} 시각 섹터 등락률 랭킹 조회가 비어 있어 섹터 발송을 건너뜀", dataTime);
             return;
         }
 
-        // 결과에 있는 마켓만 보낸다 — getTopCategoryRankings가 그 시각 데이터 없는 마켓을 이미 결과에서
+        // 결과에 있는 마켓만 보낸다 — getTopSectorRankings가 그 시각 데이터 없는 마켓을 이미 결과에서
         // 뺀다. 목록을 상수로 박아두면 데이터 없는 마켓의 빈 화면을 보내려다 실패한다.
         // changeRateRankings는 매일 첫 발송(08:10, before 없음)처럼 어느 마켓이든 변화율을 못 구할 때만
         // 필요하므로, 실제로 필요해질 때 한 번만 조회한다(하루 한 번 일어나는 추가 조회).
-        List<CategoryRankingSummary> changeRateRankings = null;
+        List<SectorRankingSummary> changeRateRankings = null;
         int sentCount = 0;
-        for (CategoryRankingSummary delta : deltaRankings) {
-            CategoryRankingSummary summaryToSend = delta;
+        for (SectorRankingSummary delta : deltaRankings) {
+            SectorRankingSummary summaryToSend = delta;
             boolean isFallback = false;
-            if (delta.topCategories().isEmpty()) {
+            if (delta.topSectors().isEmpty()) {
                 if (changeRateRankings == null) {
-                    changeRateRankings = marketMapQueryService.getTopCategoryRankingsByChangeRate(
+                    changeRateRankings = marketMapQueryService.getTopSectorRankingsByChangeRate(
                             MarketQuery.ALL_STOCK, dataTime, beforeMinutes, averageMode, sectorFilter);
                 }
-                CategoryRankingSummary fallback = findByMarket(changeRateRankings, delta.market());
-                if (fallback == null || fallback.topCategories().isEmpty()) {
+                SectorRankingSummary fallback = findByMarket(changeRateRankings, delta.market());
+                if (fallback == null || fallback.topSectors().isEmpty()) {
                     log.warn("{} 시각 {} 마켓은 변화율·등락률 랭킹이 모두 비어 있어 발송을 건너뜀", dataTime, delta.market());
                     continue;
                 }
@@ -81,7 +81,7 @@ public class SectorTelegramReportSender {
         log.info("섹터 리포트 발송 완료: 메시지={}건", sentCount);
     }
 
-    private CategoryRankingSummary findByMarket(List<CategoryRankingSummary> rankings, Market market) {
+    private SectorRankingSummary findByMarket(List<SectorRankingSummary> rankings, Market market) {
         return rankings.stream()
                 .filter(ranking -> ranking.market() == market)
                 .findFirst()
@@ -90,14 +90,13 @@ public class SectorTelegramReportSender {
 
     /** 보낸 메시지 건수를 돌려준다 — 호출부가 "하나도 못 보냈는가"를 판정하는 근거다. */
     private int sendOneMarket(
-            CategoryRankingSummary summary,
+            SectorRankingSummary summary,
             int beforeMinutes,
             AverageMode averageMode,
             boolean sectorFilter,
             boolean isFallback) {
         List<byte[]> images = screenshotClient.capture(
-                sectorPath(summary.market(), beforeMinutes, averageMode, sectorFilter),
-                RenderTarget.CATEGORY_CHANGE_RATE.selector());
+                sectorPath(summary.market(), beforeMinutes, averageMode, sectorFilter), RenderTarget.SECTOR.selector());
 
         // ScreenshotClient.capture는 응답의 images가 null일 때만 던지고 빈 배열은 그대로 돌려준다.
         // 셀렉터가 아무것도 못 찾는 경우(예: 프론트가 에러 화면을 그려 capture 대상 요소가 없음)가
@@ -108,8 +107,8 @@ public class SectorTelegramReportSender {
         }
 
         String caption = isFallback
-                ? categoryRankingTextBuilder.buildSectorFallbackCaption(summary)
-                : categoryRankingTextBuilder.buildSectorCaption(summary, beforeMinutes);
+                ? sectorRankingTextBuilder.buildSectorFallbackCaption(summary)
+                : sectorRankingTextBuilder.buildSectorCaption(summary, beforeMinutes);
         for (byte[] image : images) {
             telegramClient.sendPhoto(telegramProperties.chatId(), image, caption);
         }
@@ -117,7 +116,7 @@ public class SectorTelegramReportSender {
     }
 
     private String sectorPath(Market market, int beforeMinutes, AverageMode averageMode, boolean sectorFilter) {
-        return RenderTarget.CATEGORY_CHANGE_RATE.path() + "/" + RenderTarget.marketSegment(market)
+        return RenderTarget.SECTOR.path() + "/" + RenderTarget.marketSegment(market)
                 + "?beforeMinutes=" + beforeMinutes
                 + "&avgMode=" + averageMode.queryValue()
                 + "&sectorFilter=" + sectorFilter;

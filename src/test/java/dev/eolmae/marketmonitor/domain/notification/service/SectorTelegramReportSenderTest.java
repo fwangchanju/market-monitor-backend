@@ -10,10 +10,11 @@ import static org.mockito.Mockito.when;
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.domain.notification.client.TelegramClient;
+import dev.eolmae.marketmonitor.domain.notification.enums.RenderTarget;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
 import dev.eolmae.marketmonitor.domain.renderer.client.ScreenshotClient;
-import dev.eolmae.marketmonitor.domain.view.dto.CategoryRankingSummary;
-import dev.eolmae.marketmonitor.domain.view.dto.TopCategoryItem;
+import dev.eolmae.marketmonitor.domain.view.dto.SectorRankingSummary;
+import dev.eolmae.marketmonitor.domain.view.dto.TopSectorItem;
 import dev.eolmae.marketmonitor.domain.view.enums.AverageMode;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
@@ -42,11 +43,10 @@ class SectorTelegramReportSenderTest {
             AverageMode.SIMPLE,
             true,
             MAP_SEND_TIMES);
-    private final CategoryRankingTextBuilder categoryRankingTextBuilder =
-            Mockito.mock(CategoryRankingTextBuilder.class);
+    private final SectorRankingTextBuilder sectorRankingTextBuilder = Mockito.mock(SectorRankingTextBuilder.class);
     private final MarketMapQueryService marketMapQueryService = Mockito.mock(MarketMapQueryService.class);
     private final SectorTelegramReportSender sender = new SectorTelegramReportSender(
-            screenshotClient, telegramClient, telegramProperties, categoryRankingTextBuilder, marketMapQueryService);
+            screenshotClient, telegramClient, telegramProperties, sectorRankingTextBuilder, marketMapQueryService);
 
     private final LocalDateTime dataTime = LocalDateTime.of(2025, 6, 2, 8, 25);
     private final byte[] kospiImage = {1};
@@ -55,7 +55,7 @@ class SectorTelegramReportSenderTest {
 
     @Test
     void send_랭킹_결과가_통째로_비면_캡처도_발송도_하지_않는다() {
-        when(marketMapQueryService.getTopCategoryRankings(
+        when(marketMapQueryService.getTopSectorRankings(
                         MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(List.of());
 
@@ -67,25 +67,25 @@ class SectorTelegramReportSenderTest {
 
     @Test
     void send_두_마켓_다_있으면_마켓별로_각각_sendPhoto_한다() {
-        CategoryRankingSummary kospiSummary =
-                new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of(topCategoryItem()));
-        CategoryRankingSummary kosdaqSummary =
-                new CategoryRankingSummary(Market.KOSDAQ, indexChangeRate, List.of(topCategoryItem()));
-        List<CategoryRankingSummary> rankings = List.of(kospiSummary, kosdaqSummary);
-        when(marketMapQueryService.getTopCategoryRankings(
+        SectorRankingSummary kospiSummary =
+                new SectorRankingSummary(Market.KOSPI, indexChangeRate, List.of(topSectorItem()));
+        SectorRankingSummary kosdaqSummary =
+                new SectorRankingSummary(Market.KOSDAQ, indexChangeRate, List.of(topSectorItem()));
+        List<SectorRankingSummary> rankings = List.of(kospiSummary, kosdaqSummary);
+        when(marketMapQueryService.getTopSectorRankings(
                         MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(rankings);
         when(screenshotClient.capture(
                         "/sector/kospi?beforeMinutes=15&avgMode=simple&sectorFilter=true",
-                        "[data-captureid='category-change-rate-capture']"))
+                        RenderTarget.SECTOR.selector()))
                 .thenReturn(List.of(kospiImage));
         when(screenshotClient.capture(
                         "/sector/kosdaq?beforeMinutes=15&avgMode=simple&sectorFilter=true",
-                        "[data-captureid='category-change-rate-capture']"))
+                        RenderTarget.SECTOR.selector()))
                 .thenReturn(List.of(kosdaqImage));
-        when(categoryRankingTextBuilder.buildSectorCaption(kospiSummary, BEFORE_MINUTES))
+        when(sectorRankingTextBuilder.buildSectorCaption(kospiSummary, BEFORE_MINUTES))
                 .thenReturn("[#코스피 15분 전 대비]\n...");
-        when(categoryRankingTextBuilder.buildSectorCaption(kosdaqSummary, BEFORE_MINUTES))
+        when(sectorRankingTextBuilder.buildSectorCaption(kosdaqSummary, BEFORE_MINUTES))
                 .thenReturn("[#코스닥 15분 전 대비]\n...");
 
         sender.send(dataTime);
@@ -101,17 +101,17 @@ class SectorTelegramReportSenderTest {
 
     @Test
     void send_한_마켓만_있으면_그_마켓만_캡처해서_보낸다() {
-        CategoryRankingSummary kospiSummary =
-                new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of(topCategoryItem()));
-        List<CategoryRankingSummary> rankings = List.of(kospiSummary);
-        when(marketMapQueryService.getTopCategoryRankings(
+        SectorRankingSummary kospiSummary =
+                new SectorRankingSummary(Market.KOSPI, indexChangeRate, List.of(topSectorItem()));
+        List<SectorRankingSummary> rankings = List.of(kospiSummary);
+        when(marketMapQueryService.getTopSectorRankings(
                         MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(rankings);
         when(screenshotClient.capture(
                         "/sector/kospi?beforeMinutes=15&avgMode=simple&sectorFilter=true",
-                        "[data-captureid='category-change-rate-capture']"))
+                        RenderTarget.SECTOR.selector()))
                 .thenReturn(List.of(kospiImage));
-        when(categoryRankingTextBuilder.buildSectorCaption(kospiSummary, BEFORE_MINUTES))
+        when(sectorRankingTextBuilder.buildSectorCaption(kospiSummary, BEFORE_MINUTES))
                 .thenReturn("[#코스피 15분 전 대비]\n...");
 
         sender.send(dataTime);
@@ -126,14 +126,14 @@ class SectorTelegramReportSenderTest {
     // 루프가 0회 돌 뿐이라, 이 예외가 없으면 아무 흔적 없이 그 tick이 사라진다.
     @Test
     void send_캡처가_통째로_비면_에스컬레이션한다() {
-        CategoryRankingSummary kospiSummary =
-                new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of(topCategoryItem()));
-        when(marketMapQueryService.getTopCategoryRankings(
+        SectorRankingSummary kospiSummary =
+                new SectorRankingSummary(Market.KOSPI, indexChangeRate, List.of(topSectorItem()));
+        when(marketMapQueryService.getTopSectorRankings(
                         MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(List.of(kospiSummary));
         when(screenshotClient.capture(
                         "/sector/kospi?beforeMinutes=15&avgMode=simple&sectorFilter=true",
-                        "[data-captureid='category-change-rate-capture']"))
+                        RenderTarget.SECTOR.selector()))
                 .thenReturn(List.of());
 
         assertThatThrownBy(() -> sender.send(dataTime)).isInstanceOf(EscalateException.class);
@@ -143,22 +143,22 @@ class SectorTelegramReportSenderTest {
 
     @Test
     void send_한_마켓_캡처만_비면_나머지_마켓은_그대로_보낸다() {
-        CategoryRankingSummary kospiSummary =
-                new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of(topCategoryItem()));
-        CategoryRankingSummary kosdaqSummary =
-                new CategoryRankingSummary(Market.KOSDAQ, indexChangeRate, List.of(topCategoryItem()));
-        when(marketMapQueryService.getTopCategoryRankings(
+        SectorRankingSummary kospiSummary =
+                new SectorRankingSummary(Market.KOSPI, indexChangeRate, List.of(topSectorItem()));
+        SectorRankingSummary kosdaqSummary =
+                new SectorRankingSummary(Market.KOSDAQ, indexChangeRate, List.of(topSectorItem()));
+        when(marketMapQueryService.getTopSectorRankings(
                         MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(List.of(kospiSummary, kosdaqSummary));
         when(screenshotClient.capture(
                         "/sector/kospi?beforeMinutes=15&avgMode=simple&sectorFilter=true",
-                        "[data-captureid='category-change-rate-capture']"))
+                        RenderTarget.SECTOR.selector()))
                 .thenReturn(List.of());
         when(screenshotClient.capture(
                         "/sector/kosdaq?beforeMinutes=15&avgMode=simple&sectorFilter=true",
-                        "[data-captureid='category-change-rate-capture']"))
+                        RenderTarget.SECTOR.selector()))
                 .thenReturn(List.of(kosdaqImage));
-        when(categoryRankingTextBuilder.buildSectorCaption(kosdaqSummary, BEFORE_MINUTES))
+        when(sectorRankingTextBuilder.buildSectorCaption(kosdaqSummary, BEFORE_MINUTES))
                 .thenReturn("[#코스닥 15분 전 대비]\n...");
 
         sender.send(dataTime);
@@ -172,30 +172,29 @@ class SectorTelegramReportSenderTest {
     // buildSectorFallbackCaption으로 보낸다.
     @Test
     void send_델타_랭킹이_비어있으면_등락률_랭킹으로_폴백한다() {
-        CategoryRankingSummary kospiDeltaEmpty = new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of());
-        CategoryRankingSummary kosdaqDelta =
-                new CategoryRankingSummary(Market.KOSDAQ, indexChangeRate, List.of(topCategoryItem()));
-        when(marketMapQueryService.getTopCategoryRankings(
+        SectorRankingSummary kospiDeltaEmpty = new SectorRankingSummary(Market.KOSPI, indexChangeRate, List.of());
+        SectorRankingSummary kosdaqDelta =
+                new SectorRankingSummary(Market.KOSDAQ, indexChangeRate, List.of(topSectorItem()));
+        when(marketMapQueryService.getTopSectorRankings(
                         MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(List.of(kospiDeltaEmpty, kosdaqDelta));
 
-        CategoryRankingSummary kospiFallback =
-                new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of(topCategoryItem()));
-        when(marketMapQueryService.getTopCategoryRankingsByChangeRate(
+        SectorRankingSummary kospiFallback =
+                new SectorRankingSummary(Market.KOSPI, indexChangeRate, List.of(topSectorItem()));
+        when(marketMapQueryService.getTopSectorRankingsByChangeRate(
                         MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(List.of(kospiFallback));
 
         when(screenshotClient.capture(
                         "/sector/kospi?beforeMinutes=15&avgMode=simple&sectorFilter=true",
-                        "[data-captureid='category-change-rate-capture']"))
+                        RenderTarget.SECTOR.selector()))
                 .thenReturn(List.of(kospiImage));
         when(screenshotClient.capture(
                         "/sector/kosdaq?beforeMinutes=15&avgMode=simple&sectorFilter=true",
-                        "[data-captureid='category-change-rate-capture']"))
+                        RenderTarget.SECTOR.selector()))
                 .thenReturn(List.of(kosdaqImage));
-        when(categoryRankingTextBuilder.buildSectorFallbackCaption(kospiFallback))
-                .thenReturn("[#코스피 섹터 등락률]\n...");
-        when(categoryRankingTextBuilder.buildSectorCaption(kosdaqDelta, BEFORE_MINUTES))
+        when(sectorRankingTextBuilder.buildSectorFallbackCaption(kospiFallback)).thenReturn("[#코스피 섹터 등락률]\n...");
+        when(sectorRankingTextBuilder.buildSectorCaption(kosdaqDelta, BEFORE_MINUTES))
                 .thenReturn("[#코스닥 15분 전 대비]\n...");
 
         sender.send(dataTime);
@@ -204,31 +203,31 @@ class SectorTelegramReportSenderTest {
                 .sendPhoto(Mockito.eq("chat-id"), Mockito.eq(kospiImage), Mockito.eq("[#코스피 섹터 등락률]\n..."));
         verify(telegramClient)
                 .sendPhoto(Mockito.eq("chat-id"), Mockito.eq(kosdaqImage), Mockito.eq("[#코스닥 15분 전 대비]\n..."));
-        verify(categoryRankingTextBuilder, never()).buildSectorCaption(kospiDeltaEmpty, BEFORE_MINUTES);
+        verify(sectorRankingTextBuilder, never()).buildSectorCaption(kospiDeltaEmpty, BEFORE_MINUTES);
     }
 
     // 등락률 랭킹마저 비면 그 마켓만 건너뛰고 나머지는 그대로 보낸다 — rankings.isEmpty() 가드와 같은
     // 자리다.
     @Test
     void send_델타와_등락률_랭킹이_모두_비면_그_마켓만_건너뛴다() {
-        CategoryRankingSummary kospiDeltaEmpty = new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of());
-        CategoryRankingSummary kosdaqDelta =
-                new CategoryRankingSummary(Market.KOSDAQ, indexChangeRate, List.of(topCategoryItem()));
-        when(marketMapQueryService.getTopCategoryRankings(
+        SectorRankingSummary kospiDeltaEmpty = new SectorRankingSummary(Market.KOSPI, indexChangeRate, List.of());
+        SectorRankingSummary kosdaqDelta =
+                new SectorRankingSummary(Market.KOSDAQ, indexChangeRate, List.of(topSectorItem()));
+        when(marketMapQueryService.getTopSectorRankings(
                         MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(List.of(kospiDeltaEmpty, kosdaqDelta));
 
-        CategoryRankingSummary kospiFallbackAlsoEmpty =
-                new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of());
-        when(marketMapQueryService.getTopCategoryRankingsByChangeRate(
+        SectorRankingSummary kospiFallbackAlsoEmpty =
+                new SectorRankingSummary(Market.KOSPI, indexChangeRate, List.of());
+        when(marketMapQueryService.getTopSectorRankingsByChangeRate(
                         MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(List.of(kospiFallbackAlsoEmpty));
 
         when(screenshotClient.capture(
                         "/sector/kosdaq?beforeMinutes=15&avgMode=simple&sectorFilter=true",
-                        "[data-captureid='category-change-rate-capture']"))
+                        RenderTarget.SECTOR.selector()))
                 .thenReturn(List.of(kosdaqImage));
-        when(categoryRankingTextBuilder.buildSectorCaption(kosdaqDelta, BEFORE_MINUTES))
+        when(sectorRankingTextBuilder.buildSectorCaption(kosdaqDelta, BEFORE_MINUTES))
                 .thenReturn("[#코스닥 15분 전 대비]\n...");
 
         sender.send(dataTime);
@@ -241,17 +240,17 @@ class SectorTelegramReportSenderTest {
     // 하루 한 번이어야 할 추가 조회가 마켓 수만큼 늘어난다.
     @Test
     void send_변화율_폴백_조회는_한_번만_한다() {
-        CategoryRankingSummary kospiDeltaEmpty = new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of());
-        CategoryRankingSummary kosdaqDeltaEmpty = new CategoryRankingSummary(Market.KOSDAQ, indexChangeRate, List.of());
-        when(marketMapQueryService.getTopCategoryRankings(
+        SectorRankingSummary kospiDeltaEmpty = new SectorRankingSummary(Market.KOSPI, indexChangeRate, List.of());
+        SectorRankingSummary kosdaqDeltaEmpty = new SectorRankingSummary(Market.KOSDAQ, indexChangeRate, List.of());
+        when(marketMapQueryService.getTopSectorRankings(
                         MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(List.of(kospiDeltaEmpty, kosdaqDeltaEmpty));
 
-        CategoryRankingSummary kospiFallback =
-                new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of(topCategoryItem()));
-        CategoryRankingSummary kosdaqFallback =
-                new CategoryRankingSummary(Market.KOSDAQ, indexChangeRate, List.of(topCategoryItem()));
-        when(marketMapQueryService.getTopCategoryRankingsByChangeRate(
+        SectorRankingSummary kospiFallback =
+                new SectorRankingSummary(Market.KOSPI, indexChangeRate, List.of(topSectorItem()));
+        SectorRankingSummary kosdaqFallback =
+                new SectorRankingSummary(Market.KOSDAQ, indexChangeRate, List.of(topSectorItem()));
+        when(marketMapQueryService.getTopSectorRankingsByChangeRate(
                         MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true))
                 .thenReturn(List.of(kospiFallback, kosdaqFallback));
 
@@ -263,7 +262,7 @@ class SectorTelegramReportSenderTest {
         sender.send(dataTime);
 
         verify(marketMapQueryService, Mockito.times(1))
-                .getTopCategoryRankingsByChangeRate(
+                .getTopSectorRankingsByChangeRate(
                         MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.SIMPLE, true);
     }
 
@@ -282,21 +281,17 @@ class SectorTelegramReportSenderTest {
                 false,
                 MAP_SEND_TIMES);
         SectorTelegramReportSender weightedSender = new SectorTelegramReportSender(
-                screenshotClient,
-                telegramClient,
-                weightedProperties,
-                categoryRankingTextBuilder,
-                marketMapQueryService);
-        CategoryRankingSummary kospiSummary =
-                new CategoryRankingSummary(Market.KOSPI, indexChangeRate, List.of(topCategoryItem()));
-        when(marketMapQueryService.getTopCategoryRankings(
+                screenshotClient, telegramClient, weightedProperties, sectorRankingTextBuilder, marketMapQueryService);
+        SectorRankingSummary kospiSummary =
+                new SectorRankingSummary(Market.KOSPI, indexChangeRate, List.of(topSectorItem()));
+        when(marketMapQueryService.getTopSectorRankings(
                         MarketQuery.ALL_STOCK, dataTime, BEFORE_MINUTES, AverageMode.WEIGHTED, false))
                 .thenReturn(List.of(kospiSummary));
         when(screenshotClient.capture(
                         "/sector/kospi?beforeMinutes=15&avgMode=weighted&sectorFilter=false",
-                        "[data-captureid='category-change-rate-capture']"))
+                        RenderTarget.SECTOR.selector()))
                 .thenReturn(List.of(kospiImage));
-        when(categoryRankingTextBuilder.buildSectorCaption(kospiSummary, BEFORE_MINUTES))
+        when(sectorRankingTextBuilder.buildSectorCaption(kospiSummary, BEFORE_MINUTES))
                 .thenReturn("[#코스피 15분 전 대비]\n...");
 
         weightedSender.send(dataTime);
@@ -305,7 +300,7 @@ class SectorTelegramReportSenderTest {
                 .sendPhoto(Mockito.eq("chat-id"), Mockito.eq(kospiImage), Mockito.eq("[#코스피 15분 전 대비]\n..."));
     }
 
-    private TopCategoryItem topCategoryItem() {
-        return new TopCategoryItem("반도체", BigDecimal.valueOf(3.21));
+    private TopSectorItem topSectorItem() {
+        return new TopSectorItem("반도체", BigDecimal.valueOf(3.21));
     }
 }

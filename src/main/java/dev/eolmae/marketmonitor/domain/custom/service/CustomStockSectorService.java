@@ -115,7 +115,7 @@ public class CustomStockSectorService {
     }
 
     @Transactional(readOnly = true)
-    public SnapshotResponse<StockSectorListItem> getStockCategories() {
+    public SnapshotResponse<StockSectorListItem> getStockSectors() {
         Long userId = CurrentUser.requireId();
         Map<Long, CustomSector> sectorById = customSectorRepository.findAllByUserId(userId).stream()
                 .collect(Collectors.toMap(CustomSector::getId, Function.identity()));
@@ -189,14 +189,14 @@ public class CustomStockSectorService {
 
     private void requireOwnedSector(Long sectorId, Long userId) {
         if (customSectorRepository.findByIdAndUserId(sectorId, userId).isEmpty()) {
-            throw new NotFoundException(ErrorCode.CATEGORY_NOT_FOUND, sectorId);
+            throw new NotFoundException(ErrorCode.SECTOR_NOT_FOUND, sectorId);
         }
     }
 
     private void requireActiveStock(String stockCode) {
         StockInfo stock = stockInfoCacheService.getCache().get(stockCode);
         if (stock == null || !stock.isActiveAndOrdinary()) {
-            throw new NotFoundException(ErrorCode.STOCK_CATEGORY_NOT_FOUND, stockCode);
+            throw new NotFoundException(ErrorCode.STOCK_SECTOR_NOT_FOUND, stockCode);
         }
     }
 }

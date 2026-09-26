@@ -16,7 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * (마켓, 시각) 하나 단위의 종목코드 → 가격 캐시. buildCategoryTree/buildDefaultMarketMap이 매번
+ * (마켓, 시각) 하나 단위의 종목코드 → 가격 캐시. buildSectorTree/buildDefaultMarketMap이 매번
  * SectorPriceSnapshotService로 가격 행을 DB에서 새로 읽던 것을 캐시로 감싼다.
  *
  * <p>SectorPriceSnapshotService 안에 두지 않고 별도 빈으로 분리했다 — Spring {@code @Cacheable}은

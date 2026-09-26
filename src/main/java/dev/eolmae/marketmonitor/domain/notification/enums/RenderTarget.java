@@ -6,9 +6,9 @@ import java.util.Locale;
 
 // 캡처할 프론트 페이지와 그 안에서 스크린샷 찍을 영역(data-captureid, 프론트와 값 합의)
 public enum RenderTarget {
-    MARKET_SUMMARY("/summary", "market-summary-capture"),
-    MARKET_MAP("/map", "market-map-capture"),
-    CATEGORY_CHANGE_RATE("/sector", "category-change-rate-capture");
+    SUMMARY("/summary", "summary-capture"),
+    MAP("/map", "map-capture"),
+    SECTOR("/sector", "sector-capture");
 
     private static final String CAPTURE_ATTRIBUTE = "data-captureid";
 

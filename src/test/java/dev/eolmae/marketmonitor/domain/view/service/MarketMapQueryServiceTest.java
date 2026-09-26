@@ -71,7 +71,7 @@ class MarketMapQueryServiceTest {
             Mockito.mock(CustomStockAliasRepository.class);
     // 구간 리포지토리 하나를 합산 클래스·구간 서비스가 같이 본다 — 트리 기반 랭킹은 이 둘이 같은 구간
     // 목록을 보는 것을 전제로 한다(합산 클래스는 findAll()로 라벨→id, 구간 서비스는
-    // findAllByOrderByThresholdValueAsc()로 종목의 구간을 정한다).
+    // findAllByUserIdOrderByThresholdValueAsc()로 종목의 구간을 정한다).
     private final CustomValueTierThresholdRepository marketValueTierThresholdRepository =
             Mockito.mock(CustomValueTierThresholdRepository.class);
     private final JdbcTemplate jdbcTemplate = Mockito.mock(JdbcTemplate.class);
@@ -992,8 +992,6 @@ class MarketMapQueryServiceTest {
                 .sorted(Comparator.comparing(CustomValueTierThreshold::getThresholdValue))
                 .toList();
         when(marketValueTierThresholdRepository.findAll()).thenReturn(List.of(tiers));
-        when(marketValueTierThresholdRepository.findAllByOrderByThresholdValueAsc())
-                .thenReturn(sorted);
         when(marketValueTierThresholdRepository.findAllByUserIdOrderByThresholdValueAsc(999999L))
                 .thenReturn(sorted);
         Mockito.doReturn(sorted)

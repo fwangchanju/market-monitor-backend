@@ -8,8 +8,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface CustomScaleThresholdRepository extends JpaRepository<CustomScaleThreshold, Long> {
 
-    boolean existsByThresholdPercent(BigDecimal thresholdPercent);
-
     List<CustomScaleThreshold> findAllByUserId(Long userId);
 
     boolean existsByUserIdAndThresholdPercent(Long userId, BigDecimal thresholdPercent);
@@ -21,6 +19,4 @@ public interface CustomScaleThresholdRepository extends JpaRepository<CustomScal
     void deleteByIdAndUserId(Long id, Long userId);
 
     void deleteAllByUserId(Long userId);
-
-    boolean existsByThresholdPercentAndIdNot(BigDecimal thresholdPercent, Long id);
 }

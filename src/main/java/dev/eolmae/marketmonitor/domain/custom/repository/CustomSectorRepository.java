@@ -18,10 +18,4 @@ public interface CustomSectorRepository extends JpaRepository<CustomSector, Long
     boolean existsByUserIdAndName(Long userId, String name);
 
     void deleteAllByUserId(Long userId);
-
-    List<CustomSector> findByParentId(Long parentId);
-
-    Optional<CustomSector> findFirstByOrderByIdAsc();
-
-    boolean existsByName(String name);
 }

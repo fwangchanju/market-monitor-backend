@@ -9,6 +9,4 @@ public interface CustomValueTierThresholdRepository extends JpaRepository<Custom
     List<CustomValueTierThreshold> findAllByUserIdOrderByThresholdValueAsc(Long userId);
 
     void deleteAllByUserId(Long userId);
-
-    List<CustomValueTierThreshold> findAllByOrderByThresholdValueAsc();
 }

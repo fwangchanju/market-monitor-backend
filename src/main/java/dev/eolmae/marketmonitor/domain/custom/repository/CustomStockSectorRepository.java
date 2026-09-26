@@ -46,10 +46,4 @@ public interface CustomStockSectorRepository extends JpaRepository<CustomStockSe
     @Modifying
     @Query("delete from CustomStockSector stockSector where stockSector.id.userId = :userId")
     void deleteAllByIdUserId(@Param("userId") Long userId);
-
-    List<CustomStockSector> findBySectorId(Long sectorId);
-
-    List<CustomStockSector> findBySectorIdIn(List<Long> sectorIds);
-
-    void deleteBySectorIdIn(List<Long> sectorIds);
 }

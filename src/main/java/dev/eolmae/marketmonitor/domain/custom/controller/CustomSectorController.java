@@ -26,8 +26,8 @@ public class CustomSectorController {
     private final CustomSectorService customSectorService;
 
     @GetMapping
-    public List<SectorItem> getCategories() {
-        return customSectorService.getCategories();
+    public List<SectorItem> getSectors() {
+        return customSectorService.getSectors();
     }
 
     @PostMapping

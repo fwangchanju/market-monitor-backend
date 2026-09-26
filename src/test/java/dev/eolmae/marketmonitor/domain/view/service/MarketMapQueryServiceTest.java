@@ -26,12 +26,12 @@ import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceCacheService;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceCacheService.CachedStockPrice;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceSnapshotService;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
-import dev.eolmae.marketmonitor.domain.view.dto.CategoryChangeRateMarketRanking;
-import dev.eolmae.marketmonitor.domain.view.dto.CategoryRankingSummary;
-import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapResponse;
+import dev.eolmae.marketmonitor.domain.view.dto.MarketMapSectorNode;
+import dev.eolmae.marketmonitor.domain.view.dto.SectorChangeRateMarketRanking;
+import dev.eolmae.marketmonitor.domain.view.dto.SectorRankingSummary;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
-import dev.eolmae.marketmonitor.domain.view.dto.TopCategoryItem;
+import dev.eolmae.marketmonitor.domain.view.dto.TopSectorItem;
 import dev.eolmae.marketmonitor.domain.view.enums.AverageMode;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import java.math.BigDecimal;
@@ -62,8 +62,8 @@ class MarketMapQueryServiceTest {
     private final SectorPriceSnapshotRepository sectorPriceSnapshotRepository =
             Mockito.mock(SectorPriceSnapshotRepository.class);
     private final SectorPriceCacheService sectorPriceCacheService = Mockito.mock(SectorPriceCacheService.class);
-    private final CustomSectorRepository marketMapCategoryRepository = Mockito.mock(CustomSectorRepository.class);
-    private final CustomStockSectorRepository marketMapStockCategoryRepository =
+    private final CustomSectorRepository marketMapSectorRepository = Mockito.mock(CustomSectorRepository.class);
+    private final CustomStockSectorRepository marketMapStockSectorRepository =
             Mockito.mock(CustomStockSectorRepository.class);
     private final CustomStockAliasRepository customStockAliasRepository =
             Mockito.mock(CustomStockAliasRepository.class);
@@ -78,7 +78,7 @@ class MarketMapQueryServiceTest {
     // 들어간다(5-1).
     private final CustomValueTierThresholdService marketValueTierThresholdService =
             new CustomValueTierThresholdService(marketValueTierThresholdRepository);
-    private final SectorTierAggregationService categoryTierAggregationService =
+    private final SectorTierAggregationService sectorTierAggregationService =
             new SectorTierAggregationService(marketValueTierThresholdService, marketMonitorProperties);
     private final MarketOverviewSnapshotRepository marketOverviewSnapshotRepository =
             Mockito.mock(MarketOverviewSnapshotRepository.class);
@@ -89,10 +89,10 @@ class MarketMapQueryServiceTest {
             stockInfoCacheService,
             sectorPriceSnapshotService,
             sectorPriceCacheService,
-            marketMapCategoryRepository,
-            marketMapStockCategoryRepository,
+            marketMapSectorRepository,
+            marketMapStockSectorRepository,
             customStockAliasRepository,
-            categoryTierAggregationService,
+            sectorTierAggregationService,
             marketValueTierThresholdService,
             marketOverviewSnapshotRepository,
             industryInfoRepository,
@@ -106,11 +106,11 @@ class MarketMapQueryServiceTest {
         SecurityContextHolder.getContext()
                 .setAuthentication(
                         new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
-        Mockito.doAnswer(invocation -> marketMapCategoryRepository.findAll())
-                .when(marketMapCategoryRepository)
+        Mockito.doAnswer(invocation -> marketMapSectorRepository.findAll())
+                .when(marketMapSectorRepository)
                 .findAllByUserId(ArgumentMatchers.anyLong());
-        Mockito.doAnswer(invocation -> marketMapStockCategoryRepository.findAll())
-                .when(marketMapStockCategoryRepository)
+        Mockito.doAnswer(invocation -> marketMapStockSectorRepository.findAll())
+                .when(marketMapStockSectorRepository)
                 .findAllByIdUserId(ArgumentMatchers.anyLong());
         Mockito.doReturn(List.of()).when(customStockAliasRepository).findAllByIdUserId(ArgumentMatchers.anyLong());
         stubTierThresholds(tierThreshold(10L, "대형", 0L, false));
@@ -131,15 +131,15 @@ class MarketMapQueryServiceTest {
     }
 
     @Test
-    void getCustomMarketMap_트리집계와_카테고리명_매칭이_정확히_반영된다() {
+    void getCustomMarketMap_트리집계와_섹터명_매칭이_정확히_반영된다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
 
-        CustomSector electronics = category(1L, null, "전기/전자");
-        CustomSector semiconductor = category(2L, 1L, "반도체");
-        CustomSector chemical = category(3L, null, "화학");
-        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(electronics, semiconductor, chemical));
+        CustomSector electronics = sector(1L, null, "전기/전자");
+        CustomSector semiconductor = sector(2L, 1L, "반도체");
+        CustomSector chemical = sector(3L, null, "화학");
+        when(marketMapSectorRepository.findAll()).thenReturn(List.of(electronics, semiconductor, chemical));
 
-        when(marketMapStockCategoryRepository.findAll())
+        when(marketMapStockSectorRepository.findAll())
                 .thenReturn(List.of(
                         CustomStockSector.create(LEGACY_OWNER_ID, "005930", 2L),
                         CustomStockSector.create(LEGACY_OWNER_ID, "000660", 2L),
@@ -168,26 +168,26 @@ class MarketMapQueryServiceTest {
         MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI, null);
 
         assertThat(response.snapshotTime()).isEqualTo(snapshotTime);
-        List<MarketMapCategoryNode> nodes = response.items();
+        List<MarketMapSectorNode> nodes = response.items();
         assertThat(nodes).hasSize(2);
 
-        MarketMapCategoryNode electronicsNode = nodes.stream()
-                .filter(node -> node.categoryName().equals("전기/전자"))
+        MarketMapSectorNode electronicsNode = nodes.stream()
+                .filter(node -> node.sectorName().equals("전기/전자"))
                 .findFirst()
                 .orElseThrow();
         assertThat(electronicsNode.items()).extracting("stockCode").containsExactly("009150");
         assertThat(electronicsNode.children()).hasSize(1);
 
-        MarketMapCategoryNode semiconductorNode = electronicsNode.children().get(0);
-        assertThat(semiconductorNode.categoryName()).isEqualTo("반도체");
+        MarketMapSectorNode semiconductorNode = electronicsNode.children().get(0);
+        assertThat(semiconductorNode.sectorName()).isEqualTo("반도체");
         assertThat(semiconductorNode.items()).extracting("stockCode").containsExactlyInAnyOrder("005930", "000660");
         assertThat(semiconductorNode.totalMarketValue()).isEqualByComparingTo(BigDecimal.valueOf(2000));
 
         // 전기/전자 총액 = 직속(009150: 5*200=1000) + 자식(반도체: 2000) = 3000
         assertThat(electronicsNode.totalMarketValue()).isEqualByComparingTo(BigDecimal.valueOf(3000));
 
-        MarketMapCategoryNode chemicalNode = nodes.stream()
-                .filter(node -> node.categoryName().equals("화학"))
+        MarketMapSectorNode chemicalNode = nodes.stream()
+                .filter(node -> node.sectorName().equals("화학"))
                 .findFirst()
                 .orElseThrow();
         assertThat(chemicalNode.children()).isEmpty();
@@ -225,37 +225,37 @@ class MarketMapQueryServiceTest {
         MarketMapResponse response = service.getDefaultMarketMap(MarketQuery.KOSPI, null);
 
         assertThat(response.snapshotTime()).isEqualTo(snapshotTime);
-        List<MarketMapCategoryNode> nodes = response.items();
+        List<MarketMapSectorNode> nodes = response.items();
         assertThat(nodes).hasSize(2);
 
-        MarketMapCategoryNode semiconductorNode = nodes.stream()
-                .filter(node -> node.categoryName().equals("반도체"))
+        MarketMapSectorNode semiconductorNode = nodes.stream()
+                .filter(node -> node.sectorName().equals("반도체"))
                 .findFirst()
                 .orElseThrow();
         assertThat(semiconductorNode.children()).isEmpty();
         assertThat(semiconductorNode.items()).extracting("stockCode").containsExactlyInAnyOrder("005930", "000660");
         assertThat(semiconductorNode.totalMarketValue()).isEqualByComparingTo(BigDecimal.valueOf(2000));
-        assertThat(semiconductorNode.categoryId()).isEqualTo(0L);
+        assertThat(semiconductorNode.sectorId()).isEqualTo(0L);
         assertThat(semiconductorNode.isExcluded()).isFalse();
 
-        MarketMapCategoryNode uncategorizedNode = nodes.stream()
-                .filter(node -> node.categoryName().equals("미분류"))
+        MarketMapSectorNode unsectoredNode = nodes.stream()
+                .filter(node -> node.sectorName().equals("미분류"))
                 .findFirst()
                 .orElseThrow();
-        assertThat(uncategorizedNode.children()).isEmpty();
-        assertThat(uncategorizedNode.items()).extracting("stockCode").containsExactly("051910");
-        assertThat(uncategorizedNode.totalMarketValue()).isEqualByComparingTo(BigDecimal.valueOf(500));
+        assertThat(unsectoredNode.children()).isEmpty();
+        assertThat(unsectoredNode.items()).extracting("stockCode").containsExactly("051910");
+        assertThat(unsectoredNode.totalMarketValue()).isEqualByComparingTo(BigDecimal.valueOf(500));
     }
 
     @Test
-    void getCustomMarketMap_제외되었거나_빈_카테고리도_필터링없이_그대로_응답된다() {
+    void getCustomMarketMap_제외되었거나_빈_섹터도_필터링없이_그대로_응답된다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
 
-        CustomSector semiconductor = category(1L, null, "반도체");
-        CustomSector empty = category(2L, null, "빈카테고리");
+        CustomSector semiconductor = sector(1L, null, "반도체");
+        CustomSector empty = sector(2L, null, "빈섹터");
         empty.exclude();
-        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor, empty));
-        when(marketMapStockCategoryRepository.findAll())
+        when(marketMapSectorRepository.findAll()).thenReturn(List.of(semiconductor, empty));
+        when(marketMapStockSectorRepository.findAll())
                 .thenReturn(List.of(CustomStockSector.create(LEGACY_OWNER_ID, "005930", 1L)));
 
         StockInfo samsung = stockInfo("005930", "삼성전자", 100L, BigDecimal.TEN);
@@ -271,34 +271,34 @@ class MarketMapQueryServiceTest {
 
         MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI, null);
 
-        List<MarketMapCategoryNode> nodes = response.items();
+        List<MarketMapSectorNode> nodes = response.items();
         assertThat(nodes).hasSize(2);
 
-        MarketMapCategoryNode semiconductorNode = nodes.stream()
-                .filter(node -> node.categoryName().equals("반도체"))
+        MarketMapSectorNode semiconductorNode = nodes.stream()
+                .filter(node -> node.sectorName().equals("반도체"))
                 .findFirst()
                 .orElseThrow();
-        assertThat(semiconductorNode.categoryId()).isEqualTo(1L);
+        assertThat(semiconductorNode.sectorId()).isEqualTo(1L);
         assertThat(semiconductorNode.isExcluded()).isFalse();
 
-        MarketMapCategoryNode emptyNode = nodes.stream()
-                .filter(node -> node.categoryName().equals("빈카테고리"))
+        MarketMapSectorNode emptyNode = nodes.stream()
+                .filter(node -> node.sectorName().equals("빈섹터"))
                 .findFirst()
                 .orElseThrow();
-        assertThat(emptyNode.categoryId()).isEqualTo(2L);
+        assertThat(emptyNode.sectorId()).isEqualTo(2L);
         assertThat(emptyNode.isExcluded()).isTrue();
         assertThat(emptyNode.items()).isEmpty();
         assertThat(emptyNode.children()).isEmpty();
     }
 
     @Test
-    void getCustomMarketMap_자식_카테고리가_있는_노드의_총액은_자기_items와_자식_합계다() {
+    void getCustomMarketMap_자식_섹터가_있는_노드의_총액은_자기_items와_자식_합계다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
 
-        CustomSector parent = category(1L, null, "전기/전자");
-        CustomSector child = category(2L, 1L, "반도체");
-        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(parent, child));
-        when(marketMapStockCategoryRepository.findAll())
+        CustomSector parent = sector(1L, null, "전기/전자");
+        CustomSector child = sector(2L, 1L, "반도체");
+        when(marketMapSectorRepository.findAll()).thenReturn(List.of(parent, child));
+        when(marketMapStockSectorRepository.findAll())
                 .thenReturn(List.of(
                         CustomStockSector.create(LEGACY_OWNER_ID, "009150", 1L),
                         CustomStockSector.create(LEGACY_OWNER_ID, "005930", 2L)));
@@ -319,8 +319,8 @@ class MarketMapQueryServiceTest {
 
         MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI, null);
 
-        MarketMapCategoryNode parentNode = response.items().stream()
-                .filter(node -> node.categoryName().equals("전기/전자"))
+        MarketMapSectorNode parentNode = response.items().stream()
+                .filter(node -> node.sectorName().equals("전기/전자"))
                 .findFirst()
                 .orElseThrow();
         // 직속(009150: 5*200=1000) + 자식(반도체: 10*100=1000) = 2000
@@ -331,9 +331,9 @@ class MarketMapQueryServiceTest {
     void getCustomMarketMap_가격_스냅샷이_없는_종목은_제외된다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
 
-        CustomSector semiconductor = category(1L, null, "반도체");
-        when(marketMapCategoryRepository.findAll()).thenReturn(List.of(semiconductor));
-        when(marketMapStockCategoryRepository.findAll())
+        CustomSector semiconductor = sector(1L, null, "반도체");
+        when(marketMapSectorRepository.findAll()).thenReturn(List.of(semiconductor));
+        when(marketMapStockSectorRepository.findAll())
                 .thenReturn(List.of(
                         CustomStockSector.create(LEGACY_OWNER_ID, "005930", 1L),
                         CustomStockSector.create(LEGACY_OWNER_ID, "000660", 1L)));
@@ -353,19 +353,19 @@ class MarketMapQueryServiceTest {
 
         MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI, null);
 
-        MarketMapCategoryNode semiconductorNode = response.items().stream()
-                .filter(node -> node.categoryName().equals("반도체"))
+        MarketMapSectorNode semiconductorNode = response.items().stream()
+                .filter(node -> node.sectorName().equals("반도체"))
                 .findFirst()
                 .orElseThrow();
         assertThat(semiconductorNode.items()).extracting("stockCode").containsExactly("005930");
     }
 
     @Test
-    void getCustomMarketMap_카테고리가_하나도_없으면_빈_리스트를_반환한다() {
+    void getCustomMarketMap_섹터가_하나도_없으면_빈_리스트를_반환한다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
 
-        when(marketMapCategoryRepository.findAll()).thenReturn(List.of());
-        when(marketMapStockCategoryRepository.findAll()).thenReturn(List.of());
+        when(marketMapSectorRepository.findAll()).thenReturn(List.of());
+        when(marketMapStockSectorRepository.findAll()).thenReturn(List.of());
         when(stockInfoCacheService.getCache()).thenReturn(Map.of());
         when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
                 .thenReturn(Optional.of(snapshotTime));
@@ -381,8 +381,8 @@ class MarketMapQueryServiceTest {
     void getCustomMarketMap_그_시각에_지수_스냅샷이_있으면_marketOverview로_붙는다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
 
-        when(marketMapCategoryRepository.findAll()).thenReturn(List.of());
-        when(marketMapStockCategoryRepository.findAll()).thenReturn(List.of());
+        when(marketMapSectorRepository.findAll()).thenReturn(List.of());
+        when(marketMapStockSectorRepository.findAll()).thenReturn(List.of());
         when(stockInfoCacheService.getCache()).thenReturn(Map.of());
         when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
                 .thenReturn(Optional.of(snapshotTime));
@@ -401,8 +401,8 @@ class MarketMapQueryServiceTest {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
         List<Market> markets = List.of(Market.KOSPI, Market.KOSDAQ);
 
-        when(marketMapCategoryRepository.findAll()).thenReturn(List.of());
-        when(marketMapStockCategoryRepository.findAll()).thenReturn(List.of());
+        when(marketMapSectorRepository.findAll()).thenReturn(List.of());
+        when(marketMapStockSectorRepository.findAll()).thenReturn(List.of());
         when(stockInfoCacheService.getCache()).thenReturn(Map.of());
         when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(markets))
                 .thenReturn(Optional.of(snapshotTime));
@@ -417,8 +417,8 @@ class MarketMapQueryServiceTest {
     @Test
     void getCustomMarketMap_snapshotTime을_명시하면_최신이_아니라_그_시각_그대로_쓴다() {
         LocalDateTime requestedTime = LocalDateTime.of(2026, 7, 31, 10, 5);
-        when(marketMapCategoryRepository.findAll()).thenReturn(List.of());
-        when(marketMapStockCategoryRepository.findAll()).thenReturn(List.of());
+        when(marketMapSectorRepository.findAll()).thenReturn(List.of());
+        when(marketMapStockSectorRepository.findAll()).thenReturn(List.of());
         when(stockInfoCacheService.getCache()).thenReturn(Map.of());
         when(sectorPriceSnapshotRepository.existsByMarketTypeAndSnapshotTime(Market.KOSPI, requestedTime))
                 .thenReturn(true);
@@ -446,11 +446,11 @@ class MarketMapQueryServiceTest {
     }
 
     @Test
-    void getCategoryChangeRates_랭킹과_같은_시각의_지수_등락률이_마켓별로_붙는다() {
+    void getSectorChangeRates_랭킹과_같은_시각의_지수_등락률이_마켓별로_붙는다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
-        CustomSector semiconductor = category(1L, null, "반도체");
-        CustomSector pharma = category(2L, null, "제약");
-        stubCategoryTree(
+        CustomSector semiconductor = sector(1L, null, "반도체");
+        CustomSector pharma = sector(2L, null, "제약");
+        stubSectorTree(
                 List.of(semiconductor, pharma),
                 List.of(
                         CustomStockSector.create(LEGACY_OWNER_ID, "A", 1L),
@@ -475,17 +475,17 @@ class MarketMapQueryServiceTest {
                         marketOverviewSnapshot(
                                 Market.KOSDAQ, snapshotTime.minusMinutes(60), BigDecimal.valueOf(-0.20))));
 
-        SnapshotResponse<CategoryChangeRateMarketRanking> response =
-                service.getCategoryChangeRates(MarketQuery.ALL_STOCK, snapshotTime, 60);
+        SnapshotResponse<SectorChangeRateMarketRanking> response =
+                service.getSectorChangeRates(MarketQuery.ALL_STOCK, snapshotTime, 60);
 
-        CategoryChangeRateMarketRanking kospi = response.items().stream()
+        SectorChangeRateMarketRanking kospi = response.items().stream()
                 .filter(ranking -> ranking.market() == Market.KOSPI)
                 .findFirst()
                 .orElseThrow();
         assertThat(kospi.index().now()).isEqualByComparingTo(BigDecimal.valueOf(1.23));
         assertThat(kospi.index().before()).isEqualByComparingTo(BigDecimal.valueOf(0.98));
 
-        CategoryChangeRateMarketRanking kosdaq = response.items().stream()
+        SectorChangeRateMarketRanking kosdaq = response.items().stream()
                 .filter(ranking -> ranking.market() == Market.KOSDAQ)
                 .findFirst()
                 .orElseThrow();
@@ -494,31 +494,31 @@ class MarketMapQueryServiceTest {
     }
 
     @Test
-    void getCategoryChangeRates_그_시각에_지수_스냅샷이_없으면_index가_null이다() {
+    void getSectorChangeRates_그_시각에_지수_스냅샷이_없으면_index가_null이다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
-        CustomSector semiconductor = category(1L, null, "반도체");
-        stubCategoryTree(List.of(semiconductor), List.of(CustomStockSector.create(LEGACY_OWNER_ID, "A", 1L)));
+        CustomSector semiconductor = sector(1L, null, "반도체");
+        stubSectorTree(List.of(semiconductor), List.of(CustomStockSector.create(LEGACY_OWNER_ID, "A", 1L)));
         stubStockCache(stock("A", Market.KOSPI));
         stubPrices(
                 Market.KOSPI,
                 snapshotTime,
                 price("A", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.TEN));
-        // 이번 수집 주기에 지수기여도랭킹 수집만 실패해서, 카테고리 랭킹은 있는데 지수 스냅샷은 그 시각에
+        // 이번 수집 주기에 지수기여도랭킹 수집만 실패해서, 섹터 랭킹은 있는데 지수 스냅샷은 그 시각에
         // 없는 경우 — 다른 시각 값으로 조용히 대체하지 않고 index 전체가 null로 내려간다.
         when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
 
-        SnapshotResponse<CategoryChangeRateMarketRanking> response =
-                service.getCategoryChangeRates(MarketQuery.KOSPI, snapshotTime, 60);
+        SnapshotResponse<SectorChangeRateMarketRanking> response =
+                service.getSectorChangeRates(MarketQuery.KOSPI, snapshotTime, 60);
 
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().get(0).index()).isNull();
     }
 
     @Test
-    void getCategoryChangeRates_before_시각에_지수_스냅샷이_없으면_index_before가_null이다() {
+    void getSectorChangeRates_before_시각에_지수_스냅샷이_없으면_index_before가_null이다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
-        CustomSector semiconductor = category(1L, null, "반도체");
-        stubCategoryTree(List.of(semiconductor), List.of(CustomStockSector.create(LEGACY_OWNER_ID, "A", 1L)));
+        CustomSector semiconductor = sector(1L, null, "반도체");
+        stubSectorTree(List.of(semiconductor), List.of(CustomStockSector.create(LEGACY_OWNER_ID, "A", 1L)));
         stubStockCache(stock("A", Market.KOSPI));
         stubPrices(
                 Market.KOSPI,
@@ -531,8 +531,8 @@ class MarketMapQueryServiceTest {
         when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime.minusMinutes(60)))
                 .thenReturn(List.of());
 
-        SnapshotResponse<CategoryChangeRateMarketRanking> response =
-                service.getCategoryChangeRates(MarketQuery.KOSPI, snapshotTime, 60);
+        SnapshotResponse<SectorChangeRateMarketRanking> response =
+                service.getSectorChangeRates(MarketQuery.KOSPI, snapshotTime, 60);
 
         assertThat(response.items()).hasSize(1);
         assertThat(response.items().get(0).index().now()).isEqualByComparingTo(BigDecimal.valueOf(1.23));
@@ -540,12 +540,12 @@ class MarketMapQueryServiceTest {
     }
 
     @Test
-    void getTopCategoryRankings_자식_카테고리는_랭킹에서_제외된다() {
+    void getTopSectorRankings_자식_섹터는_랭킹에서_제외된다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
         LocalDateTime beforeTime = snapshotTime.minusMinutes(60);
-        CustomSector root = category(1L, null, "반도체");
-        CustomSector child = category(2L, 1L, "반도체 소재");
-        stubCategoryTree(
+        CustomSector root = sector(1L, null, "반도체");
+        CustomSector child = sector(2L, 1L, "반도체 소재");
+        stubSectorTree(
                 List.of(root, child),
                 List.of(
                         CustomStockSector.create(LEGACY_OWNER_ID, "A1", 1L),
@@ -564,23 +564,23 @@ class MarketMapQueryServiceTest {
                 price("A1", Market.KOSPI, beforeTime, BigDecimal.valueOf(10_000), BigDecimal.ZERO),
                 price("A2", Market.KOSPI, beforeTime, BigDecimal.valueOf(10_000), BigDecimal.ZERO));
 
-        List<CategoryRankingSummary> summaries =
-                service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
+        List<SectorRankingSummary> summaries =
+                service.getTopSectorRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
 
         assertThat(summaries).hasSize(1);
-        assertThat(summaries.get(0).topCategories())
-                .extracting(TopCategoryItem::categoryName)
+        assertThat(summaries.get(0).topSectors())
+                .extracting(TopSectorItem::sectorName)
                 .containsExactly("반도체");
     }
 
     @Test
-    void getTopCategoryRankings_TOP2까지만_등락률_내림차순으로_노출된다() {
+    void getTopSectorRankings_TOP2까지만_등락률_내림차순으로_노출된다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
         LocalDateTime beforeTime = snapshotTime.minusMinutes(60);
-        CustomSector a = category(1L, null, "반도체");
-        CustomSector b = category(2L, null, "화학");
-        CustomSector c = category(3L, null, "자동차");
-        stubCategoryTree(
+        CustomSector a = sector(1L, null, "반도체");
+        CustomSector b = sector(2L, null, "화학");
+        CustomSector c = sector(3L, null, "자동차");
+        stubSectorTree(
                 List.of(a, b, c),
                 List.of(
                         CustomStockSector.create(LEGACY_OWNER_ID, "A", 1L),
@@ -605,23 +605,23 @@ class MarketMapQueryServiceTest {
                 price("B", Market.KOSPI, beforeTime, BigDecimal.valueOf(10_000), BigDecimal.ZERO),
                 price("C", Market.KOSPI, beforeTime, BigDecimal.valueOf(10_000), BigDecimal.ZERO));
 
-        List<CategoryRankingSummary> summaries =
-                service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
+        List<SectorRankingSummary> summaries =
+                service.getTopSectorRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
 
-        assertThat(summaries.get(0).topCategories())
-                .extracting(TopCategoryItem::categoryName)
+        assertThat(summaries.get(0).topSectors())
+                .extracting(TopSectorItem::sectorName)
                 .containsExactly("반도체", "화학");
     }
 
-    // before가 없는 것을 0으로 치면 now가 그대로 델타가 되어, 실제로는 계산할 수 없는 카테고리가
+    // before가 없는 것을 0으로 치면 now가 그대로 델타가 되어, 실제로는 계산할 수 없는 섹터가
     // 1위로 올라온다. 순위에서 빼는 것이 맞다.
     @Test
-    void getTopCategoryRankings_before가_없는_카테고리는_랭킹에서_빠진다() {
+    void getTopSectorRankings_before가_없는_섹터는_랭킹에서_빠진다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
         LocalDateTime beforeTime = snapshotTime.minusMinutes(60);
-        CustomSector a = category(1L, null, "반도체");
-        CustomSector b = category(2L, null, "화학");
-        stubCategoryTree(
+        CustomSector a = sector(1L, null, "반도체");
+        CustomSector b = sector(2L, null, "화학");
+        stubSectorTree(
                 List.of(a, b),
                 List.of(
                         CustomStockSector.create(LEGACY_OWNER_ID, "A", 1L),
@@ -638,21 +638,21 @@ class MarketMapQueryServiceTest {
                 beforeTime,
                 price("B", Market.KOSPI, beforeTime, BigDecimal.valueOf(10_000), BigDecimal.ZERO));
 
-        List<CategoryRankingSummary> summaries =
-                service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
+        List<SectorRankingSummary> summaries =
+                service.getTopSectorRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
 
-        assertThat(summaries.get(0).topCategories())
-                .extracting(TopCategoryItem::categoryName)
+        assertThat(summaries.get(0).topSectors())
+                .extracting(TopSectorItem::sectorName)
                 .containsExactly("화학");
     }
 
     // 그 시각 스냅샷이 통째로 없는 경우 — 매일 첫 발송(08:10의 before는 07:55인데 수집은 08:00부터)이
     // 여기 걸린다. 캡션 쪽에서 안내 문구로 바꿔 내보낸다.
     @Test
-    void getTopCategoryRankings_before가_전부_없으면_빈_목록이_된다() {
+    void getTopSectorRankings_before가_전부_없으면_빈_목록이_된다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
-        CustomSector a = category(1L, null, "반도체");
-        stubCategoryTree(List.of(a), List.of(CustomStockSector.create(LEGACY_OWNER_ID, "A", 1L)));
+        CustomSector a = sector(1L, null, "반도체");
+        stubSectorTree(List.of(a), List.of(CustomStockSector.create(LEGACY_OWNER_ID, "A", 1L)));
         stubStockCache(stock("A", Market.KOSPI));
         stubPrices(
                 Market.KOSPI,
@@ -660,21 +660,21 @@ class MarketMapQueryServiceTest {
                 price("A", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.TEN));
         // before 시각은 존재 자체를 스텁하지 않는다 — 그 시각 스냅샷이 통째로 없는 경우.
 
-        List<CategoryRankingSummary> summaries =
-                service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
+        List<SectorRankingSummary> summaries =
+                service.getTopSectorRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
 
-        assertThat(summaries.get(0).topCategories()).isEmpty();
+        assertThat(summaries.get(0).topSectors()).isEmpty();
     }
 
     @Test
-    void getTopCategoryRankings_기본_제외_구간은_평균_계산에서_빠진다() {
+    void getTopSectorRankings_기본_제외_구간은_평균_계산에서_빠진다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
         LocalDateTime beforeTime = snapshotTime.minusMinutes(60);
-        CustomSector root = category(1L, null, "반도체");
+        CustomSector root = sector(1L, null, "반도체");
         // 구간은 시가총액으로 정해진다 — 대형 1종목(시총 10,000, +10%)과 소형 4종목(합계 시총 10,000,
         // 각 -50%)으로 나눈다. 소형은 기본 제외 구간이라 평균에서 빠지면 +10%만 남는다.
         stubTierThresholds(tierThreshold(20L, "소형", 0L, true), tierThreshold(10L, "대형", 5_000L, false));
-        stubCategoryTree(
+        stubSectorTree(
                 List.of(root),
                 List.of(
                         CustomStockSector.create(LEGACY_OWNER_ID, "BIG", 1L),
@@ -705,22 +705,22 @@ class MarketMapQueryServiceTest {
                 price("S3", Market.KOSPI, beforeTime, BigDecimal.valueOf(2_500), BigDecimal.ZERO),
                 price("S4", Market.KOSPI, beforeTime, BigDecimal.valueOf(2_500), BigDecimal.ZERO));
 
-        List<CategoryRankingSummary> summaries =
-                service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
+        List<SectorRankingSummary> summaries =
+                service.getTopSectorRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
 
-        assertThat(summaries.get(0).topCategories().get(0).changeRate()).isEqualByComparingTo(BigDecimal.TEN);
+        assertThat(summaries.get(0).topSectors().get(0).changeRate()).isEqualByComparingTo(BigDecimal.TEN);
     }
 
-    // 델타(now-before) 기준과 등락률(now) 기준이 서로 다른 카테고리를 뽑을 수 있음을 보인다 — 08:10
+    // 델타(now-before) 기준과 등락률(now) 기준이 서로 다른 섹터를 뽑을 수 있음을 보인다 — 08:10
     // 폴백이 델타 대신 이 랭킹을 쓰는 이유다.
     @Test
-    void getTopCategoryRankingsByChangeRate_등락률_기준으로_델타_기준과_다른_카테고리를_뽑는다() {
+    void getTopSectorRankingsByChangeRate_등락률_기준으로_델타_기준과_다른_섹터를_뽑는다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
         LocalDateTime beforeTime = snapshotTime.minusMinutes(60);
-        CustomSector a = category(1L, null, "반도체");
-        CustomSector b = category(2L, null, "화학");
-        CustomSector c = category(3L, null, "자동차");
-        stubCategoryTree(
+        CustomSector a = sector(1L, null, "반도체");
+        CustomSector b = sector(2L, null, "화학");
+        CustomSector c = sector(3L, null, "자동차");
+        stubSectorTree(
                 List.of(a, b, c),
                 List.of(
                         CustomStockSector.create(LEGACY_OWNER_ID, "A", 1L),
@@ -742,26 +742,26 @@ class MarketMapQueryServiceTest {
                 price("B", Market.KOSPI, beforeTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(-10)),
                 price("C", Market.KOSPI, beforeTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(8)));
 
-        List<CategoryRankingSummary> deltaRankings =
-                service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
-        List<CategoryRankingSummary> changeRateRankings = service.getTopCategoryRankingsByChangeRate(
+        List<SectorRankingSummary> deltaRankings =
+                service.getTopSectorRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
+        List<SectorRankingSummary> changeRateRankings = service.getTopSectorRankingsByChangeRate(
                 MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
 
-        assertThat(deltaRankings.get(0).topCategories())
-                .extracting(TopCategoryItem::categoryName)
+        assertThat(deltaRankings.get(0).topSectors())
+                .extracting(TopSectorItem::sectorName)
                 .containsExactly("화학", "자동차");
-        assertThat(changeRateRankings.get(0).topCategories())
-                .extracting(TopCategoryItem::categoryName)
+        assertThat(changeRateRankings.get(0).topSectors())
+                .extracting(TopSectorItem::sectorName)
                 .containsExactly("반도체", "자동차");
     }
 
     @Test
-    void getMergedTopCategoryRanking_두_마켓의_원시값을_합친_기준으로_TOP2를_뽑는다() {
+    void getMergedTopSectorRanking_두_마켓의_원시값을_합친_기준으로_TOP2를_뽑는다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
-        CustomSector a = category(1L, null, "반도체");
-        CustomSector b = category(2L, null, "화학");
-        CustomSector c = category(3L, null, "자동차");
-        stubCategoryTree(
+        CustomSector a = sector(1L, null, "반도체");
+        CustomSector b = sector(2L, null, "화학");
+        CustomSector c = sector(3L, null, "자동차");
+        stubSectorTree(
                 List.of(a, b, c),
                 List.of(
                         CustomStockSector.create(LEGACY_OWNER_ID, "A1", 1L),
@@ -788,18 +788,18 @@ class MarketMapQueryServiceTest {
                 price("A2", Market.KOSDAQ, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(-90)),
                 price("B2", Market.KOSDAQ, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(8)));
 
-        List<TopCategoryItem> merged =
-                service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime, AverageMode.WEIGHTED, false);
+        List<TopSectorItem> merged =
+                service.getMergedTopSectorRanking(MarketQuery.ALL_STOCK, snapshotTime, AverageMode.WEIGHTED, false);
 
         // 병합 평균: a=(1,000,000-900,000)/20,000=+5%, b=(80,000+80,000)/20,000=+8%, c=60,000/10,000=+6%
-        assertThat(merged).extracting(TopCategoryItem::categoryName).containsExactly("화학", "자동차");
+        assertThat(merged).extracting(TopSectorItem::sectorName).containsExactly("화학", "자동차");
     }
 
     @Test
-    void getMergedTopCategoryRanking_원시값을_합산한_뒤_한_번만_나눈다() {
+    void getMergedTopSectorRanking_원시값을_합산한_뒤_한_번만_나눈다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
-        CustomSector a = category(1L, null, "반도체");
-        stubCategoryTree(
+        CustomSector a = sector(1L, null, "반도체");
+        stubSectorTree(
                 List.of(a),
                 List.of(
                         CustomStockSector.create(LEGACY_OWNER_ID, "A1", 1L),
@@ -816,8 +816,8 @@ class MarketMapQueryServiceTest {
                 snapshotTime,
                 price("A2", Market.KOSDAQ, snapshotTime, BigDecimal.valueOf(40_000), BigDecimal.valueOf(-2)));
 
-        List<TopCategoryItem> merged =
-                service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime, AverageMode.WEIGHTED, false);
+        List<TopSectorItem> merged =
+                service.getMergedTopSectorRanking(MarketQuery.ALL_STOCK, snapshotTime, AverageMode.WEIGHTED, false);
 
         assertThat(merged.get(0).changeRate()).isEqualByComparingTo(BigDecimal.valueOf(0.4));
     }
@@ -826,23 +826,22 @@ class MarketMapQueryServiceTest {
     // 나오는데 여기는 빈 목록이 된다. 호출부(MarketMapAlbumReportSender)가 이걸 "캡처할 마켓이 없다"로
     // 읽으면 한 장도 안 찍고 에스컬레이션하므로, 빈 목록이 정상 반환이라는 것을 못박아둔다.
     @Test
-    void getMergedTopCategoryRanking_그_시각_스냅샷이_없으면_빈_목록이다() {
+    void getMergedTopSectorRanking_그_시각_스냅샷이_없으면_빈_목록이다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
-        stubCategoryTree(List.of(category(1L, null, "반도체")), List.of());
+        stubSectorTree(List.of(sector(1L, null, "반도체")), List.of());
         // KOSPI·KOSDAQ 둘 다 그 시각 스냅샷 자체를 스텁하지 않는다 — 캡처가 아예 안 된 tick.
 
-        assertThat(service.getMergedTopCategoryRanking(
-                        MarketQuery.ALL_STOCK, snapshotTime, AverageMode.WEIGHTED, false))
+        assertThat(service.getMergedTopSectorRanking(MarketQuery.ALL_STOCK, snapshotTime, AverageMode.WEIGHTED, false))
                 .isEmpty();
     }
 
     // 결정 2가 새로 더한 규칙 — 한 마켓만 데이터가 없어도(다른 마켓은 멀쩡해도) 전체가 빈 목록이어야
     // 한다. 위 테스트(둘 다 없음)만으로는 "하나라도"인지 "전부"인지 구분이 안 된다.
     @Test
-    void getMergedTopCategoryRanking_한_마켓만_합산이_비어도_빈_목록이다() {
+    void getMergedTopSectorRanking_한_마켓만_합산이_비어도_빈_목록이다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
-        CustomSector a = category(1L, null, "반도체");
-        stubCategoryTree(List.of(a), List.of(CustomStockSector.create(LEGACY_OWNER_ID, "A1", 1L)));
+        CustomSector a = sector(1L, null, "반도체");
+        stubSectorTree(List.of(a), List.of(CustomStockSector.create(LEGACY_OWNER_ID, "A1", 1L)));
         stubStockCache(stock("A1", Market.KOSPI));
         stubPrices(
                 Market.KOSPI,
@@ -850,20 +849,19 @@ class MarketMapQueryServiceTest {
                 price("A1", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.TEN));
         // KOSDAQ은 그 시각 스냅샷 자체가 없다 — KOSPI만 있어도 전체가 빈 목록이어야 한다.
 
-        assertThat(service.getMergedTopCategoryRanking(
-                        MarketQuery.ALL_STOCK, snapshotTime, AverageMode.WEIGHTED, false))
+        assertThat(service.getMergedTopSectorRanking(MarketQuery.ALL_STOCK, snapshotTime, AverageMode.WEIGHTED, false))
                 .isEmpty();
     }
 
-    // 맵 앨범 캡션(getMergedTopCategoryRanking)에서도 섹터 제외 on/off로 TOP2가 달라진다 — 지시서 결정
+    // 맵 앨범 캡션(getMergedTopSectorRanking)에서도 섹터 제외 on/off로 TOP2가 달라진다 — 지시서 결정
     // 3이 고치는 두 캡션 경로(섹터/맵) 중 나머지 하나.
     @Test
-    void getMergedTopCategoryRanking_섹터_제외를_켜면_isExcluded_카테고리가_빠진다() {
+    void getMergedTopSectorRanking_섹터_제외를_켜면_isExcluded_섹터가_빠진다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
-        CustomSector excluded = category(1L, null, "반도체");
+        CustomSector excluded = sector(1L, null, "반도체");
         excluded.exclude();
-        CustomSector included = category(2L, null, "화학");
-        stubCategoryTree(
+        CustomSector included = sector(2L, null, "화학");
+        stubSectorTree(
                 List.of(excluded, included),
                 List.of(
                         CustomStockSector.create(LEGACY_OWNER_ID, "A1", 1L),
@@ -882,22 +880,22 @@ class MarketMapQueryServiceTest {
                 snapshotTime,
                 price("B2", Market.KOSDAQ, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(5)));
 
-        List<TopCategoryItem> filtered =
-                service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime, AverageMode.WEIGHTED, true);
-        List<TopCategoryItem> unfiltered =
-                service.getMergedTopCategoryRanking(MarketQuery.ALL_STOCK, snapshotTime, AverageMode.WEIGHTED, false);
+        List<TopSectorItem> filtered =
+                service.getMergedTopSectorRanking(MarketQuery.ALL_STOCK, snapshotTime, AverageMode.WEIGHTED, true);
+        List<TopSectorItem> unfiltered =
+                service.getMergedTopSectorRanking(MarketQuery.ALL_STOCK, snapshotTime, AverageMode.WEIGHTED, false);
 
-        assertThat(filtered).extracting(TopCategoryItem::categoryName).containsExactly("화학");
-        assertThat(unfiltered).extracting(TopCategoryItem::categoryName).containsExactlyInAnyOrder("반도체", "화학");
+        assertThat(filtered).extracting(TopSectorItem::sectorName).containsExactly("화학");
+        assertThat(unfiltered).extracting(TopSectorItem::sectorName).containsExactlyInAnyOrder("반도체", "화학");
     }
 
     // 가중평균과 산술평균이 실제로 다른 값이 나오는 것을 보여준다 — 종목 하나짜리 픽스처는 itemCount가
     // 항상 1이라 두 평균이 우연히 같아서 이 분기를 검증하지 못한다.
     @Test
-    void getTopCategoryRankingsByChangeRate_평균_방식에_따라_결과가_달라진다() {
+    void getTopSectorRankingsByChangeRate_평균_방식에_따라_결과가_달라진다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
-        CustomSector a = category(1L, null, "반도체");
-        stubCategoryTree(
+        CustomSector a = sector(1L, null, "반도체");
+        stubSectorTree(
                 List.of(a),
                 List.of(
                         CustomStockSector.create(LEGACY_OWNER_ID, "BIG", 1L),
@@ -911,23 +909,23 @@ class MarketMapQueryServiceTest {
                 price("BIG", Market.KOSPI, snapshotTime, BigDecimal.valueOf(90_000), BigDecimal.valueOf(30)),
                 price("SMALL", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.TEN));
 
-        List<CategoryRankingSummary> weighted = service.getTopCategoryRankingsByChangeRate(
+        List<SectorRankingSummary> weighted = service.getTopSectorRankingsByChangeRate(
                 MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
-        List<CategoryRankingSummary> simple = service.getTopCategoryRankingsByChangeRate(
+        List<SectorRankingSummary> simple = service.getTopSectorRankingsByChangeRate(
                 MarketQuery.KOSPI, snapshotTime, 60, AverageMode.SIMPLE, false);
 
-        assertThat(weighted.get(0).topCategories().get(0).changeRate()).isEqualByComparingTo(BigDecimal.valueOf(28));
-        assertThat(simple.get(0).topCategories().get(0).changeRate()).isEqualByComparingTo(BigDecimal.valueOf(20));
+        assertThat(weighted.get(0).topSectors().get(0).changeRate()).isEqualByComparingTo(BigDecimal.valueOf(28));
+        assertThat(simple.get(0).topSectors().get(0).changeRate()).isEqualByComparingTo(BigDecimal.valueOf(20));
     }
 
-    // 평상시(매 tick) 경로 — getTopCategoryRankings → toTopCategoryItem은 avgOf를 now·before 두 번
+    // 평상시(매 tick) 경로 — getTopSectorRankings → toTopSectorItem은 avgOf를 now·before 두 번
     // 불러 그 차이를 쓴다. ByChangeRate 폴백 경로만 덮으면 두 호출 중 하나가 다른 모드를 써도 못 잡는다.
     @Test
-    void getTopCategoryRankings_평균_방식에_따라_델타_결과가_달라진다() {
+    void getTopSectorRankings_평균_방식에_따라_델타_결과가_달라진다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
         LocalDateTime beforeTime = snapshotTime.minusMinutes(60);
-        CustomSector a = category(1L, null, "반도체");
-        stubCategoryTree(
+        CustomSector a = sector(1L, null, "반도체");
+        stubSectorTree(
                 List.of(a),
                 List.of(
                         CustomStockSector.create(LEGACY_OWNER_ID, "BIG", 1L),
@@ -947,23 +945,23 @@ class MarketMapQueryServiceTest {
                 price("BIG", Market.KOSPI, beforeTime, BigDecimal.valueOf(80_000), BigDecimal.TEN),
                 price("SMALL", Market.KOSPI, beforeTime, BigDecimal.valueOf(20_000), BigDecimal.ZERO));
 
-        List<CategoryRankingSummary> weighted =
-                service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
-        List<CategoryRankingSummary> simple =
-                service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.SIMPLE, false);
+        List<SectorRankingSummary> weighted =
+                service.getTopSectorRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
+        List<SectorRankingSummary> simple =
+                service.getTopSectorRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.SIMPLE, false);
 
-        assertThat(weighted.get(0).topCategories().get(0).changeRate()).isEqualByComparingTo(BigDecimal.valueOf(20));
-        assertThat(simple.get(0).topCategories().get(0).changeRate()).isEqualByComparingTo(BigDecimal.valueOf(15));
+        assertThat(weighted.get(0).topSectors().get(0).changeRate()).isEqualByComparingTo(BigDecimal.valueOf(20));
+        assertThat(simple.get(0).topSectors().get(0).changeRate()).isEqualByComparingTo(BigDecimal.valueOf(15));
     }
 
-    // 섹터 제외(custom_sector.is_excluded)를 켜고 끄면 TOP2에 들어오는 카테고리가 달라진다.
+    // 섹터 제외(custom_sector.is_excluded)를 켜고 끄면 TOP2에 들어오는 섹터가 달라진다.
     @Test
-    void getTopCategoryRankingsByChangeRate_섹터_제외를_켜면_isExcluded_카테고리가_빠진다() {
+    void getTopSectorRankingsByChangeRate_섹터_제외를_켜면_isExcluded_섹터가_빠진다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
-        CustomSector excluded = category(1L, null, "반도체");
+        CustomSector excluded = sector(1L, null, "반도체");
         excluded.exclude();
-        CustomSector included = category(2L, null, "화학");
-        stubCategoryTree(
+        CustomSector included = sector(2L, null, "화학");
+        stubSectorTree(
                 List.of(excluded, included),
                 List.of(
                         CustomStockSector.create(LEGACY_OWNER_ID, "A", 1L),
@@ -975,27 +973,27 @@ class MarketMapQueryServiceTest {
                 price("A", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(90)),
                 price("B", Market.KOSPI, snapshotTime, BigDecimal.valueOf(10_000), BigDecimal.valueOf(5)));
 
-        List<CategoryRankingSummary> filtered = service.getTopCategoryRankingsByChangeRate(
+        List<SectorRankingSummary> filtered = service.getTopSectorRankingsByChangeRate(
                 MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, true);
-        List<CategoryRankingSummary> unfiltered = service.getTopCategoryRankingsByChangeRate(
+        List<SectorRankingSummary> unfiltered = service.getTopSectorRankingsByChangeRate(
                 MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
 
-        assertThat(filtered.get(0).topCategories())
-                .extracting(TopCategoryItem::categoryName)
+        assertThat(filtered.get(0).topSectors())
+                .extracting(TopSectorItem::sectorName)
                 .containsExactly("화학");
-        assertThat(unfiltered.get(0).topCategories())
-                .extracting(TopCategoryItem::categoryName)
+        assertThat(unfiltered.get(0).topSectors())
+                .extracting(TopSectorItem::sectorName)
                 .containsExactly("반도체", "화학");
     }
 
-    // 텔레그램 섹터 캡션의 "#코스피 +x.xx%"가 CategoryRankingSummary.indexChangeRate를 읽는다
-    // (toCategoryRankingSummary의 marketRanking.index().now()) — 캡션이 실제로 읽는 자리에 지수 값이
+    // 텔레그램 섹터 캡션의 "#코스피 +x.xx%"가 SectorRankingSummary.indexChangeRate를 읽는다
+    // (toSectorRankingSummary의 marketRanking.index().now()) — 캡션이 실제로 읽는 자리에 지수 값이
     // 실리는지 보는 테스트가 지금까지 없었다.
     @Test
-    void getTopCategoryRankings_지수_등락률이_함께_담긴다() {
+    void getTopSectorRankings_지수_등락률이_함께_담긴다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
-        CustomSector a = category(1L, null, "반도체");
-        stubCategoryTree(List.of(a), List.of(CustomStockSector.create(LEGACY_OWNER_ID, "A", 1L)));
+        CustomSector a = sector(1L, null, "반도체");
+        stubSectorTree(List.of(a), List.of(CustomStockSector.create(LEGACY_OWNER_ID, "A", 1L)));
         stubStockCache(stock("A", Market.KOSPI));
         stubPrices(
                 Market.KOSPI,
@@ -1004,8 +1002,8 @@ class MarketMapQueryServiceTest {
         when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime))
                 .thenReturn(List.of(marketOverviewSnapshot(Market.KOSPI, snapshotTime, BigDecimal.valueOf(1.23))));
 
-        List<CategoryRankingSummary> summaries =
-                service.getTopCategoryRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
+        List<SectorRankingSummary> summaries =
+                service.getTopSectorRankings(MarketQuery.KOSPI, snapshotTime, 60, AverageMode.WEIGHTED, false);
 
         assertThat(summaries.get(0).indexChangeRate()).isEqualByComparingTo(BigDecimal.valueOf(1.23));
     }
@@ -1027,9 +1025,9 @@ class MarketMapQueryServiceTest {
         return threshold;
     }
 
-    private void stubCategoryTree(List<CustomSector> categories, List<CustomStockSector> assignments) {
-        when(marketMapCategoryRepository.findAll()).thenReturn(categories);
-        when(marketMapStockCategoryRepository.findAll()).thenReturn(assignments);
+    private void stubSectorTree(List<CustomSector> sectors, List<CustomStockSector> assignments) {
+        when(marketMapSectorRepository.findAll()).thenReturn(sectors);
+        when(marketMapStockSectorRepository.findAll()).thenReturn(assignments);
     }
 
     private void stubStockCache(StockInfo... stocks) {
@@ -1076,15 +1074,14 @@ class MarketMapQueryServiceTest {
                 snapshotTime);
     }
 
-    private CustomSector category(Long id, Long parentId, String name) {
-        CustomSector category = parentId == null
-                ? CustomSector.createParent(LEGACY_OWNER_ID, name)
-                : categoryWithParent(parentId, name);
-        ReflectionTestUtils.setField(category, "id", id);
-        return category;
+    private CustomSector sector(Long id, Long parentId, String name) {
+        CustomSector sector =
+                parentId == null ? CustomSector.createParent(LEGACY_OWNER_ID, name) : sectorWithParent(parentId, name);
+        ReflectionTestUtils.setField(sector, "id", id);
+        return sector;
     }
 
-    private CustomSector categoryWithParent(Long parentId, String name) {
+    private CustomSector sectorWithParent(Long parentId, String name) {
         CustomSector parent = CustomSector.createParent(LEGACY_OWNER_ID, "parent-placeholder");
         ReflectionTestUtils.setField(parent, "id", parentId);
         return CustomSector.createChild(LEGACY_OWNER_ID, name, parent);

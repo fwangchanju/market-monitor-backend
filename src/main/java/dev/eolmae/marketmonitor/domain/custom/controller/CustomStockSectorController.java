@@ -26,8 +26,8 @@ public class CustomStockSectorController {
     private final CustomStockSectorService customStockSectorService;
 
     @GetMapping
-    public SnapshotResponse<StockSectorListItem> getStockCategories() {
-        return customStockSectorService.getStockCategories();
+    public SnapshotResponse<StockSectorListItem> getStockSectors() {
+        return customStockSectorService.getStockSectors();
     }
 
     @PutMapping("/{stockCode}")

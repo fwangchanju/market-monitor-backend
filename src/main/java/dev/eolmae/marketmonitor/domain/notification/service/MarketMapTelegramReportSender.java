@@ -18,24 +18,24 @@ public class MarketMapTelegramReportSender extends TelegramReportSender {
     // 값 해석은 각 sender가 한다는 구조를 유지하기 위해, 게터를 만들거나 부모 필드를 protected로
     // 열지 않고 자기 필드로 따로 보관한다.
     private final TelegramProperties telegramProperties;
-    private final CategoryRankingTextBuilder categoryRankingTextBuilder;
+    private final SectorRankingTextBuilder sectorRankingTextBuilder;
     private final MarketMapQueryService marketMapQueryService;
 
     public MarketMapTelegramReportSender(
             ScreenshotClient screenshotClient,
             TelegramClient telegramClient,
             TelegramProperties telegramProperties,
-            CategoryRankingTextBuilder categoryRankingTextBuilder,
+            SectorRankingTextBuilder sectorRankingTextBuilder,
             MarketMapQueryService marketMapQueryService) {
         super(screenshotClient, telegramClient, telegramProperties);
         this.telegramProperties = telegramProperties;
-        this.categoryRankingTextBuilder = categoryRankingTextBuilder;
+        this.sectorRankingTextBuilder = sectorRankingTextBuilder;
         this.marketMapQueryService = marketMapQueryService;
     }
 
     @Override
     protected RenderTarget target() {
-        return RenderTarget.MARKET_MAP;
+        return RenderTarget.MAP;
     }
 
     // 지도는 마켓을 하나로 합치지 않고 마켓별로 각각 캡처한다(ALL_STOCKS면 KOSPI/KOSDAQ 이미지 2장).
@@ -48,7 +48,7 @@ public class MarketMapTelegramReportSender extends TelegramReportSender {
     @Override
     protected String buildText(LocalDateTime dataTime, MarketQuery query) {
         return "Custom Map\n"
-                + categoryRankingTextBuilder.buildRankingText(marketMapQueryService.getTopCategoryRankings(
+                + sectorRankingTextBuilder.buildRankingText(marketMapQueryService.getTopSectorRankings(
                         query,
                         dataTime,
                         telegramProperties.beforeMinutes(),

@@ -29,7 +29,7 @@ public class SignupInitializationService {
             return null;
         });
         // INSERT ... SELECT + ON CONFLICT DO NOTHING — industry_info 전체를 신규 사용자의 기본
-        // 카테고리로 한 번에 복제하는 집합 연산. QueryDSL은 INSERT ... SELECT를 지원하지 않는다.
+        // 섹터로 한 번에 복제하는 집합 연산. QueryDSL은 INSERT ... SELECT를 지원하지 않는다.
         jdbcTemplate.update("""
                 INSERT INTO custom_sector (user_id, parent_id, name, depth, is_excluded, created_at, updated_at)
                 SELECT ?, NULL, industry.name, 0, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP

@@ -51,18 +51,18 @@ public class MarketMapController {
         return customScaleService.getDefaultScale();
     }
 
-    @PostMapping("/excluded-categories/{categoryId}")
-    public void registerExcludedCategory(@PathVariable Long categoryId) {
-        customSectorService.exclude(categoryId);
+    @PostMapping("/excluded-sectors/{sectorId}")
+    public void registerExcludedSector(@PathVariable Long sectorId) {
+        customSectorService.exclude(sectorId);
     }
 
-    @DeleteMapping("/excluded-categories/{categoryId}")
-    public void unregisterExcludedCategory(@PathVariable Long categoryId) {
-        customSectorService.include(categoryId);
+    @DeleteMapping("/excluded-sectors/{sectorId}")
+    public void unregisterExcludedSector(@PathVariable Long sectorId) {
+        customSectorService.include(sectorId);
     }
 
-    @DeleteMapping("/excluded-categories")
-    public void deleteExcludedCategories() {
+    @DeleteMapping("/excluded-sectors")
+    public void deleteExcludedSectors() {
         customSectorService.resetExcludes();
     }
 

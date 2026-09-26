@@ -54,7 +54,7 @@ public class CustomSnapshotService {
         Long userId = CurrentUser.requireId();
         String snapshotJson = customSectorTreeService.serializeCurrentSnapshot(userId);
         CustomSnapshot saved = customSnapshotRepository.save(CustomSnapshot.create(userId, label, snapshotJson));
-        tagLiveCategories(userId, saved.getId());
+        tagLiveSectors(userId, saved.getId());
         return toItem(saved);
     }
 
@@ -66,7 +66,7 @@ public class CustomSnapshotService {
         }
         String snapshotJson = customSectorTreeService.serializeCurrentSnapshot(userId);
         snapshot.overwrite(label, snapshotJson);
-        tagLiveCategories(userId, snapshotId);
+        tagLiveSectors(userId, snapshotId);
         return toItem(snapshot);
     }
 
@@ -91,7 +91,7 @@ public class CustomSnapshotService {
                 .orElseThrow(() -> new NotFoundException(ErrorCode.SNAPSHOT_NOT_FOUND, snapshotId));
     }
 
-    private void tagLiveCategories(Long userId, Long snapshotId) {
+    private void tagLiveSectors(Long userId, Long snapshotId) {
         customSectorRepository.findAllByUserId(userId).forEach(sector -> sector.tagSnapshot(snapshotId));
     }
 

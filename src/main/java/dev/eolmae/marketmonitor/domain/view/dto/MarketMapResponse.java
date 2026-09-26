@@ -9,7 +9,7 @@ import java.util.List;
  * 여럿을 합친 조회면 단일 지수값이 없으므로 marketOverview는 null.
  */
 public record MarketMapResponse(
-        LocalDateTime snapshotTime, List<MarketMapCategoryNode> items, MarketOverviewItem marketOverview) {
+        LocalDateTime snapshotTime, List<MarketMapSectorNode> items, MarketOverviewItem marketOverview) {
     public static MarketMapResponse empty() {
         return new MarketMapResponse(null, List.of(), null);
     }

@@ -23,7 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** 카테고리 추가/삭제/재부모화. 항상 라이브(현재 표시 중인) 트리만을 대상으로 한다. */
+/** 섹터 추가/삭제/재부모화. 항상 라이브(현재 표시 중인) 트리만을 대상으로 한다. */
 @Slf4j
 @Service
 @Transactional
@@ -35,8 +35,8 @@ public class CustomSectorService {
     private final StockInfoCacheService stockInfoCacheService;
 
     @Transactional(readOnly = true)
-    public List<SectorItem> getCategories() {
-        return findAllCategories(CurrentUser.requireId()).stream()
+    public List<SectorItem> getSectors() {
+        return findAllSectors(CurrentUser.requireId()).stream()
                 .map(this::toItem)
                 .toList();
     }
@@ -44,197 +44,196 @@ public class CustomSectorService {
     public SectorItem createParent(String name) {
         Long userId = CurrentUser.requireId();
         if (customSectorRepository.existsByUserIdAndName(userId, name)) {
-            throw new ConflictException(ErrorCode.CATEGORY_NAME_DUPLICATE, name);
+            throw new ConflictException(ErrorCode.SECTOR_NAME_DUPLICATE, name);
         }
-        CustomSector category = CustomSector.createParent(userId, name);
-        return toItem(customSectorRepository.save(category));
+        CustomSector sector = CustomSector.createParent(userId, name);
+        return toItem(customSectorRepository.save(sector));
     }
 
     public SectorItem createChild(String name, Long parentId) {
         Long userId = CurrentUser.requireId();
         if (customSectorRepository.existsByUserIdAndName(userId, name)) {
-            throw new ConflictException(ErrorCode.CATEGORY_NAME_DUPLICATE, name);
+            throw new ConflictException(ErrorCode.SECTOR_NAME_DUPLICATE, name);
         }
         CustomSector parent = customSectorRepository
                 .findByIdAndUserId(parentId, userId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.CATEGORY_NOT_FOUND, parentId));
-        CustomSector category = CustomSector.createChild(userId, name, parent);
-        return toItem(customSectorRepository.save(category));
+                .orElseThrow(() -> new NotFoundException(ErrorCode.SECTOR_NOT_FOUND, parentId));
+        CustomSector sector = CustomSector.createChild(userId, name, parent);
+        return toItem(customSectorRepository.save(sector));
     }
 
-    public void exclude(Long categoryId) {
-        CustomSector target = findOwnedCategory(categoryId, CurrentUser.requireId());
+    public void exclude(Long sectorId) {
+        CustomSector target = findOwnedSector(sectorId, CurrentUser.requireId());
         target.exclude();
     }
 
-    public void include(Long categoryId) {
-        CustomSector target = findOwnedCategory(categoryId, CurrentUser.requireId());
+    public void include(Long sectorId) {
+        CustomSector target = findOwnedSector(sectorId, CurrentUser.requireId());
         target.include();
     }
 
     public void resetExcludes() {
-        findAllCategories(CurrentUser.requireId()).forEach(CustomSector::include);
+        findAllSectors(CurrentUser.requireId()).forEach(CustomSector::include);
     }
 
-    public void rename(Long categoryId, String name) {
+    public void rename(Long sectorId, String name) {
         Long userId = CurrentUser.requireId();
-        CustomSector target = findOwnedCategory(categoryId, userId);
+        CustomSector target = findOwnedSector(sectorId, userId);
         if (target.getName().equals(name)) {
             return;
         }
         if (customSectorRepository.existsByUserIdAndName(userId, name)) {
-            throw new ConflictException(ErrorCode.CATEGORY_NAME_DUPLICATE, name);
+            throw new ConflictException(ErrorCode.SECTOR_NAME_DUPLICATE, name);
         }
         target.rename(name);
     }
 
-    /** categoryId를 newParentId의 자식으로 옮긴다. newParentId가 null이면 최상위(루트)로 옮긴다.
-     * newParentId가 categoryId 자신이거나 그 하위 카테고리면 순환 구조가 되므로 409로 막는다.
-     * 하위 카테고리 전체는 depth 변화량만큼 함께 갱신한다. */
-    public void reparent(Long categoryId, Long newParentId) {
-        CategoryMaps maps = getCategoryMaps();
-        Map<Long, CustomSector> categoryById = maps.categoryById();
-        Map<Long, List<CustomSector>> categoryByParentId = maps.categoryByParentId();
-        CustomSector target = findCategory(categoryId, categoryById);
+    /** sectorId를 newParentId의 자식으로 옮긴다. newParentId가 null이면 최상위(루트)로 옮긴다.
+     * newParentId가 sectorId 자신이거나 그 하위 섹터면 순환 구조가 되므로 409로 막는다.
+     * 하위 섹터 전체는 depth 변화량만큼 함께 갱신한다. */
+    public void reparent(Long sectorId, Long newParentId) {
+        SectorMaps maps = getSectorMaps();
+        Map<Long, CustomSector> sectorById = maps.sectorById();
+        Map<Long, List<CustomSector>> sectorByParentId = maps.sectorByParentId();
+        CustomSector target = findSector(sectorId, sectorById);
 
-        List<Long> subCategoryIds = collectSubCategoryIds(categoryId, categoryByParentId);
-        if (subCategoryIds.contains(newParentId)) {
-            throw new ConflictException(ErrorCode.CATEGORY_CIRCULAR_REFERENCE, categoryId, newParentId);
+        List<Long> subSectorIds = collectSubSectorIds(sectorId, sectorByParentId);
+        if (subSectorIds.contains(newParentId)) {
+            throw new ConflictException(ErrorCode.SECTOR_CIRCULAR_REFERENCE, sectorId, newParentId);
         }
 
         int newDepth = 0;
         if (newParentId != null) {
-            CustomSector newParent = findCategory(newParentId, categoryById);
+            CustomSector newParent = findSector(newParentId, sectorById);
             newDepth = newParent.getDepth() + 1;
         }
         int depthDifference = newDepth - target.getDepth();
         target.changeParent(newParentId);
 
-        // target을 포함한 하위 카테고리 전체 depth를 depthDifference만큼 일괄 이동
+        // target을 포함한 하위 섹터 전체 depth를 depthDifference만큼 일괄 이동
         if (depthDifference != 0) {
-            subCategoryIds.stream()
-                    .map(categoryById::get)
-                    .forEach(category -> category.changeDepth(category.getDepth() + depthDifference));
+            subSectorIds.stream()
+                    .map(sectorById::get)
+                    .forEach(sector -> sector.changeDepth(sector.getDepth() + depthDifference));
         }
     }
 
     @Transactional(readOnly = true)
-    public SectorDeletePreview deletePreview(Long categoryId) {
+    public SectorDeletePreview deletePreview(Long sectorId) {
         Long userId = CurrentUser.requireId();
-        CategoryMaps maps = getCategoryMaps();
-        Map<Long, CustomSector> categoryById = maps.categoryById();
-        CustomSector target = findCategory(categoryId, categoryById);
+        SectorMaps maps = getSectorMaps();
+        Map<Long, CustomSector> sectorById = maps.sectorById();
+        CustomSector target = findSector(sectorId, sectorById);
 
-        List<Long> subCategoryIds = collectSubCategoryIds(categoryId, maps.categoryByParentId());
-        List<CustomStockSector> stockCategories =
-                customStockSectorRepository.findByIdUserIdAndSectorIdIn(userId, subCategoryIds);
-        List<CustomStockSector> blockingStockCategories = findBlockingStockCategories(stockCategories);
-        if (!blockingStockCategories.isEmpty()) {
+        List<Long> subSectorIds = collectSubSectorIds(sectorId, maps.sectorByParentId());
+        List<CustomStockSector> stockSectors =
+                customStockSectorRepository.findByIdUserIdAndSectorIdIn(userId, subSectorIds);
+        List<CustomStockSector> blockingStockSectors = findBlockingStockSectors(stockSectors);
+        if (!blockingStockSectors.isEmpty()) {
             return SectorDeletePreview.blocked(
-                    target.getName(), toBlockingStockCategoryItems(blockingStockCategories, categoryById));
+                    target.getName(), toBlockingStockSectorItems(blockingStockSectors, sectorById));
         }
         return SectorDeletePreview.deletable(
-                target.getName(), toDeletableCategoryNames(categoryId, subCategoryIds, categoryById));
+                target.getName(), toDeletableSectorNames(sectorId, subSectorIds, sectorById));
     }
 
-    public void delete(Long categoryId) {
+    public void delete(Long sectorId) {
         Long userId = CurrentUser.requireId();
-        CategoryMaps maps = getCategoryMaps();
-        Map<Long, CustomSector> categoryById = maps.categoryById();
-        findCategory(categoryId, categoryById);
+        SectorMaps maps = getSectorMaps();
+        Map<Long, CustomSector> sectorById = maps.sectorById();
+        findSector(sectorId, sectorById);
 
-        List<Long> subCategoryIds = collectSubCategoryIds(categoryId, maps.categoryByParentId());
-        List<CustomStockSector> stockCategories =
-                customStockSectorRepository.findByIdUserIdAndSectorIdIn(userId, subCategoryIds);
-        if (!findBlockingStockCategories(stockCategories).isEmpty()) {
-            throw new ConflictException(ErrorCode.CATEGORY_HAS_ASSIGNED_STOCK, categoryId);
+        List<Long> subSectorIds = collectSubSectorIds(sectorId, maps.sectorByParentId());
+        List<CustomStockSector> stockSectors =
+                customStockSectorRepository.findByIdUserIdAndSectorIdIn(userId, subSectorIds);
+        if (!findBlockingStockSectors(stockSectors).isEmpty()) {
+            throw new ConflictException(ErrorCode.SECTOR_HAS_ASSIGNED_STOCK, sectorId);
         }
 
         // 활성 주권 배정은 없다고 확인했지만(위 판정), 비활성 종목의 배정 행은 여전히 남아있을 수 있다 —
-        // custom_sector를 가리키는 FK라 카테고리 삭제 전에 먼저 지워야 한다(결정 1).
-        if (!stockCategories.isEmpty()) {
-            log.info("[카테고리삭제] 비활성 배정 행 삭제 | categoryId={}|count={}", categoryId, stockCategories.size());
-            customStockSectorRepository.deleteByUserIdAndSectorIdIn(userId, subCategoryIds);
+        // custom_sector를 가리키는 FK라 섹터 삭제 전에 먼저 지워야 한다(결정 1).
+        if (!stockSectors.isEmpty()) {
+            log.info("[섹터삭제] 비활성 배정 행 삭제 | sectorId={}|count={}", sectorId, stockSectors.size());
+            customStockSectorRepository.deleteByUserIdAndSectorIdIn(userId, subSectorIds);
         }
 
-        List<CustomSector> subCategories = subCategoryIds.stream()
-                .map(categoryById::get)
+        List<CustomSector> subSectors = subSectorIds.stream()
+                .map(sectorById::get)
                 .sorted(Comparator.comparingInt(CustomSector::getDepth).reversed())
                 .toList();
-        customSectorRepository.deleteAll(subCategories);
+        customSectorRepository.deleteAll(subSectors);
     }
 
-    /** 카테고리 전체 스냅샷을 id 조회용/parentId 그룹핑용 두 가지 형태로 함께 준비해둔다.
+    /** 섹터 전체 스냅샷을 id 조회용/parentId 그룹핑용 두 가지 형태로 함께 준비해둔다.
      * reparent/deletePreview/delete처럼 둘 다 필요한 경우에만 사용. */
-    private record CategoryMaps(
-            Map<Long, CustomSector> categoryById, Map<Long, List<CustomSector>> categoryByParentId) {}
+    private record SectorMaps(Map<Long, CustomSector> sectorById, Map<Long, List<CustomSector>> sectorByParentId) {}
 
-    private CategoryMaps getCategoryMaps() {
-        List<CustomSector> categories = findAllCategories(CurrentUser.requireId());
-        Map<Long, CustomSector> categoryById = new HashMap<>();
-        Map<Long, List<CustomSector>> categoryByParentId = new HashMap<>();
-        for (CustomSector category : categories) {
-            categoryById.put(category.getId(), category);
-            categoryByParentId
-                    .computeIfAbsent(category.getParentId(), key -> new ArrayList<>())
-                    .add(category);
+    private SectorMaps getSectorMaps() {
+        List<CustomSector> sectors = findAllSectors(CurrentUser.requireId());
+        Map<Long, CustomSector> sectorById = new HashMap<>();
+        Map<Long, List<CustomSector>> sectorByParentId = new HashMap<>();
+        for (CustomSector sector : sectors) {
+            sectorById.put(sector.getId(), sector);
+            sectorByParentId
+                    .computeIfAbsent(sector.getParentId(), key -> new ArrayList<>())
+                    .add(sector);
         }
-        return new CategoryMaps(categoryById, categoryByParentId);
+        return new SectorMaps(sectorById, sectorByParentId);
     }
 
-    private List<CustomSector> findAllCategories(Long userId) {
+    private List<CustomSector> findAllSectors(Long userId) {
         return customSectorRepository.findAllByUserId(userId);
     }
 
-    private CustomSector findOwnedCategory(Long categoryId, Long userId) {
+    private CustomSector findOwnedSector(Long sectorId, Long userId) {
         return customSectorRepository
-                .findByIdAndUserId(categoryId, userId)
-                .orElseThrow(() -> new NotFoundException(ErrorCode.CATEGORY_NOT_FOUND, categoryId));
+                .findByIdAndUserId(sectorId, userId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.SECTOR_NOT_FOUND, sectorId));
     }
 
-    private CustomSector findCategory(Long categoryId, Map<Long, CustomSector> categoryById) {
-        CustomSector category = categoryById.get(categoryId);
-        if (category == null) {
-            throw new NotFoundException(ErrorCode.CATEGORY_NOT_FOUND, categoryId);
+    private CustomSector findSector(Long sectorId, Map<Long, CustomSector> sectorById) {
+        CustomSector sector = sectorById.get(sectorId);
+        if (sector == null) {
+            throw new NotFoundException(ErrorCode.SECTOR_NOT_FOUND, sectorId);
         }
-        return category;
+        return sector;
     }
 
-    private List<String> toDeletableCategoryNames(
-            Long categoryId, List<Long> subCategoryIds, Map<Long, CustomSector> categoryById) {
-        return subCategoryIds.stream()
-                .filter(id -> !id.equals(categoryId))
-                .map(id -> categoryById.get(id).getName())
+    private List<String> toDeletableSectorNames(
+            Long sectorId, List<Long> subSectorIds, Map<Long, CustomSector> sectorById) {
+        return subSectorIds.stream()
+                .filter(id -> !id.equals(sectorId))
+                .map(id -> sectorById.get(id).getName())
                 .toList();
     }
 
-    /** "이 카테고리들을 막는" 배정만 남긴다 — 그 행이 가리키는 종목이 stock_info 캐시에서 활성 주권인
+    /** "이 섹터들을 막는" 배정만 남긴다 — 그 행이 가리키는 종목이 stock_info 캐시에서 활성 주권인
      * 것만(캐시에 아예 없는 종목은 화면에도 안 보이므로 "막지 않음"으로 친다, 5-3). deletePreview·delete가
      * 이 필터를 공유해서 화면(종목 관리 페이지)과 같은 기준으로 판정한다. */
-    private List<CustomStockSector> findBlockingStockCategories(List<CustomStockSector> stockCategories) {
+    private List<CustomStockSector> findBlockingStockSectors(List<CustomStockSector> stockSectors) {
         Map<String, StockInfo> stockInfoCache = stockInfoCacheService.getCache();
-        return stockCategories.stream()
-                .filter(stockCategory -> isActiveOrdinaryStock(stockCategory, stockInfoCache))
+        return stockSectors.stream()
+                .filter(stockSector -> isActiveOrdinaryStock(stockSector, stockInfoCache))
                 .toList();
     }
 
-    private boolean isActiveOrdinaryStock(CustomStockSector stockCategory, Map<String, StockInfo> stockInfoCache) {
-        StockInfo stockInfo = stockInfoCache.get(stockCategory.getStockCode());
+    private boolean isActiveOrdinaryStock(CustomStockSector stockSector, Map<String, StockInfo> stockInfoCache) {
+        StockInfo stockInfo = stockInfoCache.get(stockSector.getStockCode());
         return stockInfo != null && stockInfo.isActiveAndOrdinary();
     }
 
-    private List<StockSectorItem> toBlockingStockCategoryItems(
-            List<CustomStockSector> stockCategories, Map<Long, CustomSector> categoryById) {
+    private List<StockSectorItem> toBlockingStockSectorItems(
+            List<CustomStockSector> stockSectors, Map<Long, CustomSector> sectorById) {
         Map<String, StockInfo> stockInfoCache = stockInfoCacheService.getCache();
-        return stockCategories.stream()
-                .map(stockCategory -> new StockSectorItem(
-                        stockCategory.getStockCode(),
-                        resolveStockName(stockCategory.getStockCode(), stockInfoCache),
-                        categoryById.get(stockCategory.getSectorId()).getName()))
+        return stockSectors.stream()
+                .map(stockSector -> new StockSectorItem(
+                        stockSector.getStockCode(),
+                        resolveStockName(stockSector.getStockCode(), stockInfoCache),
+                        sectorById.get(stockSector.getSectorId()).getName()))
                 .toList();
     }
 
-    /** 캐시에 없는 종목이면 종목코드를 그대로 이름 자리에 넣는다 — findBlockingStockCategories가 활성
+    /** 캐시에 없는 종목이면 종목코드를 그대로 이름 자리에 넣는다 — findBlockingStockSectors가 활성
      * 주권만 통과시키므로 이 자리는 지금 도달 불가능하지만, "캐시가 낡았을 때"의 대가(5-3)를 실제 예외로
      * 만들지 않기 위한 방어다. */
     private String resolveStockName(String stockCode, Map<String, StockInfo> stockInfoCache) {
@@ -242,22 +241,22 @@ public class CustomSectorService {
         return stockInfo != null ? stockInfo.getStockName() : stockCode;
     }
 
-    private List<Long> collectSubCategoryIds(Long categoryId, Map<Long, List<CustomSector>> categoryByParentId) {
+    private List<Long> collectSubSectorIds(Long sectorId, Map<Long, List<CustomSector>> sectorByParentId) {
         List<Long> collectedIds = new ArrayList<>();
-        collectedIds.add(categoryId);
-        collectSubCategories(categoryId, categoryByParentId, collectedIds);
+        collectedIds.add(sectorId);
+        collectSubSectors(sectorId, sectorByParentId, collectedIds);
         return collectedIds;
     }
 
-    private void collectSubCategories(
-            Long parentId, Map<Long, List<CustomSector>> categoryByParentId, List<Long> collectedIds) {
-        for (CustomSector child : categoryByParentId.getOrDefault(parentId, List.of())) {
+    private void collectSubSectors(
+            Long parentId, Map<Long, List<CustomSector>> sectorByParentId, List<Long> collectedIds) {
+        for (CustomSector child : sectorByParentId.getOrDefault(parentId, List.of())) {
             collectedIds.add(child.getId());
-            collectSubCategories(child.getId(), categoryByParentId, collectedIds);
+            collectSubSectors(child.getId(), sectorByParentId, collectedIds);
         }
     }
 
-    private SectorItem toItem(CustomSector category) {
-        return new SectorItem(category.getId(), category.getName(), category.getParentId(), category.getDepth());
+    private SectorItem toItem(CustomSector sector) {
+        return new SectorItem(sector.getId(), sector.getName(), sector.getParentId(), sector.getDepth());
     }
 }

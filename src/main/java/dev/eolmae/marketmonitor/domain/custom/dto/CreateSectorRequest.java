@@ -3,4 +3,4 @@ package dev.eolmae.marketmonitor.domain.custom.dto;
 import jakarta.validation.constraints.NotBlank;
 
 public record CreateSectorRequest(
-        @NotBlank(message = "카테고리명을 입력해주세요.") String name, Long parentId) {}
+        @NotBlank(message = "섹터명을 입력해주세요.") String name, Long parentId) {}

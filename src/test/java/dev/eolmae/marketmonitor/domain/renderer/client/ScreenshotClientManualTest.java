@@ -33,7 +33,7 @@ class ScreenshotClientManualTest {
                 new AppJwtService(new AuthProperties(), new ObjectMapper()),
                 RestClient.create());
 
-        assertThat(client.capture(RenderTarget.MARKET_SUMMARY.path(), RenderTarget.MARKET_SUMMARY.selector()))
+        assertThat(client.capture(RenderTarget.SUMMARY.path(), RenderTarget.SUMMARY.selector()))
                 .isNotEmpty();
     }
 }

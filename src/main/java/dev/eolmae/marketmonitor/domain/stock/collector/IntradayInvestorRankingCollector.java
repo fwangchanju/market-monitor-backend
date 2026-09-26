@@ -21,7 +21,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 @RequiredArgsConstructor
 public class IntradayInvestorRankingCollector {
 
-    // ka10065: 장중투자자별매매상위요청 (순위정보 카테고리)
+    // ka10065: 장중투자자별매매상위요청 (순위정보 섹터)
     // amt_qty_tp=1 (금액 기준) 고정, 5개 투자자 유형만 수집
 
     private final KiwoomApiClient kiwoomApiClient;

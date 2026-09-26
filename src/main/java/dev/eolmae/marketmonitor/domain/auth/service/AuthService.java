@@ -64,7 +64,6 @@ public class AuthService {
         UserAccount user =
                 userAccountRepository.findByIssuerAndSub(issuer, subject).orElse(null);
         if (user == null) {
-            requireAllowedSignupEmail(email);
             List<Long> insertedIds =
                     jdbcTemplate.query("""
                     INSERT INTO users (issuer, sub, email, role, created_at, updated_at)
@@ -182,16 +181,6 @@ public class AuthService {
         }
         if (authProperties.getJwtSecret().getBytes(StandardCharsets.UTF_8).length < 32) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "JWT 서명 키가 설정되지 않았습니다.");
-        }
-    }
-
-    private void requireAllowedSignupEmail(String email) {
-        String ownerEmail = authProperties.getSignupOwnerEmail();
-        if (ownerEmail.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "가입 이메일 게이트가 설정되지 않았습니다.");
-        }
-        if (!ownerEmail.equalsIgnoreCase(email)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "현재는 소유자 계정 가입만 허용됩니다.");
         }
     }
 

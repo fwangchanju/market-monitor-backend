@@ -7,7 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
-import dev.eolmae.marketmonitor.domain.access.enums.Role;
+import dev.eolmae.marketmonitor.domain.auth.enums.Role;
 import dev.eolmae.marketmonitor.domain.auth.service.AuthenticatedUserPrincipal;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomSector;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomSectorRepository;

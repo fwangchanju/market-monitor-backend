@@ -10,7 +10,6 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class AuthProperties {
 
     private Google google = new Google();
-    private String signupOwnerEmail = "";
     private String jwtSecret = "";
     private String frontendUrl = "http://localhost:5173";
 

@@ -2,7 +2,7 @@ package dev.eolmae.marketmonitor.domain.auth.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import dev.eolmae.marketmonitor.domain.access.enums.Role;
+import dev.eolmae.marketmonitor.domain.auth.enums.Role;
 import dev.eolmae.marketmonitor.domain.auth.properties.AuthProperties;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;

@@ -26,6 +26,9 @@ public enum ErrorCode {
     KRX_SESSION_EXPIRED("KRX 세션이 만료되었습니다."),
     KRX_RESPONSE_INVALID("KRX 응답 구조가 올바르지 않습니다."),
 
+    // Auth
+    REFRESH_TOKEN_CLEANUP_FAILED("갱신 토큰 정리 배치 실행에 실패했습니다."),
+
     // Stock 수집
     STOCK_INFO_SYNC_FAILED("종목 기준정보 동기화에 실패했습니다."),
     COLLECTOR_EXECUTION_FAILED("수집기 실행에 실패했습니다."),

@@ -104,7 +104,7 @@ public class AuthService {
                 .findByTokenHash(hash(rawRefreshToken))
                 .filter(refreshToken -> refreshToken.isUsableAt(LocalDateTime.now(Zone.KST.zoneId())))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "세션을 갱신할 수 없습니다."));
-        token.revoke();
+        token.replace();
         return createTokens(token.getUser());
     }
 
@@ -113,7 +113,27 @@ public class AuthService {
         if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
             return;
         }
-        userRefreshTokenRepository.findByTokenHash(hash(rawRefreshToken)).ifPresent(UserRefreshToken::revoke);
+        // findByTokenHash가 PESSIMISTIC_WRITE로 행을 먼저 잠근다. 동시에 다른 탭이 같은 토큰으로 갱신
+        // 중이면 그 트랜잭션이 끝난 뒤(새 토큰 커밋 후) 아래 일괄 폐기가 그 새 토큰까지 잡아낸다.
+        UserRefreshToken token = userRefreshTokenRepository
+                .findByTokenHash(hash(rawRefreshToken))
+                .orElse(null);
+        if (token == null) {
+            return;
+        }
+        token.revoke();
+        LocalDateTime now = LocalDateTime.now(Zone.KST.zoneId());
+        LocalDateTime cutoff = now.minus(UserRefreshToken.REPLACEMENT_GRACE);
+        userRefreshTokenRepository.revokeTokensCreatedOrReplacedSince(
+                token.getUser().getId(), cutoff, now);
+    }
+
+    @Transactional
+    public void cleanupRefreshTokens() {
+        LocalDateTime now = LocalDateTime.now(Zone.KST.zoneId());
+        LocalDateTime staleCutoff = now.minusDays(1);
+        int deletedCount = userRefreshTokenRepository.deleteExpiredOrStaleTokens(now, staleCutoff);
+        log.info("갱신 토큰 정리 완료: deletedCount={}", deletedCount);
     }
 
     @Transactional(readOnly = true)

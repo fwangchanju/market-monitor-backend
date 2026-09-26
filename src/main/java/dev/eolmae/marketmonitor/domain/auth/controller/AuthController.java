@@ -41,6 +41,7 @@ public class AuthController {
     private static final String RETURN_TO_COOKIE = "mm_oauth_return";
     private static final String ACCESS_COOKIE = "mm_access";
     private static final String REFRESH_COOKIE = "mm_refresh";
+    private static final String CAPTURE_TOKEN_HEADER = "X-Capture-Token";
     private static final String CALLBACK_PATH = "/api/auth/google/callback";
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -111,15 +112,31 @@ public class AuthController {
 
     @GetMapping("/session")
     @ResponseBody
-    public AuthSessionResponse session() {
+    public AuthSessionResponse session(HttpServletRequest request, HttpServletResponse response) {
         AuthenticatedUserPrincipal principal = CurrentUser.current();
-        return authService.session(principal);
+        if (principal != null) {
+            return authService.session(principal);
+        }
+        String refreshToken = cookie(request, REFRESH_COOKIE);
+        if (request.getHeader(CAPTURE_TOKEN_HEADER) != null || refreshToken == null) {
+            return AuthSessionResponse.anonymous();
+        }
+        try {
+            return refreshSession(refreshToken, response);
+        } catch (ResponseStatusException e) {
+            expireCookie(response, REFRESH_COOKIE, "/api/auth");
+            return AuthSessionResponse.anonymous();
+        }
     }
 
     @PostMapping("/refresh")
     @ResponseBody
     public AuthSessionResponse refresh(HttpServletRequest request, HttpServletResponse response) {
-        IssuedTokens tokens = authService.refresh(cookie(request, REFRESH_COOKIE));
+        return refreshSession(cookie(request, REFRESH_COOKIE), response);
+    }
+
+    private AuthSessionResponse refreshSession(String rawRefreshToken, HttpServletResponse response) {
+        IssuedTokens tokens = authService.refresh(rawRefreshToken);
         setTokens(response, tokens);
         return authService.session(appJwtService.parse(tokens.accessToken()));
     }

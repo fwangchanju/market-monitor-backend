@@ -13,8 +13,6 @@ import lombok.Getter;
 @Getter
 public class CustomStockSector {
 
-    private static final Long LEGACY_OWNER_ID = 999999L;
-
     @EmbeddedId
     private CustomStockSectorId id;
 
@@ -28,10 +26,6 @@ public class CustomStockSector {
     private LocalDateTime updatedAt;
 
     protected CustomStockSector() {}
-
-    public static CustomStockSector create(String stockCode, Long sectorId) {
-        return create(LEGACY_OWNER_ID, stockCode, sectorId);
-    }
 
     public static CustomStockSector create(Long userId, String stockCode, Long sectorId) {
         var entity = new CustomStockSector();

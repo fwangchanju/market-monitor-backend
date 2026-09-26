@@ -15,8 +15,6 @@ import lombok.Getter;
 @Getter
 public class CustomSector {
 
-    private static final Long LEGACY_OWNER_ID = 999999L;
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -60,10 +58,6 @@ public class CustomSector {
         return entity;
     }
 
-    public static CustomSector createParent(String name) {
-        return createParent(LEGACY_OWNER_ID, name);
-    }
-
     public static CustomSector createChild(Long userId, String name, CustomSector parent) {
         var entity = new CustomSector();
         entity.userId = userId;
@@ -75,10 +69,6 @@ public class CustomSector {
         entity.createdAt = now;
         entity.updatedAt = now;
         return entity;
-    }
-
-    public static CustomSector createChild(String name, CustomSector parent) {
-        return createChild(parent.userId, name, parent);
     }
 
     public static CustomSector createDefaultParent(Long userId, String name) {

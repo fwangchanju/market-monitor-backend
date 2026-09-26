@@ -4,8 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import dev.eolmae.marketmonitor.domain.auth.enums.Role;
+import dev.eolmae.marketmonitor.domain.auth.service.AuthenticatedUserPrincipal;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomValueTierThreshold;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomValueTierThresholdRepository;
+import dev.eolmae.marketmonitor.domain.notification.properties.MarketMonitorProperties;
 import dev.eolmae.marketmonitor.domain.view.dto.CategoryTierBreakdown;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapCategoryNode;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapItem;
@@ -14,20 +17,58 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class SectorTierAggregationServiceTest {
 
+    private static final long TEST_USER_ID = 1L;
+    // 비로그인 폴백 대상과 다른 값으로 둬서, 실제로 이 프로퍼티 값을 읽는지(우연히 일치하는 게
+    // 아닌지)를 구분해 검증한다.
+    private static final long OWNER_PROPERTY_USER_ID = 555555L;
+
     private final CustomValueTierThresholdRepository marketValueTierThresholdRepository =
             mock(CustomValueTierThresholdRepository.class);
+    private final MarketMonitorProperties marketMonitorProperties =
+            new MarketMonitorProperties("http://localhost:8081", OWNER_PROPERTY_USER_ID);
     private final SectorTierAggregationService service =
-            new SectorTierAggregationService(marketValueTierThresholdRepository);
+            new SectorTierAggregationService(marketValueTierThresholdRepository, marketMonitorProperties);
+
+    @BeforeEach
+    void stubAuthentication() {
+        var principal = new AuthenticatedUserPrincipal(TEST_USER_ID, Role.ADMIN);
+        SecurityContextHolder.getContext()
+                .setAuthentication(
+                        new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
+    }
+
+    @AfterEach
+    void clearAuthentication() {
+        SecurityContextHolder.clearContext();
+    }
+
+    @Test
+    void aggregateByCategory_비로그인이면_market_monitor_owner_user_id_프로퍼티_값으로_구간을_조회한다() {
+        SecurityContextHolder.clearContext();
+        CustomValueTierThreshold large = tier(10L, "대형");
+        when(marketValueTierThresholdRepository.findAllByUserIdOrderByThresholdValueAsc(OWNER_PROPERTY_USER_ID))
+                .thenReturn(List.of(large));
+
+        MarketMapCategoryNode node = leaf(1L, "반도체", List.of(item("005930", "대형", BigDecimal.TEN, 10_000)));
+
+        Map<Long, List<CategoryTierBreakdown>> result = service.aggregateByCategory(List.of(node));
+
+        assertThat(result.get(1L)).extracting(CategoryTierBreakdown::tierLabel).containsExactly("대형");
+    }
 
     @Test
     void aggregateByCategory_하위_카테고리_항목이_부모_합계에_재귀로_포함된다() {
         CustomValueTierThreshold large = tier(10L, "대형");
-        when(marketValueTierThresholdRepository.findAllByUserIdOrderByThresholdValueAsc(999999L))
+        when(marketValueTierThresholdRepository.findAllByUserIdOrderByThresholdValueAsc(TEST_USER_ID))
                 .thenReturn(List.of(large));
 
         MarketMapCategoryNode child = leaf(2L, "반도체 소재", List.of(item("000660", "대형", BigDecimal.TEN, 10_000)));
@@ -55,7 +96,7 @@ class SectorTierAggregationServiceTest {
     void aggregateByCategory_시가총액_구간별로_따로_묶인다() {
         CustomValueTierThreshold large = tier(10L, "대형");
         CustomValueTierThreshold small = tier(20L, "소형");
-        when(marketValueTierThresholdRepository.findAllByUserIdOrderByThresholdValueAsc(999999L))
+        when(marketValueTierThresholdRepository.findAllByUserIdOrderByThresholdValueAsc(TEST_USER_ID))
                 .thenReturn(List.of(large, small));
 
         MarketMapCategoryNode node = leaf(
@@ -78,7 +119,7 @@ class SectorTierAggregationServiceTest {
     @Test
     void aggregateByCategory_가중합과_산술합을_각각_구한다() {
         CustomValueTierThreshold large = tier(10L, "대형");
-        when(marketValueTierThresholdRepository.findAllByUserIdOrderByThresholdValueAsc(999999L))
+        when(marketValueTierThresholdRepository.findAllByUserIdOrderByThresholdValueAsc(TEST_USER_ID))
                 .thenReturn(List.of(large));
 
         // 시총 90,000짜리 +30%, 시총 10,000짜리 +10% — 가중합은 시총에 끌리고 산술합은 종목당 등락률 합.
@@ -102,7 +143,7 @@ class SectorTierAggregationServiceTest {
 
     @Test
     void aggregateByCategory_종목이_없는_카테고리는_결과_맵에_없다() {
-        when(marketValueTierThresholdRepository.findAllByUserIdOrderByThresholdValueAsc(999999L))
+        when(marketValueTierThresholdRepository.findAllByUserIdOrderByThresholdValueAsc(TEST_USER_ID))
                 .thenReturn(List.of());
 
         MarketMapCategoryNode empty = leaf(1L, "빈카테고리", List.of());
@@ -135,7 +176,7 @@ class SectorTierAggregationServiceTest {
     }
 
     private CustomValueTierThreshold tier(Long id, String label) {
-        CustomValueTierThreshold threshold = CustomValueTierThreshold.create(label, 0L, false);
+        CustomValueTierThreshold threshold = CustomValueTierThreshold.create(TEST_USER_ID, label, 0L, false);
         ReflectionTestUtils.setField(threshold, "id", id);
         return threshold;
     }

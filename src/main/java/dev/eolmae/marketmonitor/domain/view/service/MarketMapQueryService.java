@@ -614,7 +614,6 @@ public class MarketMapQueryService {
     }
 
     private Long customDataUserId() {
-        Long currentUserId = CurrentUser.currentId();
-        return currentUserId == null ? marketMonitorProperties.ownerUserId() : currentUserId;
+        return marketMonitorProperties.userIdOrOwner(CurrentUser.currentId());
     }
 }

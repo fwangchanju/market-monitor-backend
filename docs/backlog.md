@@ -17,304 +17,111 @@
 
 ## 구획 — 지금 무엇을 확정하고 무엇을 열어두는가
 
-집계 테이블 제거, 시간외 등락률, 회원가입이 한 덩어리로 얽혀 있어서 한 번에 결정하기 어렵다.
-**의존 관계로 잘라 구획을 나눈다.** 구획 1과 2는 확정이고, 구획 3의 내용은 아래 각 항목에 적혀
-있되 미확정이다. 앞 구획이 끝나기 전에는 뒤 구획을 다시 논의하지 않는다.
+집계 테이블 제거, 시간외 등락률, 회원가입이 한 덩어리로 얽혀 있어서 **의존 관계로 잘라 구획을
+나눴다.** 앞 구획이 끝나기 전에는 뒤 구획을 다시 논의하지 않는다.
 
-| 구획 | 내용 | 무엇에 걸려 있나 |
+| 구획 | 내용 | 상태 |
 |---|---|---|
-| **0** | 렌더러 장애 / 스냅샷 실삭제 전환 | 아무것도. 서로도 독립, 아무 때나 |
-| **1** | 카테고리 집계 테이블 제거 + 섹터 페이지를 지도 응답 위에서 조립 + 종목 캐시 | 없음 ← **다음 작업** |
-| **2** | 시간외 등락률 + 마켓 지수 바 + 공휴일 판정 | 구획 1 |
-| **3** | `userId` + 멀티테넌시 + 과거 날짜 조회 | 구획 0의 실삭제 전환, 구획 1 |
+| **0** | 렌더러 장애 / 스냅샷 실삭제 전환 | 실삭제 전환 완료(2026-09-26, PR #131). 렌더러 장애는 남음 |
+| **1** | 카테고리 집계 테이블 제거 + 섹터 페이지를 지도 응답 위에서 조립 + 종목 캐시 | **완료**(2026-09-24, PR #121~#126) |
+| **2** | 시간외 등락률 + 마켓 지수 바 + 공휴일 판정 | ← **다음 작업** |
+| **3** | `userId` + 멀티테넌시 + 과거 날짜 조회 | 로그인·사용자별 데이터 **완료**(2026-09-26, PR #127~#134). 과거 날짜 조회만 남음 |
 
-요약 페이지 개편은 구획 1 이후 프론트만의 작업이라 표에 없다. 아래 「요약 페이지」를 본다.
-
-### 집계 테이블 제거를 맨 앞으로 당겼다
-
-한때 집계 제거를 구획 2(멀티테넌시)에 묶어두고 시간외 등락률을 먼저 하기로 했다. 시간외 토글이
-"집계 없이 조립하는 화면"의 리허설이 된다는 논리였다. **뒤집었다.** 섹터·요약 페이지가 지도
-응답 위에서 조립하기로 하면서(아래 「카테고리 집계 테이블을 없앤다」) 집계 제거가 멀티테넌시와
-무관한 독립 작업이 됐고, 이걸 먼저 하면 시간외 등락률이 처음부터 단일 경로 위에 얹힌다. 시간외
-설계에 적혀 있던 "구획 2까지 두 경로가 공존한다"는 대가가 사라진다.
-
-측정은 배포 뒤 종목 캐시의 hit/miss와 `/api/map` 응답 시간 로그로 한다. 테이블을 지우는 것이
-아니라 호출부만 끊는 것이라(엔티티·DDL은 별도 PR) 되돌리기 쉽다.
+요약 페이지 개편은 프론트만의 작업이라 표에 없다. 아래 「요약 페이지」를 본다.
 
 ### 구획 2에 공휴일 판정을 넣는 이유
 
 기술적 선행 조건은 아니다(기준가가 당일 15:35라 "직전 거래일"을 몰라도 된다). **사용자 결정**으로
 같이 진행한다. 둘 다 수집기 주변을 건드리는 작업이라 한 번에 보는 편이 낫다.
 
-### 구획 3에 과거 날짜 조회를 넣는 이유
+### 과거 날짜 조회가 남은 이유
 
-**같은 조회 경로를 두 번 고치지 않기 위해서다.** 멀티테넌시는 `/api/map`에 "누구의 트리인가"를
-넣고, 과거 날짜 조회는 같은 자리에 "언제인가"를 넣는다. 구획 1이 `snapshotTime` 파라미터를 이미
-만들어두므로 과거 날짜 조회는 그 시각을 "그날 종가 시각"으로 해석하는 한 겹이 더 붙는 것이다.
-
-### 구획 2와 3의 순서
-
-**2가 먼저다.** 시간외 등락률이 건드리는 `sector_price_snapshot`과 수집기는 **사용자 독립
-영역**이라 멀티테넌시와 겹치는 코드가 거의 없다. 반대로 3을 먼저 하면 시간외 등락률을
-멀티테넌시 위에서 써야 해서 일이 늘어난다.
+**같은 조회 경로를 두 번 고치지 않기 위해 구획 3에 묶었다.** 사용자 범위(`userId`)가 먼저 들어갔으니,
+과거 날짜 조회는 `/api/map`의 `snapshotTime` 파라미터를 "그날 종가 시각"으로 해석하는 한 겹만 더
+붙이면 된다.
 
 ---
 
-## 로그인 기능 도입 (IP 화이트리스트 제거)
+## 로그인 이후 남은 것
 
-**배경**: 원래 개인용으로 만들었고, 일반 사용자 접근을 막을 특별한 이유가 있어서 nginx에서 IP로
-차단하는 구조를 썼다. 그 이유가 무의미해져서 IP 차단 자체를 없애기로 했다.
+가입·로그인과 사용자별 커스텀 데이터 전환은 끝났다(2026-09-26, 백엔드 PR #127~#134, 프론트 #62·#64).
+구조는 `docs/architecture.md`, 결정과 이유는 `docs/decisions.md`의 「로그인과 사용자별 데이터」에 있다.
+여기에는 미룬 것만 남긴다.
 
-할 일
-- Spring Security + JWT 로그인. 구글 계정 연동 방식을 쓰고 싶음
-- 사용자별 커스텀 데이터 관리: 기존 커스텀 테이블에 `userId` 컬럼 추가 (사용자마다 화면이 다르므로)
-- 기존 데이터는 admin 사용자 id로 마이그레이션
-- `domain/access`(IP 화이트리스트, 관리자 토큰)는 이 작업으로 대체되어 사라진다
-- 신규 가입 시 초기 적재: 가입이 발생하면 `stock_info` 기준으로
-  `custom_sector` / `custom_stock_sector`에 전체 정보를 초기 적재한다
-- 사용자별 커스텀 데이터에 개수 상한을 건다(아래 「사용자별 커스텀 데이터 상한」)
-- **커스텀 API 이름 정리를 여기서 같이 한다** (2026-09-25 결정, 구획 1 PR 2d를 흡수).
-  경로가 권한을 뜻하지 않게 되는 시점이라 따로 하면 곧 버릴 nginx 규칙을 만들어야 하고, 프론트·백엔드
-  동시 배포도 두 번이 된다
-  - URL `/api/admin/market-map/*` → `/api/custom/*` (아래 「`/api/admin/` 을 `/api/custom/` 으로 바꾼다」)
-  - 커스텀 API dto의 JSON 필드 `category*` → `sector*`, `version*` → `snapshot*`. `SectorTreeNode`의
-    키는 `custom_snapshot.snapshot_json`에 저장되므로, 그 시점에 저장본이 있으면 JSON도 변환한다
-  - 지도 응답(`/api/map`)의 `categoryId` 등은 바꾸지 않는다 — 지도 쪽 이름이다
-  - 프론트 파일명(`marketMapAdmin.ts`, `useMarketMapAdmin` 등) → custom, 옛 페이지 `/admin/market-map`
-    (`MarketMapAdminPage`) 삭제
-  - 백엔드 테스트의 mock 변수 이름(`marketMapCategoryRepository` 등)을 클래스 이름(`customSectorRepository`)에 맞춘다
-- `auth.frontend-url`과 `market-monitor.base-url`(캡처 페이지 주소)은 운영에서 같은 사이트 주소다. 지금은
-  prod에서 전자가 후자를 참조하게만 해뒀다 — 로컬은 백엔드 8081·프론트 5173이라 값이 달라 속성 하나로 합칠지는 정리 PR에서 정한다
+### 설정 프리셋 — 사용자당 3개
 
-**선행 조건**: 코드 정비(CI·테스트·버그 수정·문서) 완료. 안전망도 문서도 없는 상태에서 인증과 데이터
-마이그레이션 같은 위험한 작업을 하지 않는다.
+**사용자 결정(2026-09-26).** 지금 `user_preference`는 사용자당 한 행이다. 이걸 **사용자당 최대 3개의
+프리셋**으로 바꾸고, 화면에 버튼으로 노출해 눌러서 전환한다.
 
-**주의**: `domain/access`가 곧 사라지므로 정비 단계에서 그쪽 코드를 다듬는 것은 낭비다. 실제로
-"예외 계층에 403이 없어서 `ResponseStatusException`으로 우회하는 문제"는 정비 범위에서 제외했다.
-이 작업에서 새 구조로 제대로 잡는다.
+- **한 프리셋 = JSON 하나**에 화면 옵션, **색상 구간**, **시가총액 구간**을 전부 담는다. 전환은 활성
+  프리셋만 바꾸고 아무 데이터도 지우거나 복사하지 않는다
+- 그래서 `custom_scale_threshold`, `custom_value_tier_threshold` 테이블은 없어진다(값이 프리셋 JSON으로
+  들어간다). 행 단위 CRUD 대신 목록 전체를 한 번에 저장한다
+- 테이블: `user_preference (user_id, slot 1~3, name, payload)`. `name`은 **최대 6자**, 비면 `설정 N`
+- 활성 프리셋은 사용자 행에 기억한다(예: `users.active_preset`)
+- 기본값 규칙은 그대로다. 프리셋 JSON에 없는 값은 기본값을 쓴다 — 색상은 **프론트 상수**, 시가총액
+  구간은 **백엔드 상수**(쓰는 쪽이 기본값을 가진다, `decisions.md`)
+- 섹터 트리·종목 배정·별칭은 **프리셋 밖**이다. 수천 행짜리 데이터라 통째 교체는 스냅샷이 맡는다
+- 텔레그램 캡처·캡션은 소유자의 **활성 프리셋**을 쓴다
+
+같이 정리할 것 — **지금 설정 키가 페이지별이 아니다.** 지도와 섹터 페이지가 같은 `marketMap.*` 키를
+공유한다(원래 sessionStorage 구조를 그대로 옮겼다). 섹터 페이지의 비교 분 등 일부 설정은 아직
+브라우저에만 남는다. 프리셋 작업에서 키 구조를 다시 잡는다.
+
+### 사용자 정보 — 닉네임·최종 접속 시각
+
+**사용자 결정(2026-09-26).** `users`에 `nickname`(최대 20자, 비면 이메일 표시)과 `last_login_at`(로그인·
+토큰 갱신 때 기록)을 추가한다. 개인정보처리방침(`/privacy`) 수집 항목에 한 줄씩 추가해야 한다.
+프로필 이미지는 파일 저장소·업로드가 필요한 별도 기능이라 **프로필 화면을 만들 때** 같이 한다.
+탈퇴(`deleted_at` 또는 실삭제)도 그때 정한다.
+
+### 시가총액 구간 편집 화면
+
+지금 사용자별 구간 테이블은 있지만 편집 API·화면이 없다(조회만). 행이 없으면 백엔드 상수를 쓴다.
+프리셋 작업을 먼저 하면 구간은 프리셋 JSON으로 들어가므로, 편집 화면은 그 위에서 만든다.
 
 ### 사용자별 커스텀 데이터 상한
 
-지금은 관리자 혼자 쓰니 상한이 없다. 사용자가 늘어나면 무한정 만들게 둘 수 없어서 두 곳에 상한을 건다.
+사용자가 무한정 만들게 둘 수 없어서 두 곳에 상한을 건다.
 
-등락률 범례바(`market_map_scale_threshold`)는 0%를 제외하고 총 8개, 0%까지 합쳐 최대 9개다.
-+/- 합산 8개로 걸지 +/- 각 4개로 걸지는 착수할 때 정한다. 각 4개 쪽이 한쪽에 몰아 만드는
-경우를 막아주니 그쪽이 나을 수 있다.
+- 등락률 색상 구간: 0%를 제외하고 총 8개, 0%까지 합쳐 최대 9개. +/- 합산 8개로 걸지 각 4개로 걸지는
+  착수할 때 정한다. 각 4개 쪽이 한쪽에 몰아 만드는 경우를 막아준다
+- 섹터(`custom_sector`): depth 최대 3. 부모를 바꾸면 하위 depth를 통째로 옮기는 구조라
+  (`CustomSectorService.reparent`) 부모 변경 시 하위 트리 전체가 상한을 넘지 않는지도 검사한다
 
-카테고리(`market_map_category`)는 depth 최대 3까지다. 화면에서 이미 대분류·중분류·소분류로
-보여주고 있으니 그 이상은 표현할 자리가 없다. 지금 코드는 부모를 바꾸면 하위 depth를 통째로
-옮기는 구조라(`MarketMapCategoryService`), 부모 변경 시 하위 트리 전체가 상한을 넘지 않는지도
-같이 검사해야 한다.
+### DB 통합 테스트
 
-### `/api/admin/` 을 `/api/custom/` 으로 바꾼다
+이 레포에는 DB를 띄우는 테스트가 없다. 사용자 A/B 데이터 격리, 복합 FK, 원본 SQL(upsert·`INSERT … SELECT`·
+advisory lock)의 오타는 빌드에서 안 잡히고 운영에서 터진다. 스냅샷 복원의 flush 순서 버그(PR #127
+리뷰에서 발견)도 mock 테스트로는 못 잡았다. Testcontainers로 PostgreSQL을 띄우는 테스트를 들인다.
 
-지금 이 접두사가 붙어 있는 이유는 **nginx가 경로로 권한을 판정하기 때문**이다.
+### 부하와 남용
 
-```nginx
-location /api/admin/ { auth_request /internal/access-check-admin; ... }
-location /api/       { auth_request /internal/access-check-general; ... }
-```
+화이트리스트가 없어져 누구나 들어온다. nginx 요청 제한은 넣었다(PR #130 — 일반 IP당 20r/s·버스트 50,
+`/api/auth/` 10r/m·버스트 20). 남은 것:
 
-로그인이 들어오면 권한은 사용자에서 나오므로 **경로가 권한을 의미할 이유가 없어진다.** 그리고 지금
-그 밑에 있는 것을 보면 이름 자체가 틀렸다.
+- **응답 캐싱.** 마켓맵 데이터는 5분에 한 번 바뀌는데 요청마다 종목 행 수천 개를 읽는다. 공개 기본
+  지도는 사용자와 무관하니 `(market, snapshotTime)` 키 캐시로 충분하다. 사용자별 커스텀 지도 캐시는
+  키가 사용자별이 되므로 `maximumSize`를 반드시 같이 건다
+- **볼륨 DDoS**는 서버에서 못 막는다. 앞단 프록시(Cloudflare 등)가 필요한데 duckdns 도메인이라 도메인
+  이전 얘기가 된다. 실제로 공격받으면 그때 판단한다
 
-```
-/api/admin/allowed-ips                  ← 화이트리스트와 함께 사라진다
-/api/admin/market-map/categories        ┐
-/api/admin/market-map/scale             │ 전부 마켓맵 커스터마이징 —
-/api/admin/market-map/stock-categories  │ "관리자 기능"이 아니라 "내 설정"이다
-/api/admin/market-map/versions          ┘
-```
+### 도메인을 바꿀 때 같이 고칠 것
 
-살아남는 넷은 사용자별 데이터가 되므로(`userId` 컬럼 추가 대상과 정확히 같은 테이블들) `custom`이
-맞는 이름이다. 프론트의 `marketMapAdmin.ts`·`MarketMapAdminPage`·`useMarketMapAdmin` 같은 이름도
-같이 따라간다.
+- Google OAuth 클라이언트의 승인된 리디렉션 URI(`https://<도메인>/api/auth/google/callback`)
+- Google Auth Platform 브랜딩: 홈페이지, 개인정보처리방침(`/privacy`), 승인된 도메인
+- `application-prod.properties`의 `market-monitor.base-url` — 로그인 복귀 주소와 캡처 주소가 같이 쓴다
+- nginx `server_name`과 인증서
 
-### 화이트리스트가 없어질 때 같이 봐야 하는 것 — 부하와 남용
+### 자잘한 정리
 
-**전제를 먼저 바로잡는다. nginx는 지금도 요청을 쳐내주지 않는다.** `auth_request`가 매 요청마다
-Spring을 호출하는 구조라, 낯선 IP의 요청도 이미 앱까지 들어온다. 정적 파일(`location /`)까지 그렇다.
-
-```
-낯선 IP가 GET /
-  → nginx가 Spring의 /internal/access-check/general 호출   ← 여기서 이미 앱이 일한다
-  → false → nginx가 403
-```
-
-그래서 "화이트리스트를 없애면 서버가 부하를 받기 시작한다"가 아니라, **이미 받고 있고 요청당 비용만
-바뀐다.** 지금은 캐시 조회 하나인데, 그 뒤로는 `/api/map`처럼 종목 행 수천 개를 읽는 조회가
-된다.
-
-그리고 게이트가 사라지는 것도 아니다 — IP 조회가 토큰 검증으로 바뀔 뿐이고 비용은 비슷하다.
-**진짜 새로 열리는 표면은 가입·로그인 엔드포인트**다. 인증 없이 열려야 하므로 무차별 대입과 계정
-남용의 표적이 된다. 화이트리스트 시절엔 없던 면이다.
-
-#### 할 일
-
-- **응답 캐싱.** 마켓맵 데이터는 5분에 한 번만 바뀌는데 지금은 요청마다 4,300행을 새로 읽는다.
-  TTL 캐시 하나면 그 조회가 5분에 한 번이 된다. 남용 대비이면서 평상시 응답 속도 개선이고, 위
-  「멀티테넌시 — 카테고리 집계 테이블을 없앤다」의 "집계 없이 견디나"에도 그대로 먹히는 카드다.
-  단 `userId`가 붙으면 캐시 키도 사용자별이 되므로 메모리 상한을 같이 정해야 한다
-- **가입·로그인 엔드포인트만 따로 빡빡한 제한.** 일반 API보다 훨씬 낮은 임계로 IP당 분당 N회
-- **`ALLOWED_IP` 캐시의 교훈을 반복하지 않는다.** 지금 그 캐시는 `expireAfterWrite(10s)`만 있고
-  `maximumSize`가 없다. IP를 바꿔가며 들어오면 10초 치가 그대로 힙에 쌓인다. 사용자 키 캐시를
-  만들 때 상한을 빠뜨리지 않는다
-- **정적 경로에서 `auth_request`를 떼어낸다.** 지금은 백엔드가 죽으면 nginx가 정적 페이지조차 못
-  준다(`auth_request` 백엔드 실패는 500이다). SPA 껍데기는 인증 대상이 아니고 데이터는 `/api/`가
-  지키므로, 이 커플링을 끊을 자리가 여기다
-
-### 사용자별 설정 관리
-
-지금 화면 설정이 **두 갈래로 나뉘어 있다.** 새로 만드는 것이 아니라 이미 있는 것을 정리하는 일이다.
-
-```
-서버 DB에 전용 테이블로 있는 것           프론트 세션스토리지에만 있는 것
-──────────────────────────────           ────────────────────────────
-MarketMapScaleThreshold   색상 임계값      marketMap.isCustom           커스텀 모드
-MarketValueTierThreshold  시총 구간 정의   marketMap.decimalPlacesIndex  자릿수
-MarketMapCategory.is_excluded 섹터 제외    marketMap.stockLabelModeIndex 라벨 모드
-MarketMapStockCategory    종목 배정        avgChangeRateUseSimple       평균 방식
-                                           tierRangeMin/MaxIndex 등 (총 14개)
-```
-
-#### 경계 — 무엇이 존재하는가 vs 어떻게 볼 것인가
-
-| | 어디에 | 페이지 개념 |
-|---|---|---|
-| **(A)** 카테고리 트리·제외, 색상 임계값, 시총 구간 *정의*, 종목 배정 | 지금처럼 전용 테이블 + `userId` | **없다.** 사용자당 하나 |
-| **(B)** 자릿수, 라벨 모드, 뎁스 범위, 평균 방식, 구간 *범위 선택* | `user_preference.payload` (jsonb) | **페이지마다 독립** |
-
-제외 섹터가 이 경계를 잘 보여준다. **"반도체를 제외 목록에 넣었다"는 (A)**이고, **"지금 이 화면에서
-제외를 적용할까"(`sectorFilterEnabled`)는 (B)**다. 목록은 하나인데 적용 여부는 페이지마다 다를 수
-있다. 시총 구간도 같다 — 경계값 정의는 (A), 어느 구간까지 볼지는 (B).
-
-#### (B)의 저장 방식 — 중첩 record + jsonb 단일 행
-
-```sql
-CREATE TABLE user_preference (
-    user_id     BIGINT PRIMARY KEY REFERENCES app_user(id),
-    payload     JSONB       NOT NULL DEFAULT '{}',
-    updated_at  TIMESTAMP   NOT NULL
-);
-```
-
-**사용자당 한 행이다.** 설정 14개를 다 넣어도 300~500바이트라, 어제 없애기로 한 집계 테이블처럼
-사용자 수만큼 곱해지는 문제가 없다(그쪽은 사용자당 2,700행 × 매 tick이었다).
-
-payload는 페이지별로 묶인 중첩 구조다. 자바 쪽은 record 트리로 받고
-`@JdbcTypeCode(SqlTypes.JSON)`으로 매핑한다 — `MarketMapCategoryVersion.snapshotJson`이 이미 쓰는
-패턴이라 새 기술이 아니다.
-
-```json
-{
-  "marketMap":          { "decimalPlaces": 1, "stockLabelMode": 3 },
-  "categoryChangeRate": { "beforeMinutes": 15, "tierRangeMinIndex": 1 }
-}
-```
-
-**저장은 payload 전체를 덮어쓴다.** 프론트가 어차피 전부 메모리에 들고 있고 크기가 작다. 탭 두 개에서
-동시에 바꾸면 나중 저장이 이기는데, UI 취향이라 감당할 만하다. 거슬리면 그때
-`payload || jsonb_build_object('marketMap', …)`로 가지만 갈아끼우면 되고 **스키마는 안 바뀐다** —
-중첩 구조를 지금 잡아두는 값어치가 거기 있다. 다만 그 문법은 QueryDSL로 표현할 수 없어
-`docs/rules/style.md`의 「쿼리 문자열 직접 작성은 지양」 예외가 된다. 그때 이유를 주석에 남긴다.
-
-저장 시점은 **디바운스 500ms**로 통일한다. 슬라이더를 드래그할 때 요청이 수십 번 나가면 안 된다.
-색상 편집은 이미 draft + "적용" 구조라 그대로 둔다.
-
-#### 페이지별로 독립이다 — 같은 이름이어도 다른 값
-
-같은 이름의 설정이 여러 페이지에 있어도 **서로 다른 값**이다. 화면에 같은 텍스트로 보여서 동일한
-설정처럼 보이지만, 각 페이지에서 따로 설정하고 따로 저장하며 따로 움직인다.
-
-"공유해야 하지 않나" 싶은 것들(제외 섹터 목록, 색상 임계값, 시총 구간 정의)은 **설정이 아니라
-사용자 데이터**라 (A)에 있고 페이지 개념 자체가 없다. 그래서 `shared` 그룹을 따로 둘 필요가 없다.
-
-> **기존 요구사항 하나를 의도적으로 뒤집는다.** `useMarketValueTierRange.ts`에 "두 화면 모두 배포 전
-> 운영 수치와 일치해야 한다는 요구사항 때문에 상태를 분리해두면 안 됨"이라고 적혀 있다. 그 이유가
-> **배포 전 검증**이라 지금은 유효하지 않다고 보고 페이지별로 가른다. 나중에 "원래 공유였는데?"가
-> 나오면 버그가 아니라 이 결정이다.
-
-#### 기본값은 코드에 남는다 — 그리고 서버가 유일한 진실이어야 한다
-
-설정 목록과 기본값을 DB 테이블(설정 기준정보 + 사용자별 값, 이른바 EAV)로 관리하는 안을 검토했고
-**택하지 않았다.** EAV의 값어치는 "코드 배포 없이 설정을 추가할 수 있다"인데, 이 앱에서는 설정을
-하나 추가하면 그 값을 읽어 화면을 바꾸는 프론트 코드를 반드시 같이 고쳐야 한다. **테이블이 코드보다
-먼저 갈 수 없다.** 그럼 남는 이득은 "이 설정이 뭘 의미하는지를 한 곳에 모은다"뿐인데, 그건 record
-타입으로 얻으면 컴파일러가 지켜주기까지 한다. 대신 값이 전부 문자열로 뭉개지고 조회가 join+pivot이
-되는 비용만 남는다. 설정 14개에 치를 값이 아니다.
-
-기본값이 필요한 경우는 신규 가입자만이 아니다. **설정을 하나 추가할 때마다 기존 사용자 payload에는
-그 키가 없다.** 전체 사용자 마이그레이션을 매번 할 수 없으므로 "없으면 기본값"은 예외가 아니라
-상시 경로다.
-
-**그래서 payload에는 사용자가 실제로 바꾼 것만 담는다(sparse).** 가입 시점에 기본값을 전부 채워
-넣는 안도 검토했는데, 그러면 **기본값을 나중에 바꿀 수가 없다** — 전원이 옛 값을 명시적으로 들고
-있어서 아무도 새 기본값을 안 따라온다. sparse면 손 안 댄 사람은 자동으로 따라오고 직접 바꾼 사람만
-자기 값을 지킨다. "이 사람이 직접 고른 값인가, 그냥 기본값인가"라는 구분도 sparse가 보존한다
-(키가 있으면 명시, 없으면 기본).
-
-가입 시에는 빈 `{}` 행 하나만 만든다. 행이 항상 존재하므로 upsert를 따로 안 해도 되는 이점은 그대로
-얻는다.
-
-**그 기본값을 프론트와 백엔드 양쪽에 두면 안 된다.** 오늘 겪은 버그가 정확히 그 모양이었다 — 화면
-기본값은 산술평균인데 서버는 가중평균 고정이라 같은 텔레그램 메시지 안에서 이미지와 캡션이 갈렸다
-(`docs/instructions-telegram-average-mode.md` 참고). 기본값을 한 곳에만 두면 그 종류의 어긋남이
-구조적으로 생기지 않는다.
-
-그래서 **서버가 기본값의 유일한 진실**이고, 비로그인·초기 로드에도 서버가 기본값을 내려준다.
-
-#### 미결 — 렌더러는 누구 계정으로 찍는가 ★
-
-**로그인 작업을 시작할 때 이것부터 정해야 한다.**
-
-지금 렌더러는 IP 화이트리스트로 통과한다. 로그인이 들어오면 렌더러도 인증해야 하고, 그러면 **어느
-사용자의 설정으로 그림을 그릴지**가 정해져야 한다. 텔레그램으로 나가는 이미지가 그 사람의 화면이기
-때문이다.
-
-| | 내용 | 결과 |
-|---|---|---|
-| 가 | 텔레그램 전용 계정을 만든다 | 설정이 명시적으로 관리됨. 그 계정으로 로그인해 조정 가능 |
-| 나 | 본인 계정으로 찍는다 | 내 화면이 그대로 나감. 내가 설정을 바꾸면 텔레그램도 같이 바뀜 |
-| 다 | 지금처럼 URL 파라미터로 계속 넘긴다 | 계정과 무관. 서버 프로퍼티가 기준 |
-
-**어느 쪽이든 지금 만들어둔 URL 파라미터 구조(`avgMode`/`sectorFilter`)는 버려지지 않는다** —
-계정 설정 위에 덮어쓰는 수단으로 남는다. 갈리는 것은 "기본값이 프로퍼티냐 계정 설정이냐"다.
-
-**(나)가 목표다**(사용자). 그러면 걸리는 것이 둘이다.
-
-**렌더러가 로그인 상태를 못 들고 있다.** 캡처마다 `newPage()`로 새 탭을 열어 sessionStorage가 비고,
-이 앱은 localStorage·쿠키를 안 쓴다. 토큰을 유지하려고 그것들을 쓰기 시작하면 "렌더러 세션이
-격리된다"는 전제가 깨진다(위 「어긋나지 않는 것」의 근거다).
-
-→ **단기 토큰을 URL에 싣는 편이 단순하다.** 백엔드가 발송 직전에 그 사용자용 단기 토큰을 발급해
-캡처 URL에 붙이고, 프론트가 그것으로 인증해 그 계정 설정을 로드한다. 렌더러는 아무 상태도 안 들고,
-지금 `avgMode`를 넘기는 구조와 같은 모양이다.
-
-**내 화면 설정이 곧 발송 내용이 된다.** 슬라이더를 실험적으로 만지면 15분 뒤 발송이 그 값으로 나간다.
-의도라면 그대로 두고, 아니라면 "발송에는 마지막 저장 시점을 쓴다" 같은 장치가 필요하다.
-
-#### 미결 — 공개할 것인가 ★
-
-비로그인 사용자를 아예 막고 로그인 팝업만 보여주는 안이 나왔다. 그러면 프론트가 "로그인 안 된
-상태의 화면"을 안 그려도 되어 상태 분기가 준다.
-
-**다만 기본값을 없애주지는 않는다.** 가입 직후 첫 화면, 설정을 새로 추가했을 때, 렌더러 계정에 없는
-키 — 전부 기본값이 필요하다. 없어지는 것은 "비로그인 방문자용 기본값"뿐인데 그건 어차피 같은 값이라
-따로 있던 것이 아니다.
-
-**그리고 이 작업의 배경과 충돌한다.** 위에 "일반 사용자 접근을 막을 이유가 무의미해져서 IP 차단을
-없애기로 했다"고 적어뒀다. IP 벽을 걷고 로그인 벽을 세우면 문턱은 낮아지지만 여전히 닫혀 있다.
-텔레그램 이미지를 본 사람이 바로 들어와 볼 수 없다.
-
-**"공개할 것인가"를 먼저 정해야 이 질문이 풀린다.** 제품 결정이다.
-
-#### 범위 밖
-
-- **nginx `limit_req`/`limit_conn`** — 이 작업을 기다릴 이유가 없어서 **선행 작업에 포함했다.**
-  지금 `infra/nginx.conf`에는 요청 제한이 한 줄도 없고, 그래서 `auth_request` 자체가 무방비다.
-  로그인과 무관하게 이미 뚫려 있는 구멍이라 먼저 막는다
-- **볼륨 DDoS** — 서버에서 막을 수 없다. 대역폭이 먼저 죽는다. 앞단 프록시(Cloudflare 등)가 필요한데
-  지금 duckdns 도메인을 쓰고 있어 도메인 이전 얘기가 된다. 실제로 공격받으면 그때 판단한다
+- `auth.frontend-url`과 `market-monitor.base-url`은 운영에서 같은 값이다. prod에서는 전자가 후자를
+  참조하게만 해뒀다 — 로컬은 백엔드 8081·프론트 5173이라 값이 다르다. 하나로 합칠지 정한다
+- `infra/nginx-guest.conf`와 `infra/scripts/guest-access-on.sh`는 공개 전환 뒤 의미가 없다(내용을
+  `nginx.conf`와 같게 맞춰 둠). 지운다
+- `common/event/StockInfoSyncedEvent`는 발행·수신하는 곳이 없다. 지운다
+- 커스텀 API의 JSON 필드는 `sector*`로 바뀌었지만 지도 응답(`/api/map`)의 `categoryId` 등은 지도 쪽
+  이름이라 그대로 뒀다
 
 ---
 
@@ -388,8 +195,8 @@ item마다 snapshotTime을 들고 있는 현재 구조는 불필요하다. 리�
 **배경**: 카테고리별 등락률의 "직전 대비 급변"을 보여주려면 두 시점의 값을 비교해야 하는데, 그 사이에
 종목이 A 카테고리에서 B로 재배정되면 델타가 순수 가격변동이 아니라 구성 변경까지 섞인 값이 된다.
 
-**확정한 설계**: `market_map_stock_category` 재배정 이력을 append-only 로그로 남긴다.
-`reassign()`이 호출될 때마다 `(stock_code, category_id_from, category_id_to, changed_at)`을 기록한다.
+**확정한 설계**: `custom_stock_sector` 재배정 이력을 append-only 로그로 남긴다(사용자별이므로 `user_id` 포함).
+배정이 바뀔 때마다 `(user_id, stock_code, sector_id_from, sector_id_to, changed_at)`을 기록한다.
 삭제·수정 없는 순수 append.
 
 - "구성이 바뀌었나"는 그 구간에 이벤트가 몇 번 찍혔는지가 아니라, 각 종목의 T1 시점 카테고리 vs
@@ -468,6 +275,11 @@ market-summary-capture        → summary-capture
 ---
 
 ## Flyway — 유지 결정, 과도기 운영 방식, 릴리즈 전환
+
+> **현재 상태(2026-09-26)**: 로그인 스키마까지 V1 하나로 합쳤다(PR #134). 운영 이력도 V1 한 줄이다.
+> 아래 「릴리즈 브랜치 전환」의 조건(가입 기능 완료)에 도달했으므로, 다음 스키마 변경부터는 V1을
+> 고치지 않고 V2부터 쌓는 쪽으로 간다. 릴리즈 브랜치 운용 시작 시점은 그때 정한다.
+
 
 ### 걷어낼지 고민했고, 유지하기로 했다
 
@@ -628,277 +440,6 @@ CI에 `docker build` 한 단계를 넣으면 이 부류가 걸린다. 이미지�
 성공하는지만 보면 된다.
 
 왜 미뤘나: CI 시간이 늘고, 지금은 `lombok.config`를 필터와 Dockerfile 양쪽에 넣어 급한 불은 껐다.
-
-## 장 종가는 15:30이 아니라 15:35 스냅샷이다 — 보존 시각을 둘로 늘린다
-
-**아래 「실삭제로 전환한다」의 선행 조건이다.** 지금 정리 배치는 15:30만 남기고 지우도록 되어 있는데,
-**그 시각은 종가가 아니다.** 실삭제로 먼저 전환했으면 매일 진짜 종가를 지우고 있었을 것이다.
-
-### 어떻게 확인했나
-
-키움의 `flu_rt`는 `(현재가 − 전일종가) / 전일종가`다. 뒤집으면 전일 종가가 나온다.
-
-```
-전일종가 = 현재가 ÷ (1 + flu_rt/100)
-```
-
-다음 영업일 첫 장중 스냅샷에서 이렇게 역산하면 **키움이 종가로 치는 값**이 나온다. 그것을 전 영업일의
-15:25~15:45 스냅샷과 대조해 일치율을 봤다(주권만, 오차 허용 0.05% — 등락률이 소수점 둘째 자리까지만
-와서 생기는 역산 오차 약 0.005%를 덮되 호가 한 틱보다는 훨씬 작은 값).
-
-| 날짜 | 15:25 | 15:30 | 15:35 | 15:40 | 15:45 |
-|---|---|---|---|---|---|
-| 08-27 | 33.2 | 99.5 | (없음) | 87.7 | 85.5 |
-| 08-28 | 35.0 | 99.5 | 99.8 | 86.6 | 84.0 |
-| 08-31 | 31.4 | 99.6 | 99.8 | 86.2 | 83.4 |
-| 09-01 | 31.7 | 99.5 | 99.9 | 86.9 | 83.9 |
-| 09-02 | 29.8 | 99.3 | 99.9 | 86.0 | 83.2 |
-| 09-03 | 30.1 | 99.4 | 99.9 | 87.9 | 84.2 |
-| 09-04 | 32.5 | 99.7 | 99.7 | 87.6 | 84.2 |
-| 09-07 | 33.2 | 99.7 | 99.9 | 86.2 | 84.0 |
-| 09-08 | 31.3 | 99.6 | 99.9 | 87.0 | 82.2 |
-| 09-09 | 35.5 | 99.7 | 99.8 | 87.1 | 83.9 |
-| 09-10 | 29.8 | **98.1** | 99.8 | 84.6 | 82.3 |
-| 09-11 | 32.1 | 99.6 | 99.8 | 87.3 | 84.3 |
-| 09-14 | 30.3 | 99.6 | **100.0** | 87.2 | 84.4 |
-
-13영업일 전부 **15:35가 최고**다. 단 하루도 15:30이 이기지 못했다.
-
-읽히는 것이 셋이다.
-
-- **15:20~15:30은 종가 단일가(동시호가)** 구간이라 체결이 없다. 그래서 15:25가 30%대에 머문다.
-  실제로 15:20과 15:25의 일치 건수가 완전히 같았다
-- **15:30에 이미 99% 이상 반영된다.** 걱정했던 "2~3분 지연"은 매일 10~50종목에만 해당한다.
-  다만 9/10처럼 98.1%까지 떨어지는 날이 있어 편차는 15:30 쪽이 크다
-- **15:40부터 오염된다.** 84~88%로 떨어지는 것은 그때부터 시간외 거래가 붙기 때문이다.
-  바꿔 말하면 **15:35까지는 시간외 거래가 시작되지 않는다**
-
-**이 셋은 전부 거래소 시간표로 설명된다.** NXT 메인마켓이 15:20에 끝나고 애프터마켓이 15:40에
-시작하므로 **15:20~15:40은 NXT가 닫혀 있다.** 그 구간의 SOR은 구조적으로 KRX 단독 가격이고, KRX
-종가는 15:30 동시호가로 확정된다. 그래서 15:35가 100%인 것은 우연이 아니다. 자세한 시간표는 아래
-「시간외 구간 등락률」의 「전제 1」에 있다.
-
-15:35도 100%는 아니다(99.7~100.0). 매일 3~8종목이 안 맞는다. 정리매매·거래정지 같은 특수 종목으로
-보이는데 파봐야 얻을 것이 없어 숫자만 남긴다.
-
-### 조치 — 시각을 박지 않고 종가 윈도우의 latest를 남긴다
-
-> 한때 "15:30과 15:35 둘을 남긴다"로 적어뒀다. **바꿨다**(사용자 제안). 시각 목록을 박는 대신
-> 아래 「시간외 등락률 구현 설계」의 **기준가 규칙을 그대로 쓴다.**
-
-```
-남길 행 = 그 날짜·그 마켓에서 snapshot_time이 [15:30, 15:40) 안인 것 중 가장 늦은 것
-```
-
-**8/27에 15:35 스냅샷이 아예 없다.** 그런 날 15:35 하나만 고정으로 남기는 로직이면 하루치가 통째로
-사라진다. 윈도우 규칙은 그 자리에서 15:30을 잡아준다 — "없으면 15:30" 같은 폴백 목록이 필요 없다.
-
-시각 목록보다 나은 점이 셋이다.
-
-1. **수집 주기가 바뀌어도 안 깨진다.** `collect.interval-minutes`가 바뀌면 15:30·15:35라는 시각
-   자체가 사라질 수 있다
-2. **기준가와 같은 행을 남긴다.** 시간외 등락률이 기준가로 쓰는 행과 정리 배치가 보존하는 행이
-   정의상 같아진다. 둘을 따로 정의하면 언젠가 어긋난다
-3. **아래 「과거 날짜 조회」의 우선순위 규칙이 사라진다.** 거기 "15:35 우선, 없으면 15:30"이라고
-   적어뒀는데, 애초에 하루에 한 행만 남으면 고를 것이 없다
-
-보존량도 하루 2개에서 1개로 준다.
-
-#### 주의 셋
-
-**마켓별로 따로 판정한다.** `IndexContributionRankingCollector.collect`가 마켓마다 별도 트랜잭션을
-돌려서 KOSPI만 성공하고 KOSDAQ은 실패할 수 있다. 날짜 단위로만 latest를 잡으면 그런 날 한쪽
-마켓의 종가가 삭제된다.
-
-**윈도우가 빈 날은 그날이 통째로 사라진다.** 8/27이 그렇다. 종가 행이 없으니 어차피 「과거 날짜
-조회」로 그릴 수도 없어 받아들일 만하지만, **배치 로그에 "그 날짜는 보존할 행이 없었다"를 남긴다.**
-나중에 달력에서 그날이 비어 있는 이유를 찾느라 헤매지 않도록.
-
-**프로퍼티를 바꾸면 삭제 정책이 같이 바뀐다.** `market.close-window-start` / `market.after-hours-start`를
-공유하므로, 그 값을 옮기는 순간 보존 대상 행도 옮겨간다. 되돌릴 수 없는 쪽이라 값을 건드릴 때
-이 문서를 다시 본다.
-
-#### 변경 범위
-
-```java
-// SectorPriceSnapshotService:28, MarketMapCategoryChangeRateSnapshotService:46
-private static final LocalTime MARKET_CLOSE_TIME = LocalTime.of(15, 30);
-```
-
-지금 `targetPredicate`는 `hour/minute`가 이 상수와 다른 행을 지운다. 이것을 "(날짜, 마켓)별 윈도우
-latest에 해당하지 않는 행"으로 바꾼다. 두 리포지토리 구현, Custom 인터페이스 두 곳, 서비스 두 곳,
-그리고 테스트.
-
-상수 이름도 같이 손본다. `MARKET_CLOSE_TIME`은 "장 마감 시각"으로 읽히는데 실제로 뜻하는 것은
-"보존할 스냅샷 시각"이다. 그 어긋남이 이번 문제의 뿌리 중 하나다.
-
-**지금 드라이런이라 이 변경은 안전하다.** 실삭제 전환보다 먼저 들어가야 한다.
-
-### 재현 쿼리
-
-보존 시각을 다시 의심하게 되면 이걸 그대로 돌린다. 날짜 창만 바꾸면 된다.
-
-```sql
-WITH ord AS (
-  SELECT stock_code FROM stock_info
-  WHERE active = true AND market_code IN ('0','10')
-),
-days AS (
-  SELECT d, LEAD(d) OVER (ORDER BY d) AS next_d
-  FROM (SELECT DISTINCT snapshot_time::date AS d
-        FROM sector_price_snapshot
-        WHERE snapshot_time >= CURRENT_DATE - 30) x
-),
-ref AS (                       -- 각 영업일의 "다음 영업일 첫 장중 스냅샷" 시각
-  SELECT dy.d, MIN(s.snapshot_time) AS ref_time
-  FROM days dy
-  JOIN sector_price_snapshot s
-    ON s.snapshot_time >= dy.next_d + TIME '09:30'
-   AND s.snapshot_time <  dy.next_d + TIME '15:00'
-  WHERE dy.next_d IS NOT NULL
-  GROUP BY dy.d
-),
-real_close AS (                -- 그 시각 등락률에서 전일 종가를 역산
-  SELECT r.d, s.stock_code,
-         s.current_price / (1 + s.change_rate / 100.0) AS close_price
-  FROM ref r
-  JOIN sector_price_snapshot s ON s.snapshot_time = r.ref_time
-  WHERE s.change_rate > -100 AND s.current_price > 0
-),
-candidate AS (
-  SELECT s.snapshot_time::date AS d, s.snapshot_time::time AS t,
-         s.stock_code, s.current_price
-  FROM sector_price_snapshot s
-  WHERE s.snapshot_time >= CURRENT_DATE - 30
-    AND s.snapshot_time::time BETWEEN TIME '15:25' AND TIME '15:45'
-    AND s.current_price > 0
-),
-matched AS (
-  SELECT c.d, c.t,
-         abs(c.current_price - r.close_price) / r.close_price < 0.0005 AS ok
-  FROM candidate c
-  JOIN real_close r ON r.d = c.d AND r.stock_code = c.stock_code
-  JOIN ord        ON ord.stock_code = c.stock_code
-)
-SELECT d AS 날짜,
-       ROUND(100.0*count(*) FILTER (WHERE t=TIME '15:25' AND ok)/NULLIF(count(*) FILTER (WHERE t=TIME '15:25'),0),1) AS "15:25",
-       ROUND(100.0*count(*) FILTER (WHERE t=TIME '15:30' AND ok)/NULLIF(count(*) FILTER (WHERE t=TIME '15:30'),0),1) AS "15:30",
-       ROUND(100.0*count(*) FILTER (WHERE t=TIME '15:35' AND ok)/NULLIF(count(*) FILTER (WHERE t=TIME '15:35'),0),1) AS "15:35",
-       ROUND(100.0*count(*) FILTER (WHERE t=TIME '15:40' AND ok)/NULLIF(count(*) FILTER (WHERE t=TIME '15:40'),0),1) AS "15:40",
-       ROUND(100.0*count(*) FILTER (WHERE t=TIME '15:45' AND ok)/NULLIF(count(*) FILTER (WHERE t=TIME '15:45'),0),1) AS "15:45"
-FROM matched
-GROUP BY d ORDER BY d;
-```
-
----
-
-## 스냅샷 정리를 실삭제로 전환한다
-
-**선행 조건**: 위 「장 종가는 15:35 스냅샷이다」가 먼저다. 보존 시각을 고치기 전에 실삭제로 전환하면
-진짜 종가를 지운다.
-
-`market-monitor.retention.dry-run`이 아직 `true`다. 배치는 매일 돌지만 아무것도 지우지 않는다.
-
-**막혀 있던 이유는 드라이런 로그가 아무것도 증명하지 못했기 때문이다.** 판정 기준은 "삭제 대상
-건수가 cutoff 이전 전체 건수의 대부분일 것"인데, 두 값이 똑같이 나왔다. 확인해보니 cutoff
-(30일 전) 이전에는 15:30 스냅샷이 한 건도 없었다. 5분 간격 수집을 시작한 것이 `ca2cde9`
-(2026-08-26)라 아직 30일이 안 됐기 때문이다. 남길 것이 애초에 없으니 "전부 삭제 대상"이 나온
-것이고, 술어가 뒤집혀 있어도 같은 숫자가 나온다.
-
-### 보존 기간을 10일로 줄였다 (PR #107, 완료)
-
-기다리는 대신 기간을 줄였다. 한 달을 못 채우고도 데이터가 기가 단위를 바라보는데 월 단위로 들고
-있을 이유가 없다는 판단이다. `SnapshotRetentionScheduler.RETENTION_DAYS`가 10이다.
-
-10일이면 cutoff 이전 구간에 15:30 스냅샷이 존재한다. 그래서 **대상 건수 < cutoff 이전 전체 건수**가
-성립하고, 기다리지 않고 술어를 판정할 수 있다.
-
-`dry-run`은 프로퍼티지만 `RETENTION_DAYS`는 자바 상수다. 다시 바꾸려면 배포가 필요하고, "10일"이
-적힌 주석과 테스트 이름·기대 날짜도 같이 어긋난다.
-
-**기간을 줄여도 첫 실삭제에서 지울 양은 줄지 않는다.** 오히려 늘어난다. 아래 초기 정리 SQL은 그대로
-필요하다.
-
-### 드라이런 판정 — 끝났다 (2026-09-18)
-
-윈도우 규칙(PR #111)을 배포한 다음날 04:00 로그다.
-
-```
-[섹터가격스냅샷정리] 대상건수:6,432,590 | cutoff이전전체건수:6,467,035
-                     최소시각:2026-07-24T18:00 | 최대시각:2026-09-07T20:00
-[섹터가격스냅샷정리] 보존시각 | 표본:[KOSPI 09-07T15:35, KOSDAQ 09-07T15:35, ...] | 보존날짜수:8
-[카테고리등락률스냅샷정리] 대상건수:595,436 | cutoff이전전체건수:598,771
-```
-
-**술어가 맞다.** 표본 시각이 전부 `15:35`고(정각 15:30을 박았다면 8/28 같은 날의 종가를 놓쳤을
-것이다), 대상 건수가 전체보다 작다.
-
-보존량도 맞는다. `6,467,035 − 6,432,590 = 34,445`행이고 `34,445 ÷ 8일 = 4,306`으로 **종목 수와
-일치한다.** 날짜×마켓당 정확히 한 시각씩 남기고 있다는 뜻이다.
-
-#### 알고 켜야 하는 것 둘
-
-**① 첫 실삭제가 703만 행이다.** 두 테이블 합쳐 `6,432,590 + 595,436`이다. 아래 초기 정리 SQL이
-그래서 필요하다.
-
-**② 8일치만 남는다.** 데이터가 7/24부터 쌓여 있어 cutoff(9/8) 이전 영업일이 30일이 넘는데
-**보존날짜수는 8**이다. 나머지는 5분 주기 전환 전이라 `[15:30, 15:40)` 구간에 스냅샷이 아예 없다.
-남길 종가가 없으니 규칙상 전량 삭제가 맞다. **"10일치 종가는 남겠지"라고 생각하고 켜면 안 된다.**
-
-### 남은 순서
-
-**드라이런을 `false`로 바꾸는 단계는 건너뛴다**(사용자 결정). 불필요한 스위치를 코드에 남기지 않기
-위해 **드라이런 경로를 제거하는 배포로 바로 간다.** 그 배포 **전에** 쌓인 데이터를 손으로 치우므로,
-배포 시점에는 배치가 다룰 양이 하루치뿐이다 — 배치를 청크로 쪼갤 이유도 그래서 없다.
-
-1. ~~드라이런 로그로 판정~~ — **완료**(위)
-2. **초기 정리 SQL 수동 실행.** 배치는 `cutoff`보다 오래된 것을 **한 문장으로 전부** 지운다.
-   정상 운영에서는 그게 하루치라 문제가 없지만, 지금은 쌓여 있는 전체가 한 번에 걸린다. 단일
-   DELETE는 락과 테이블 팽창을 부른다
-   - `sector_price_snapshot`은 청크 삭제. `snapshot_time` 인덱스가 있어 청크 반복이 싸다.
-     한 번에 5만 행씩, 0행이 나올 때까지 반복. 멱등이어야 한다
-   - `market_map_category_change_rate_snapshot`은 `snapshot_time` 인덱스가 **없어서** 청크마다
-     풀스캔이 된다. 쪼개면 손해다 — 단일 문으로. 이 테이블은 「카테고리 집계 테이블을 없앤다」
-     PR 2에서 DROP되므로, 그게 먼저 나갔으면 이 항목은 건너뛴다
-   - 끝나고 `VACUUM (ANALYZE)`. 대량 DELETE 후 공간이 회수되지 않는다
-   - 실행은 `docker exec -it market-monitor-postgres psql -U market_monitor -d market_monitor_db`
-   - **보존 조건을 배치와 똑같이 써야 한다.** "15:35가 아닌 것"으로 지우면 안 된다 — 8/28처럼
-     윈도우의 latest가 15:30인 날의 종가가 같이 날아간다. 기준은 **(마켓, 날짜)별 `[15:30, 15:40)`
-     구간의 최대값**이고, 위 드라이런 로그가 16행(8일 × 2마켓)으로 잡아낸 그것이다. 지우기 전에
-     그 16행을 먼저 SELECT로 확인한다
-3. 아래 「드라이런 경로 제거」를 배포한다. 이 배포로 실삭제가 켜진다
-4. 다음날 04:00 로그에 삭제 건수가 찍히는지 확인. 2번을 마쳤으면 **하루치**여야 한다
-
----
-
-## 스냅샷 정리 배치의 드라이런 경로 제거
-
-`market-monitor.retention.dry-run`은 술어가 뒤집혔는지 한 번 확인하려고 만든 장치다. 삭제 술어는
-QueryDSL이 만드는 쿼리가 결정하는데 이 프로젝트에 DB 테스트가 없어서, 술어가 반대로 뒤집혀
-있어도 컴파일과 단위 테스트가 전부 통과한다. 그래서 사람이 로그를 한 번 읽고 판정하는 경로를
-뒀다.
-
-검증이 끝나 실삭제로 전환하면 다시 `true`가 될 일이 없다. **위 항목의 수동 정리가 끝난 뒤에
-걷어낸다 — 그 배포가 곧 실삭제 전환이다**(사용자 결정). 프로퍼티를 `false`로 바꿔 하루 돌려보는
-중간 단계를 두지 않는다. 불필요한 스위치를 남기지 않기 위해서고, 수동 정리를 마치면 배치가 다룰
-양이 하루치뿐이라 사고 규모도 작다.
-지우는 범위는 `if (dryRun) return;` 한 줄이 아니라 드라이런 로그를 위해서만 존재하는 조회 경로
-전체다.
-
-- `dry-run` 프로퍼티와 `@Value`
-- 두 리포지토리의 `summarizeSnapshotsToDelete()`와 `SnapshotRetentionSummary`
-- Custom 인터페이스의 선언 두 곳과 관련 테스트
-
-대략 120줄이다. 실삭제 경로는 이미 삭제 건수를 따로 찍고 있어서 운영에 지장이 없다.
-
-제대로 된 대안은 DB를 띄우는 통합 테스트로 술어를 검증하는 것이다. 그러면 CI가 증명하므로 이
-장치가 처음부터 필요 없다. 지금 이 프로젝트에는 DB 테스트가 한 건도 없어서 도입 비용이 커
-택하지 않았다. 나중에 통합 테스트를 들이게 되면 이 항목은 자연히 해소된다.
-
-보존 정책을 바꿀 때(30일을 60일로 등) 같은 검증이 다시 필요해지는데, 그때는 세 줄짜리 플래그를
-다시 넣으면 된다.
-
----
 
 ## 알림 채널이 텔레그램 하나뿐이다
 
@@ -1170,7 +711,7 @@ suffix가 붙는다. KRX와 NXT 중 유리한 쪽 호가를 알아서 물어다 
 |---|---|
 | `IndexContributionRankingCollector.toSectorPriceEntity` | 키움 `flu_rt`를 그대로 `change_rate`에 **저장** |
 | `MarketMapQueryService.toMarketMapItem` | 그 값을 읽어 `MarketMapItem.changeRate`로 |
-| `MarketMapCategoryChangeRateSnapshotService.computeRawSums` | 그 `MarketMapItem.changeRate`로 Σ등락률×시총을 만들어 **저장** |
+| ~~`MarketMapCategoryChangeRateSnapshotService.computeRawSums`~~ | (집계 테이블 제거로 없어졌다 — 지금은 `SectorTierAggregationService`가 조회 시점에 합산) |
 
 **중간에 다른 출처가 끼어들지 않는다.** 저장 시점의 한 줄을 바꾸면 지도 박스, 카테고리 가중평균,
 섹터 페이지, 텔레그램 캡션이 전부 따라온다. 계획의 전제 중 가장 불확실했던 부분인데, 다행히 좁다.
@@ -1249,7 +790,7 @@ suffix가 붙는다. KRX와 NXT 중 유리한 쪽 호가를 알아서 물어다 
 
 한때 여기에 "시간외 토글이 집계 제거의 리허설이 되고, 그때까지 전일 대비는 집계를 읽고 시간외는
 조회 시점에 계산하는 두 경로가 공존한다"고 적어뒀다. 집계 테이블 제거를 구획 1로 당기면서(맨 앞
-「구획」, 아래 「카테고리 집계 테이블을 없앤다」) 그 대가가 없어졌다. 시간외 등락률이 들어올
+「구획」, 2026-09-24 완료) 그 대가가 없어졌다. 시간외 등락률이 들어올
 시점에는 지도·섹터·요약·텔레그램이 전부 종목 행에서 조회 시점에 조립하고 있으므로, 시간외는 그
 조립에 들어가는 종목 등락률 하나를 바꾸는 일이 된다.
 
@@ -1565,301 +1106,6 @@ Redis로 가면 매 조회마다 수천 건을 직렬화/역직렬화한다. 종
 
 ---
 
-## 카테고리 집계 테이블을 없앤다 — 지도·섹터·요약이 한 응답을 쓴다
-
-`market_map_category_change_rate_snapshot`은 섹터 페이지를 가볍게 하려고 만든 테이블이다. 수집
-tick마다 마켓별로 커스텀 트리를 빌드해서 카테고리 × 시가총액 구간별 등락률 원시합을 저장하고,
-섹터 페이지와 텔레그램 캡션이 그걸 읽는다. **없앤다.** 지도·섹터·요약 페이지가 전부 `/api/map`
-응답 하나를 받아 프론트에서 조립하고, 텔레그램 캡션은 백엔드에서 같은 트리 빌더로 계산한다.
-
-### 왜 없애나
-
-단일 사용자를 전제로 만든 최적화다. 사용자별 커스텀 분류가 들어오면 `category_id`가 사용자별이
-되어 집계 행과 tick당 쓰기 부하가 사용자 수만큼 곱해진다. 수집기는 누가 볼지 모르니 전원 몫을
-매 tick 계산해 저장해야 하고, 그중 대부분은 아무도 안 본다.
-
-집계 테이블이 폭발하는 이유는 **사용자 독립적인 측정값**(등락률, 시총)을 **사용자별 매핑**
-(카테고리)으로 미리 묶어뒀기 때문이다. 둘을 분리하면 사용자별로 저장할 것이 남지 않는다.
-
-| | 성격 | 크기 |
-|---|---|---|
-| `sector_price_snapshot` | 사용자 독립 | 2,740행 × tick. 지금 그대로 |
-| 종목→카테고리 매핑, 구간 경계 | 사용자별 | 수십~수천 행, 거의 안 바뀜 |
-| 집계 | 위 둘의 곱 | **저장하지 않는다** |
-
-지도 페이지는 이미 그 시각 종목 행을 전부 읽어(`findPriceByStockCode`) 트리를 만들고 있고
-문제된 적이 없다. 섹터 페이지가 읽는 시각은 now/before 둘뿐이라 지도가 하는 일을 두 번 하면
-같은 값이 나온다.
-
-### 결정 1 — 섹터 페이지는 지도 응답을 두 번 받아 프론트에서 조립한다
-
-백엔드가 카테고리별 합을 내려주는 전용 조회(지금의 `GET /api/sector`)를 남기는 안과 비교했다.
-전용 조회를 남기면 프론트를 덜 고치지만, 요약 페이지가 결정타다.
-
-```
-요약 페이지 우측 그래프  =  카테고리별 평균 등락률
-요약 페이지 좌측 박스     =  카테고리별 평균 등락률 (헤더 값, 톱픽 판정)
-지도 페이지 헤더          =  카테고리별 평균 등락률
-```
-
-셋이 같은 값이고 요약·지도는 지도 응답(종목 포함)에서 프론트가 계산한다. 그 계산 유틸은 어차피
-만들어야 하고, 섹터 페이지는 그 유틸을 두 시각에 적용한 것일 뿐이다. 전용 조회를 남기면 같은
-규칙을 백엔드에 한 벌 더 두고 엔드포인트도 하나 더 유지한다. 시간외 등락률·멀티테넌시·기본 모드가
-들어올 때도 `/api/map` 한 곳만 고치면 세 페이지가 따라온다.
-
-```
-GET /api/map?market&isCustom[&snapshotTime]
-                 │
-                 ├─ 지도 페이지   최신 1회
-                 ├─ 요약 페이지   최신 1회
-                 ├─ 섹터 페이지   최신 1회 + (최신 snapshotTime − beforeMinutes) 1회
-                 └─ 텔레그램 캡션 백엔드에서 같은 트리 빌더로
-```
-
-- `snapshotTime`이 없으면 최신, 있으면 그 시각에 **정확히 일치**하는 스냅샷. 없으면 빈 응답이고
-  가까운 시각으로 대체하지 않는다. 지금 섹터 페이지의 before 규칙("before 시각에 스냅샷이 없으면
-  그 카테고리는 before 없음")이 그대로 유지된다
-- 섹터 페이지는 순차 2회다. 첫 응답의 `snapshotTime`을 보고 before 시각을 정한다. 프론트가 "지금
-  시각을 5분 격자로 내림 − beforeMinutes"로 추측해서 병렬로 보내는 안은 수집이 늦거나 구멍이 나면
-  어긋나므로 택하지 않았다. 60초 재조회에서는 같은 tick이면 before 키가 이미 react-query 캐시에
-  있고, tick이 바뀌어도 before(t)는 15분 전의 now(t)였던 것이라 대부분 있다. 더 걸리는 건 첫 진입
-  한 번이다
-- 기본 모드(`isCustom=false`)는 지도가 이미 지원하므로 섹터도 공짜로 따라온다. 계속 미뤄왔던
-  일이다. 기본 모드 노드는 `categoryId`가 전부 0이라 프론트 키를 `categoryName`으로 잡는다
-  (커스텀 트리는 이름이 DB UK로 유일, 기본 모드는 group-by 결과라 유일)
-- 대가는 섹터 페이지 페이로드가 카테고리 수십 행에서 종목 2,740개 × 2로 커지는 것 하나다. 단일
-  사용자에선 무시할 수준이고, 나중에 문제가 되면 카테고리 합만 내려주는 경량 응답을 위에 얹으면
-  된다. 이 결정을 되돌리는 것이 아니다
-
-### 결정 2 — `tierBreakdown`은 지도 응답에서도 뺀다
-
-지도 응답의 `MarketMapCategoryNode.tierBreakdown`도 이 테이블에서 온다. 카테고리별로 구간마다
-`Σ(등락률×시총)`, `Σ시총`, `Σ등락률`, 종목 수를 미리 더한 것인데, 같은 응답에 종목 하나하나가
-`changeRate`·`totalMarketValue`·`marketValueTier`를 달고 전부 실려 있다. 프론트가 자손 종목을
-모아 구간으로 거르고 더하면 같은 숫자가 나온다. 실제로 그 코드가 이미 있다.
-`MarketMapCategorySection`의 `localWeightedAvgChangeRate`/`localSimpleAvgChangeRate`가 폴백으로
-그 계산을 한다. 백엔드가 미리 더해 보낼 이유가 없다.
-
-덤으로 어긋남 하나가 사라진다. `tierBreakdown`은 수집 시점 값이라 어드민이 종목을 다른
-카테고리로 옮기면 다음 tick까지 items(현재 매핑)와 `tierBreakdown`(옛 매핑)이 다른 카테고리를
-가리킨다.
-
-프론트 `useFilteredMarketMapTree.filterNodes`가 `combineTierBreakdowns(node.tierBreakdown)`으로
-채우던 평균을 items에서 계산하도록 바꾼다. **같은 PR이어야 한다.** 따로 하면 그 사이 업종 톱픽이
-그 값을 못 받아 전부 빠진다.
-
-### 결정 3 — 종목 캐시 한 층. 수집기가 넣고, 없으면 읽어서 넣는다
-
-비싼 건 그 시각의 종목 행 2,740개를 DB에서 읽는 것 하나다. 그건 사용자와 무관하다. 키움에서 온
-값이라 모두에게 같다. 카테고리별 덧셈은 메모리에서 밀리초다.
-
-```
-키     (market, snapshotTime)
-값     가공 전 가격 행 — 종목코드·현재가·등락률·시각
-적재   수집기가 저장 트랜잭션이 커밋된 뒤 넣는다 (run("지수기여도랭킹")이 성공을 반환한 다음)
-폴백   읽을 때 없으면 DB에서 읽어 넣는다. 재시작 직후와 TTL 만료 뒤만 탄다
-TTL    2시간, expireAfterWrite
-구현   CacheService<T> + @Cacheable, Caffeine
-```
-
-- 키는 마켓 단위다. `ALL_STOCK`은 둘을 이어붙여 쓴다. 올스탁 키를 따로 두면 같은 행이 두 벌
-  들어간다
-- 최대 크기는 2시간 안의 tick 24개 × 2,740행 ≈ 66,000행, 행당 100바이트 안팎이라 7MB 안쪽.
-  누가 무엇을 보든 이 위로 안 올라간다. 사용자 수와 곱해지는 건 없다
-- 시총·구간 라벨·제외 종목 필터는 읽을 때 붙인다. 캐시에는 순수 가격 행만 둔다. 그래야 어드민이
-  구간 경계나 제외 목록을 바꿔도 캐시를 안 비워도 된다
-- 과거 시각의 값은 안 변하므로 무효화가 없다. TTL은 정확성이 아니라 메모리 때문이다.
-  beforeMinutes 최대가 60이라 1시간이면 충분한데, 15:30 종가 항목은 저녁까지 불리므로 2시간으로
-  잡았다. 만료된 뒤 부르면 폴백으로 한 번 읽어 다시 들어온다
-- 커밋 뒤에 넣는 이유: 트랜잭션 안에서 넣으면 롤백됐을 때 DB에 없는 시각이 캐시에 남는다.
-  마켓별로 따로 넣으니 한 마켓만 실패한 tick은 그 마켓만 빠지고, `findLatestCommonSnapshotTime`이
-  DB 기준이라 라이브 조회가 그 시각을 부르지도 않는다
-- 사용자별 결과 캐시 `(userId, market, snapshotTime, isCustom)`는 지금 안 둔다. 단일 사용자에서는
-  트리 편집마다 비우는 코드만 늘고 얻는 게 없다. 구획 3에서 `userId`와 같이 붙인다
-- Redis로 옮기는 건 인스턴스가 둘 이상이거나 재시작에도 캐시가 살아야 할 때다. 지금은 컨테이너
-  하나라 Caffeine이 빠르다. `CacheManager` 구현만 갈아끼우면 되도록 위 패턴을 지킨다
-
-### 결정 4 — 텔레그램은 백엔드에서 같은 트리 빌더로 계산한다
-
-캡션 셋(`getTopCategoryRankings`, `getTopCategoryRankingsByChangeRate`,
-`getMergedTopCategoryRanking`)이 전부 이 테이블을 읽는다. 발송기와 `CategoryRankingTextBuilder`는
-`MarketMapQueryService`만 의존하고 리포지토리를 안 보므로, 그 세 메서드 내부만 트리 items에서
-합치는 방식으로 바꾸면 발송기와 텍스트 빌더는 안 바뀐다(PR #109 리뷰에서 "랭킹 확정은
-QueryService가 끝내고 빌더는 포맷만"으로 정리해둔 경계).
-
-`ALL_STOCK`은 트리를 한 번 빌드하고 items를 `StockInfo.marketType`으로 나눠 (마켓, 카테고리,
-구간)별로 합친다. 마켓마다 따로 빌드하면 now/before에 4번이다.
-
-"카테고리 아래 종목을 모아 구간으로 거르고 더한다"는 규칙이 프론트(세 페이지)와 백엔드(캡션)에
-한 벌씩 남는다. 한때 「랭킹 규칙이 프론트와 백엔드에 따로 있다」를 백로그에 두고 백엔드가 확정해
-내려주는 쪽으로 풀려 했는데, 페이지들이 종목 단위 응답을 받기로 하면서 그 방향이 닫혔다. 규칙이
-20줄짜리 덧셈 하나라 두 벌을 감수한다.
-
-### 수집기와 발송 게이트
-
-`CollectionScheduler.captureCategoryChangeRateSnapshots`와 `lastChangeRateSuccess`를 지운다.
-발송 게이트는 `lastIndexContributionSuccess` 하나가 된다. 섹터 발송은 이미 그 값으로 실패 알림과
-갈리므로 `sectorImageAvailable`이 항상 true가 되고, 맵 발송은 `lastIndexContributionSuccess`가
-그대로 캡션 여부가 된다. 두 발송기의 `send(dataTime, sectorImageAvailable)` 인자를 뺀다. "맵
-이미지는 등락률 스냅샷과 무관하니 가두지 않는다"는 주석과 `getMergedTopCategoryRanking`의 "이
-결과로 캡처 마켓을 정하면 안 된다" 경고도 근거가 사라지므로 같이 정리한다.
-
-카테고리 버전 복원 직후 "스냅샷 행이 없어진 categoryId를 가리킬 수 있어 다음 tick까지 뺀다"던
-`decorateRanking`의 처리도 조회 시점 계산이면 문제 자체가 없다.
-
-### PR 경계
-
-한 번에 다 하면 놓친다. 셋으로 나눈다.
-
-**PR 1 백엔드**
-- 수집기 저장 제거, `lastChangeRateSuccess` 제거, 발송기 인자 제거
-- `/api/map`에 `snapshotTime` 파라미터
-- 종목 캐시 (수집기 적재 + 읽기 폴백)
-- 텔레그램 세 메서드를 트리 기반으로. 원시합 계산은 `collectSnapshots` + `computeRawSums`를 저장
-  없이 새 클래스로 옮긴다
-- `MarketMapCategoryNode.tierBreakdown`, `CategoryTierBreakdown`, `getCategoryChangeRates`,
-  `GET /api/sector`(PR #116에서 방금 분리한 `SectorController`) 제거
-- `SnapshotRetentionScheduler`에서 이 테이블 단계 제거
-- `MarketMapCategoryChangeRateSnapshotService`는 저장·조회·정리 메서드만 남은 채 호출부 없이 둔다
-
-**PR 1 프론트**
-- 섹터 페이지를 `useMarketMap` 두 번으로. `useCategoryChangeRates`·`combineTierBreakdowns` 제거
-- 카테고리 평균 유틸을 공용으로 끌어올려 `filterNodes`·업종 톱픽·섹터 그래프가 같이 쓴다
-- 기본 모드 키를 `categoryName`으로
-
-프론트 PR 1은 요약 페이지 개편과 같은 시기에 한다(사용자 결정). 두 작업이 같은 유틸을 만든다.
-백엔드와 프론트 PR 1은 같이 배포해야 한다. 백엔드만 나가면 섹터 페이지의 `/api/sector`가
-404다. 순서는 프론트 먼저. 두 번 조회하는 코드는 `snapshotTime`을 모르는 옛 백엔드에서도 최신을
-두 번 받아 동작은 한다.
-
-**PR 2** (따로, 나중에)
-- `MarketMapCategoryChangeRateSnapshotService`·엔티티·리포지토리·QueryDSL 구현체·보존 선정 테스트
-  삭제
-- 커스텀 테이블 이름 정리 (아래 「커스텀 테이블 이름을 `custom_*`으로 바꾼다」)
-- 둘 다 Flyway `V2`로 한 번에. `V1`을 고치는 게 아니라 새 파일을 추가하는 것이라
-  `operations.md`의 checksum 불일치 절차는 해당 없다
-- **배포 전 CTAS 백업이 선행 조건이다.** 아래 「배포 전 필수 — CTAS 백업」. 지시서에 그대로 옮긴다
-
-### 커스텀 테이블 이름을 `custom_*`으로 바꾼다
-
-사용자가 커스텀하는 테이블은 여섯인데 접두사가 `market_map_`이다. 로그인 뒤 `userId`가 붙을
-대상이 "지도의 설정"이 아니라 "사용자의 분류"이고, 그 분류를 지도·섹터·요약이 다 쓴다. 지도만
-가리키는 이름이 안 맞는다. `category`도 화면과 API에서 부르는 이름인 `sector`로 맞춘다
-(위 「`/api/admin/` 을 `/api/custom/` 으로 바꾼다」와 같은 판단).
-
-| 지금 | 바뀐 뒤 | 무엇을 커스텀하나 |
-|---|---|---|
-| `market_map_category` | `custom_sector` | 섹터 트리(대·중·소분류). `is_excluded`가 섹터 제외 |
-| `market_map_stock_category` | `custom_stock_sector` | 종목 → 섹터 배정, 별칭 |
-| `market_map_category_version` | `custom_sector_version` | 트리 버전 저장·복원 |
-| `market_map_scale_threshold` | `custom_scale_threshold` | 등락률 범례바 색 구간 |
-| `market_value_tier_threshold` | `custom_value_tier_threshold` | 시가총액 구간 경계. 접두사만 맞춘다 |
-| `market_map_excluded_stock` | **삭제** | 아래 |
-| `market_map_category_change_rate_snapshot` | **삭제** | 이 절의 집계 테이블 |
-
-`market_map_excluded_stock`은 죽은 테이블이다. 등록·해제·목록·전체삭제 API는 있는데 지도 트리를
-만드는 경로(`filterCandidates`, `buildCategoryTree`)가 이 테이블을 안 본다. 프론트도
-`api/marketMap.ts`에 호출 함수만 있고 어느 페이지도 안 부른다. 실제로 동작하는 섹터 제외는
-`market_map_category.is_excluded`다(우클릭 "이 섹터 제외" → `excluded-categories/{id}`). 테이블과
-API, 엔티티, 프론트 함수를 같이 지운다.
-
-엔티티·컨트롤러·서비스·DTO·패키지(`domain/marketmap`)·프론트 파일명(`MarketMapAdminPage`,
-`useMarketMapAdmin` 등)도 `category` → `sector`, `marketMap` → `custom`으로 따라간다.
-`MarketMapController`는 지도·요약·섹터를 다 받치므로 그때 같이 이름을 정한다. 프론트 라우트는
-PR #59에서 이미 `/admin/sector`, `/admin/stock`으로 갔다.
-
-**rename은 삭제 후 재생성이 아니다.** PostgreSQL의 `ALTER TABLE … RENAME TO`는 카탈로그의 이름만
-바꾸는 메타데이터 작업이라 데이터를 옮기지 않고 행 수와 무관하게 즉시 끝난다. 인덱스·제약·FK·
-시퀀스는 테이블을 OID로 참조해서 이름을 바꿔도 그대로 붙어 있다. DDL이 트랜잭션 안에서 돌고
-Flyway가 마이그레이션 하나를 한 트랜잭션으로 실행하므로 중간에 실패하면 전체가 롤백된다.
-되돌리는 것도 `RENAME` 한 번이라 CTAS 백업은 필요 없다. 배포 전 `pg_dump` 한 번이면 된다.
-
-```sql
-ALTER TABLE market_map_category            RENAME TO custom_sector;
-ALTER TABLE market_map_stock_category      RENAME TO custom_stock_sector;
-ALTER TABLE market_map_category_version    RENAME TO custom_sector_version;
-ALTER TABLE market_map_scale_threshold     RENAME TO custom_scale_threshold;
-ALTER TABLE market_value_tier_threshold    RENAME TO custom_value_tier_threshold;
-DROP TABLE market_map_excluded_stock;
-DROP TABLE market_map_category_change_rate_snapshot;
-```
-
-제약·인덱스·시퀀스 이름(`pk_market_map_category`, `uk_market_map_category_name`,
-`market_map_category_id_seq` 등)은 안 바꿔도 동작하지만 옛 이름이 남아 헷갈리니
-`ALTER TABLE … RENAME CONSTRAINT`, `ALTER INDEX … RENAME`, `ALTER SEQUENCE … RENAME`으로 같이
-맞춘다. 전부 메타데이터 변경이다.
-
-**시퀀스에 `_seq1`이 붙은 것이 있다.** `V1`이 `GENERATED ALWAYS AS IDENTITY`로 시퀀스를 자동
-생성할 때 같은 이름이 이미 있어서 뒤에 `1`이 붙은 것으로, Flyway 도입 전 스키마의 잔재다. 어느
-쪽이 실제로 쓰이는지 확인한 뒤 고아를 지우고 쓰는 쪽을 정식 이름으로 바꾼다. 쓰는 쪽을 지우면
-다음 insert가 바로 실패하므로 확인을 생략하지 않는다.
-
-```sql
--- 각 테이블의 id 컬럼이 실제로 쓰는 시퀀스
-SELECT c.relname AS table_name, pg_get_serial_sequence(c.relname, 'id') AS used_sequence
-FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE c.relkind = 'r' AND n.nspname = 'public'
-  AND EXISTS (SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid AND a.attname = 'id')
-ORDER BY 1;
-
--- 어느 컬럼에도 안 붙은 고아 시퀀스
-SELECT s.relname FROM pg_class s
-WHERE s.relkind = 'S'
-  AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = s.oid AND d.deptype IN ('a', 'i'));
-```
-
-조심할 것은 DB가 아니라 앱 쪽이다. 엔티티 `@Table(name=…)`과 마이그레이션이 같은 배포에 나가야
-한다. Flyway가 앱 기동 시 먼저 도니 같은 PR에 넣으면 자연히 맞는다.
-
-#### 배포 전 필수 — CTAS 백업 (사용자가 직접 실행)
-
-rename은 메타데이터 작업이라 데이터를 잃을 경로가 없지만, DROP 두 건과 시퀀스 정리가 같은
-마이그레이션에 들어가므로 **배포 전에 대상 테이블 전체를 CTAS로 복사해 둔다.** 운영 DB 접근은
-사용자만 하므로 사용자가 실행한다. 구현 세션은 PR 설명에 "배포 전 아래 백업이 선행 조건"이라고
-적고, 병합 요청 시 백업이 끝났는지 확인을 요청한다. 백업 없이 배포하지 않는다.
-
-```sql
-CREATE TABLE bak_market_map_category                     AS TABLE market_map_category;
-CREATE TABLE bak_market_map_stock_category               AS TABLE market_map_stock_category;
-CREATE TABLE bak_market_map_category_version             AS TABLE market_map_category_version;
-CREATE TABLE bak_market_map_scale_threshold              AS TABLE market_map_scale_threshold;
-CREATE TABLE bak_market_value_tier_threshold             AS TABLE market_value_tier_threshold;
-CREATE TABLE bak_market_map_excluded_stock               AS TABLE market_map_excluded_stock;
-CREATE TABLE bak_market_map_category_change_rate_snapshot AS TABLE market_map_category_change_rate_snapshot;
-```
-
-`CREATE TABLE … AS TABLE`은 데이터만 복사하고 제약·인덱스·identity는 안 가져온다. 되돌릴 일이
-생기면 `INSERT INTO … SELECT`로 부어 넣고 시퀀스를 `setval`로 맞춘다. 배포 뒤 며칠 두고 이상이
-없으면 `bak_*`를 지운다. 실행은
-`docker exec -it market-monitor-postgres psql -U market_monitor -d market_monitor_db`.
-
-### 확인해야 할 것
-
-- 렌더러가 섹터 페이지를 캡처할 때 페이지 로드 대기 시간. 첫 요청이 캐시 miss면 DB를 두 번 읽는다
-- 텔레그램 08:10 첫 발송. before가 없어 `getTopCategoryRankingsByChangeRate` 폴백을 타는 경로가
-  그대로 살아야 한다
-- 배포 뒤 종목 캐시 hit/miss와 `/api/map` 응답 시간 로그. 한때 "배포 전에 지도·섹터 응답 시간을
-  잰다"고 적었는데, 테이블을 지우는 게 아니라 호출부만 끊는 것이라 되돌리기 쉬워 배포 뒤 측정으로
-  바꿨다
-
-### 검토했고 택하지 않은 안
-
-**A. 기본 트리만 집계하고 커스텀한 사용자는 실시간.** 경로가 둘로 갈려 같은 화면이 미묘하게 다른
-값을 내는 버그가 생긴다.
-
-**B. 집계 테이블에 `userId`를 붙이고 감수.** 쓰기 쪽이 사용자 수에 비례해 커지는 구조를 남긴다.
-
-**C. materialized view / 야간 배치 재계산.** 같은 곱셈을 시점만 미룬다. 장중 갱신도 못 한다.
-
-**D. 백엔드가 카테고리별 합을 내려주는 섹터 전용 조회를 유지.** 위 「결정 1」. 요약 페이지까지
-지도 응답을 쓰기로 하면서 닫혔다.
-
-**E. 요청 시점에만 캐시 적재(수집기 워밍 없이).** 수집기가 방금 저장한 행을 이미 들고 있어 넣는
-비용이 거의 없고, 사용자 무관 데이터라 사용자 수와 곱해지지 않는다. 첫 요청 miss와 tick 경계
-동시 miss가 같이 사라진다. 다만 재시작 뒤를 위해 읽기 폴백은 남긴다.
-
----
-
 ## 요약 페이지 — 지도 응답 위에 그린다
 
 지금 요약 페이지(`MarketSummaryPage`)는 `/api/summary`로 시장 개요·투자자 매매·프로그램 매매
@@ -1892,68 +1138,6 @@ CREATE TABLE bak_market_map_category_change_rate_snapshot AS TABLE market_map_ca
 
 ---
 
-## 멀티테넌시 — `userId`와 sparse override
-
-회원가입을 도입하면 커스텀 테이블 다섯(위 「커스텀 테이블 이름을 `custom_*`으로 바꾼다」의
-표)에 `userId`가 붙는다. 집계 테이블이 사용자 수만큼 곱해지는 문제는 위 「카테고리 집계 테이블을
-없앤다」로 먼저 풀었다. 남는 건 가입 비용이다.
-
-### 터지는 것 — 가입할 때 2,700행을 만들어야 한다
-
-`market_map_stock_category`는 지금 **전 종목 미러**다. `MarketMapCategoryService.syncStockCategories`가
-`StockInfoSyncedEvent`를 받아 신규 종목마다 행을 만든다. 사용자별이 되면 가입 시점에 2,700행을
-한 번에 만들어야 하고, 신규 상장이 있을 때마다 전 사용자에게 뿌려야 한다.
-
-### 가입 비용 — 미러 대신 sparse override
-
-`market_map_stock_category`를 **전 종목 미러가 아니라 override 테이블로** 바꾼다.
-
-```
-기본 매핑  = stock_info.categoryName 으로 자동 생성된 카테고리   (지금 getDefaultMarketMap이 쓰는 것)
-override = market_map_stock_category 에 행이 있는 종목만
-```
-
-신규 가입자는 **0행**으로 시작한다. 옮기거나 별칭을 단 종목만 행이 생긴다. 신규 상장 종목을 전
-사용자에게 뿌리는 싱크도 **통째로 사라진다.**
-
-"없으면 이렇게, 있으면 이렇게"가 코드 전체에 번질까 봐 애초에 미러로 출발했는데, **실제로 미러를
-전제하는 자리는 두 곳뿐이다.** 둘 다 배정이 없으면 NPE다.
-
-```java
-// ① MarketMapQueryService — 지도 트리를 만들 때
-stockCategoryMap.get(stockInfo.getStockCode()).getCategoryId()
-
-// ② MarketMapStockCategoryService.toStockCategoryListItem — 종목 관리 페이지
-//    stockCategory 인자가 null일 수 있는데(getStockCategories가 Map.get으로 넘긴다) 그대로 쓴다
-MarketMapCategory category = categoryById.get(stockCategory.getCategoryId());
-```
-
-> ②는 처음에 빠뜨렸다가 카테고리 삭제 버그를 조사하면서 찾았다. 지금은 신규 상장 종목을 자동
-> 배정하는 `MarketMapCategoryService.onStockInfoSynced`(`StockInfoSyncedEvent` 수신)가 미러 불변식을
-> 떠받쳐서 null이 오지 않는다. **이 작업에서 두 곳을 같이 고친다** — 한 곳만 고치면 종목 관리
-> 페이지가 통째로 500이 된다.
-
-이 자리를 resolver 하나로 바꾸면 나머지는 지금 모양 그대로다. 호출부는 여전히 `Map`을 받는다.
-
-```java
-/** 한 사용자의 최종 "종목 → 카테고리" 배정. override가 있으면 그것, 없으면 stock_info 업종으로
- * 자동 생성된 카테고리. 호출부는 이 값이 어디서 왔는지 알 필요가 없다. */
-Map<String, Long> resolveCategoryByStockCode(Long userId)
-```
-
-`toMarketMapItem`의 `resolveAlias`는 **이미 null을 처리한다**(`stockCategory == null || alias == null
-|| isBlank`). sparse 전제가 코드에 부분적으로 이미 들어와 있다.
-
-대가: "이 종목이 어느 카테고리인가"를 DB만 보고 알 수 없다. 관리 쿼리가 불편해진다.
-
-### 순서 (미확정)
-
-1. `market_map_stock_category`를 sparse override로
-2. 세 테이블에 `userId` 추가
-3. 사용자별 결과 캐시 `(userId, market, snapshotTime, isCustom)`. 위 「결정 3」에서 미뤄둔 것
-4. 과거 날짜 조회. 2·3과 같은 조회 경로를 건드리므로 함께
-
----
 ## 과거 날짜 조회 (달력)
 
 상단 스냅샷 시각 옆에 달력 아이콘을 이미 붙여뒀다(`MarketMapIcons.CalendarIcon`,

@@ -127,7 +127,7 @@ public class CustomSectorService {
 
         List<Long> subCategoryIds = collectSubCategoryIds(categoryId, maps.categoryByParentId());
         List<CustomStockSector> stockCategories =
-                customStockSectorRepository.findByUserIdAndSectorIdIn(userId, subCategoryIds);
+                customStockSectorRepository.findByIdUserIdAndSectorIdIn(userId, subCategoryIds);
         List<CustomStockSector> blockingStockCategories = findBlockingStockCategories(stockCategories);
         if (!blockingStockCategories.isEmpty()) {
             return SectorDeletePreview.blocked(
@@ -145,7 +145,7 @@ public class CustomSectorService {
 
         List<Long> subCategoryIds = collectSubCategoryIds(categoryId, maps.categoryByParentId());
         List<CustomStockSector> stockCategories =
-                customStockSectorRepository.findByUserIdAndSectorIdIn(userId, subCategoryIds);
+                customStockSectorRepository.findByIdUserIdAndSectorIdIn(userId, subCategoryIds);
         if (!findBlockingStockCategories(stockCategories).isEmpty()) {
             throw new ConflictException(ErrorCode.CATEGORY_HAS_ASSIGNED_STOCK, categoryId);
         }

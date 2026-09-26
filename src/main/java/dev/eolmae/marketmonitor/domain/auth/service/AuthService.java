@@ -64,6 +64,8 @@ public class AuthService {
         UserAccount user =
                 userAccountRepository.findByIssuerAndSub(issuer, subject).orElse(null);
         if (user == null) {
+            // ON CONFLICT DO NOTHING + RETURNING — 동시 로그인 레이스에서 실제로 삽입된 행만 받아
+            // 신규 가입 여부를 판정한다. JPQL/QueryDSL에 없는 문법이라 JdbcTemplate으로 직접 쓴다.
             List<Long> insertedIds =
                     jdbcTemplate.query("""
                     INSERT INTO users (issuer, sub, email, role, created_at, updated_at)

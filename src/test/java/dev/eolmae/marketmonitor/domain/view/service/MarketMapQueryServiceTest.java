@@ -114,7 +114,7 @@ class MarketMapQueryServiceTest {
                 .findAllByUserId(ArgumentMatchers.anyLong());
         Mockito.doAnswer(invocation -> marketMapStockCategoryRepository.findAll())
                 .when(marketMapStockCategoryRepository)
-                .findAllByUserId(ArgumentMatchers.anyLong());
+                .findAllByIdUserId(ArgumentMatchers.anyLong());
         Mockito.doReturn(List.of()).when(customStockAliasRepository).findAllByIdUserId(ArgumentMatchers.anyLong());
         stubTierThresholds(tierThreshold(10L, "대형", 0L, false));
     }

@@ -62,7 +62,7 @@ class CustomSectorTreeServiceTest {
         child.exclude();
 
         when(sectorRepository.findAllByUserId(USER_ID)).thenReturn(List.of(root, child));
-        when(stockSectorRepository.findAllByUserId(USER_ID))
+        when(stockSectorRepository.findAllByIdUserId(USER_ID))
                 .thenReturn(List.of(CustomStockSector.create(USER_ID, "005930", 11L)));
         when(stockAliasRepository.findAllByIdUserId(USER_ID))
                 .thenReturn(List.of(CustomStockAlias.create(USER_ID, "005930", "삼전")));
@@ -87,7 +87,7 @@ class CustomSectorTreeServiceTest {
         assertThat(snapshot.valueTierThresholds()).hasSize(1);
         assertThat(snapshot.preferences()).containsEntry("showValue", true);
         verify(sectorRepository).findAllByUserId(USER_ID);
-        verify(stockSectorRepository).findAllByUserId(USER_ID);
+        verify(stockSectorRepository).findAllByIdUserId(USER_ID);
         verify(stockAliasRepository).findAllByIdUserId(USER_ID);
     }
 

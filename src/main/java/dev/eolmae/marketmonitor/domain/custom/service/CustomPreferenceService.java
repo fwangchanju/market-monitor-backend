@@ -22,6 +22,8 @@ public class CustomPreferenceService {
     @Transactional(readOnly = true)
     public Map<String, Object> getPreferences() {
         Long userId = CurrentUser.requireId();
+        // payload::TEXT — JSONB 캐스팅. user_preference에 매핑된 JPA 엔티티가 없고, JSONB 컬럼
+        // 자체도 JPQL/QueryDSL 문법으로 다룰 수 없다.
         String payload = jdbcTemplate.queryForObject(
                 "SELECT payload::TEXT FROM user_preference WHERE user_id = ?", String.class, userId);
         try {
@@ -36,6 +38,7 @@ public class CustomPreferenceService {
         Long userId = CurrentUser.requireId();
         try {
             String json = objectMapper.writeValueAsString(payload == null ? Map.of() : payload);
+            // CAST(? AS JSONB) — 위와 동일한 이유(엔티티 없음 + JSONB 캐스팅)로 JdbcTemplate을 쓴다.
             jdbcTemplate.update(
                     "UPDATE user_preference SET payload = CAST(? AS JSONB), updated_at = CURRENT_TIMESTAMP WHERE user_id = ?",
                     json,

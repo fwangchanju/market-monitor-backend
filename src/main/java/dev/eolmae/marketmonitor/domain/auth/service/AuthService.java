@@ -1,6 +1,7 @@
 package dev.eolmae.marketmonitor.domain.auth.service;
 
 import dev.eolmae.marketmonitor.common.enums.Zone;
+import dev.eolmae.marketmonitor.common.event.UserSignedUpEvent;
 import dev.eolmae.marketmonitor.domain.auth.dto.AuthSessionResponse;
 import dev.eolmae.marketmonitor.domain.auth.entity.UserAccount;
 import dev.eolmae.marketmonitor.domain.auth.entity.UserRefreshToken;
@@ -14,6 +15,8 @@ import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -32,6 +35,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AuthService {
 
     private static final String GOOGLE_ISSUER = "https://accounts.google.com";
@@ -44,12 +48,13 @@ public class AuthService {
     private final AuthProperties authProperties;
     private final UserAccountRepository userAccountRepository;
     private final UserRefreshTokenRepository userRefreshTokenRepository;
-    private final SignupInitializationService signupInitializationService;
+    private final ApplicationEventPublisher eventPublisher;
     private final AppJwtService appJwtService;
     private final JdbcTemplate jdbcTemplate;
 
     @Transactional
     public IssuedTokens loginWithGoogle(String code, String codeVerifier, String redirectUri) {
+        log.info("Google 로그인 콜백 진입");
         requireGoogleConfiguration();
         String idToken = exchangeCodeForIdToken(code, codeVerifier, redirectUri);
         Jwt googleUser = verifyGoogleIdToken(idToken);
@@ -74,8 +79,11 @@ public class AuthService {
                     RETURNING id
                     """, (resultSet, rowNumber) -> resultSet.getLong(1), issuer, subject, email);
             if (!insertedIds.isEmpty()) {
-                user = userAccountRepository.findById(insertedIds.getFirst()).orElseThrow();
-                signupInitializationService.initialize(user.getId());
+                Long newUserId = insertedIds.getFirst();
+                log.info("신규 가입 users INSERT 완료: userId={}", newUserId);
+                eventPublisher.publishEvent(new UserSignedUpEvent(newUserId));
+                log.info("신규 가입 템플릿 복제 완료: userId={}", newUserId);
+                user = userAccountRepository.findById(newUserId).orElseThrow();
             } else {
                 user = userAccountRepository.findByIssuerAndSub(issuer, subject).orElseThrow();
                 user.updateEmail(email);

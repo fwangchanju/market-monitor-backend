@@ -2,6 +2,7 @@ package dev.eolmae.marketmonitor.domain.stock.collector;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.event.IndustryInfoCreatedEvent;
+import dev.eolmae.marketmonitor.common.event.StockInfoSyncedEvent;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.common.util.Strings;
@@ -91,7 +92,14 @@ public class StockInfoCollector {
                         fetched.listCount(),
                         fetched.lastPrice()))
                 .toList();
-        stockInfoRepository.saveAll(newStocks);
+        stockInfoRepository.saveAllAndFlush(newStocks);
+        List<String> newOrdinaryStockCodes = newStocks.stream()
+                .filter(stock -> StockMarketCode.isOrdinaryShare(stock.getMarketCode()))
+                .map(StockInfo::getStockCode)
+                .toList();
+        if (!newOrdinaryStockCodes.isEmpty()) {
+            eventPublisher.publishEvent(new StockInfoSyncedEvent(newOrdinaryStockCodes));
+        }
         // 커밋 전에 비우면 evict~커밋 사이에 다른 스레드가 캐시를 재적재해 옛 데이터를 캐시에 굳힐 수
         // 있다 — 그래서 evict는 이 트랜잭션이 커밋된 뒤로 미룬다.
         evictCacheAfterCommit();

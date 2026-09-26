@@ -1,23 +1,25 @@
 package dev.eolmae.marketmonitor.domain.stock.collector;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.event.IndustryInfoCreatedEvent;
+import dev.eolmae.marketmonitor.common.event.StockInfoSyncedEvent;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.StockInfoRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.StockInfoResponse;
+import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
 import dev.eolmae.marketmonitor.domain.stock.repository.IndustryInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mockito;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -59,9 +61,13 @@ class StockInfoCollectorTest {
 
         collector.sync();
 
-        ArgumentCaptor<IndustryInfoCreatedEvent> captor = ArgumentCaptor.forClass(IndustryInfoCreatedEvent.class);
-        verify(eventPublisher).publishEvent(captor.capture());
-        assertThat(captor.getValue().name()).isEqualTo("반도체");
+        verify(eventPublisher)
+                .publishEvent(Mockito.<Object>argThat(event -> event instanceof IndustryInfoCreatedEvent industry
+                        && industry.name().equals(response.list().get(0).upName())));
+        verify(eventPublisher)
+                .publishEvent(Mockito.<Object>argThat(event -> event instanceof StockInfoSyncedEvent synced
+                        && synced.stockCodes().size() == 2
+                        && synced.stockCodes().containsAll(List.of("005930", "051910"))));
     }
 
     @AfterEach
@@ -81,6 +87,7 @@ class StockInfoCollectorTest {
         collector.sync();
 
         verify(stockInfoCacheService).evict();
+        verify(eventPublisher, never()).publishEvent(any(StockInfoSyncedEvent.class));
     }
 
     @Test
@@ -118,8 +125,29 @@ class StockInfoCollectorTest {
 
         collector.sync();
 
-        ArgumentCaptor<IndustryInfoCreatedEvent> captor = ArgumentCaptor.forClass(IndustryInfoCreatedEvent.class);
-        verify(eventPublisher).publishEvent(captor.capture());
-        assertThat(captor.getValue().name()).isEqualTo("반도체");
+        verify(eventPublisher)
+                .publishEvent(Mockito.<Object>argThat(event -> event instanceof IndustryInfoCreatedEvent industry
+                        && industry.name().equals(response.list().get(0).upName())));
+        verify(eventPublisher)
+                .publishEvent(Mockito.<Object>argThat(event -> event instanceof StockInfoSyncedEvent synced
+                        && synced.stockCodes().equals(List.of("005930"))));
+        InOrder insertionOrder = Mockito.inOrder(stockInfoRepository, eventPublisher);
+        insertionOrder.verify(stockInfoRepository).saveAllAndFlush(any());
+        insertionOrder.verify(eventPublisher).publishEvent(any(StockInfoSyncedEvent.class));
+    }
+
+    @Test
+    void sync_비활성_기존_종목의_재활성화에는_신규상장_이벤트를_발행하지_않는다() {
+        StockInfo inactive = StockInfo.create("005930", "Samsung", Market.KOSPI, "0", null, 100L, null);
+        inactive.markInactive();
+        StockInfoResponse response = new StockInfoResponse(
+                "0", "normal", List.of(new StockInfoResponse.StockItem("005930", "Samsung", "0", "", "100", "10000")));
+        when(kiwoomApiClient.post(any(StockInfoRequest.class), eq(StockInfoResponse.class)))
+                .thenReturn(response);
+        when(stockInfoRepository.findAll()).thenReturn(List.of(inactive));
+
+        collector.sync();
+
+        verify(eventPublisher, never()).publishEvent(any(StockInfoSyncedEvent.class));
     }
 }

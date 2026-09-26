@@ -1,42 +1,35 @@
 # These rules apply to shell commands requested outside the sandbox.
 prefix_rule(
-    pattern = ["gh", "pr", "merge"],
+    pattern = [["sudo", "ssh", "scp", "sftp", "rsync", "kubectl", "helm"]],
     decision = "forbidden",
-    justification = "The user handles PR merges.",
-    match = ["gh pr merge 123"],
+    justification = "Production server access and direct deployment are forbidden; use GitHub Actions.",
+    match = ["ssh production.example"],
 )
 
 prefix_rule(
-    pattern = ["gh", "workflow", "run"],
+    pattern = ["bash", ["infra/scripts/deploy.sh", "infra/scripts/deploy-application.sh", "infra/scripts/deploy-nginx.sh", "infra/scripts/deploy-renderer.sh"]],
     decision = "forbidden",
-    justification = "The user handles manual workflow runs.",
-    match = ["gh workflow run deploy.yml"],
+    justification = "Do not deploy directly from the server terminal; use GitHub Actions.",
+    match = ["bash infra/scripts/deploy-application.sh"],
 )
 
 prefix_rule(
-    pattern = ["git", "commit"],
-    decision = "prompt",
-    justification = "Ask the user before committing.",
-    match = ["git commit -m docs"],
+    pattern = ["sh", ["infra/scripts/deploy.sh", "infra/scripts/deploy-application.sh", "infra/scripts/deploy-nginx.sh", "infra/scripts/deploy-renderer.sh"]],
+    decision = "forbidden",
+    justification = "Do not deploy directly from the server terminal; use GitHub Actions.",
+    match = ["sh infra/scripts/deploy.sh"],
 )
 
 prefix_rule(
-    pattern = ["git", "push"],
-    decision = "prompt",
-    justification = "Ask the user before pushing.",
-    match = ["git push origin branch"],
+    pattern = [["./infra/scripts/deploy.sh", "./infra/scripts/deploy-application.sh", "./infra/scripts/deploy-nginx.sh", "./infra/scripts/deploy-renderer.sh"]],
+    decision = "forbidden",
+    justification = "Do not deploy directly from the server terminal; use GitHub Actions.",
+    match = ["./infra/scripts/deploy-nginx.sh"],
 )
 
 prefix_rule(
-    pattern = ["gh", "pr", "create"],
+    pattern = [["docker", "docker-compose"]],
     decision = "prompt",
-    justification = "Ask the user before creating a PR.",
-    match = ["gh pr create --draft"],
-)
-
-prefix_rule(
-    pattern = ["gh", "pr", "edit"],
-    decision = "prompt",
-    justification = "Ask the user before editing a PR.",
-    match = ["gh pr edit 123"],
+    justification = "Confirm an isolated local Docker daemon and local Compose project; production Docker is forbidden.",
+    match = ["docker compose -p market-monitor-local up -d"],
 )

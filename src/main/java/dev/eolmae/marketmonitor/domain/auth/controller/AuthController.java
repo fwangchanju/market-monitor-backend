@@ -17,9 +17,7 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Base64;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -39,7 +37,6 @@ public class AuthController {
     private static final String STATE_COOKIE = "mm_oauth_state";
     private static final String VERIFIER_COOKIE = "mm_oauth_verifier";
     private static final String RETURN_TO_COOKIE = "mm_oauth_return";
-    private static final String ACCESS_COOKIE = "mm_access";
     private static final String REFRESH_COOKIE = "mm_refresh";
     private static final String CAPTURE_TOKEN_HEADER = "X-Capture-Token";
     private static final String CALLBACK_PATH = "/api/auth/google/callback";
@@ -48,6 +45,7 @@ public class AuthController {
     private final AuthService authService;
     private final AuthProperties authProperties;
     private final AppJwtService appJwtService;
+    private final AuthCookies authCookies;
 
     @GetMapping("/google")
     public RedirectView beginGoogleLogin(
@@ -72,9 +70,9 @@ public class AuthController {
                 .build()
                 .encode()
                 .toUriString();
-        addCookie(response, STATE_COOKIE, state, "/api/auth/google", Duration.ofMinutes(10));
-        addCookie(response, VERIFIER_COOKIE, verifier, "/api/auth/google", Duration.ofMinutes(10));
-        addCookie(
+        authCookies.add(response, STATE_COOKIE, state, "/api/auth/google", Duration.ofMinutes(10));
+        authCookies.add(response, VERIFIER_COOKIE, verifier, "/api/auth/google", Duration.ofMinutes(10));
+        authCookies.add(
                 response,
                 RETURN_TO_COOKIE,
                 Base64.getUrlEncoder()
@@ -101,12 +99,12 @@ public class AuthController {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "OAuth state 검증에 실패했습니다.");
         }
 
-        expireCookie(response, STATE_COOKIE, "/api/auth/google");
-        expireCookie(response, VERIFIER_COOKIE, "/api/auth/google");
+        authCookies.expire(response, STATE_COOKIE, "/api/auth/google");
+        authCookies.expire(response, VERIFIER_COOKIE, "/api/auth/google");
         String returnTo = decodedReturnTo(cookie(request, RETURN_TO_COOKIE));
-        expireCookie(response, RETURN_TO_COOKIE, "/api/auth/google");
+        authCookies.expire(response, RETURN_TO_COOKIE, "/api/auth/google");
         IssuedTokens tokens = authService.loginWithGoogle(code, verifier, callbackUri());
-        setTokens(response, tokens);
+        authCookies.setSessionCookies(response, tokens);
         return new RedirectView(authProperties.getFrontendUrl() + returnTo);
     }
 
@@ -124,7 +122,7 @@ public class AuthController {
         try {
             return refreshSession(refreshToken, response);
         } catch (ResponseStatusException e) {
-            expireCookie(response, REFRESH_COOKIE, "/api/auth");
+            authCookies.expire(response, REFRESH_COOKIE, "/api/auth");
             return AuthSessionResponse.anonymous();
         }
     }
@@ -137,15 +135,14 @@ public class AuthController {
 
     private AuthSessionResponse refreshSession(String rawRefreshToken, HttpServletResponse response) {
         IssuedTokens tokens = authService.refresh(rawRefreshToken);
-        setTokens(response, tokens);
+        authCookies.setSessionCookies(response, tokens);
         return authService.session(appJwtService.parse(tokens.accessToken()));
     }
 
     @PostMapping("/logout")
     public void logout(HttpServletRequest request, HttpServletResponse response) {
         authService.logout(cookie(request, REFRESH_COOKIE));
-        expireCookie(response, ACCESS_COOKIE, "/");
-        expireCookie(response, REFRESH_COOKIE, "/api/auth");
+        authCookies.expireSessionCookies(response);
         response.setStatus(HttpStatus.NO_CONTENT.value());
     }
 
@@ -153,37 +150,6 @@ public class AuthController {
         return ServletUriComponentsBuilder.fromCurrentContextPath()
                 .path(CALLBACK_PATH)
                 .toUriString();
-    }
-
-    private void setTokens(HttpServletResponse response, IssuedTokens tokens) {
-        addCookie(response, ACCESS_COOKIE, tokens.accessToken(), "/", Duration.ofMinutes(15));
-        addCookie(response, REFRESH_COOKIE, tokens.refreshToken(), "/api/auth", Duration.ofDays(14));
-    }
-
-    private void addCookie(HttpServletResponse response, String name, String value, String path, Duration maxAge) {
-        response.addHeader(
-                HttpHeaders.SET_COOKIE,
-                ResponseCookie.from(name, value)
-                        .httpOnly(true)
-                        .secure(true)
-                        .sameSite("Lax")
-                        .path(path)
-                        .maxAge(maxAge)
-                        .build()
-                        .toString());
-    }
-
-    private void expireCookie(HttpServletResponse response, String name, String path) {
-        response.addHeader(
-                HttpHeaders.SET_COOKIE,
-                ResponseCookie.from(name, "")
-                        .httpOnly(true)
-                        .secure(true)
-                        .sameSite("Lax")
-                        .path(path)
-                        .maxAge(Duration.ZERO)
-                        .build()
-                        .toString());
     }
 
     private String safeReturnTo(String returnTo) {

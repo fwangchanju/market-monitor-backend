@@ -39,7 +39,7 @@ class AuthControllerTest {
     private final AuthService authService = mock(AuthService.class);
     private final AppJwtService appJwtService = mock(AppJwtService.class);
     private final MockMvc mockMvc = MockMvcBuilders.standaloneSetup(
-                    new AuthController(authService, new AuthProperties(), appJwtService))
+                    new AuthController(authService, new AuthProperties(), appJwtService, new AuthCookies()))
             .build();
 
     @AfterEach

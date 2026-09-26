@@ -11,6 +11,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import dev.eolmae.marketmonitor.common.exception.NotFoundException;
 import dev.eolmae.marketmonitor.domain.auth.entity.UserAccount;
 import dev.eolmae.marketmonitor.domain.auth.entity.UserRefreshToken;
 import dev.eolmae.marketmonitor.domain.auth.enums.Role;
@@ -114,6 +115,27 @@ class AuthServiceTest {
         verify(userRefreshTokenRepository).deleteExpiredOrStaleTokens(nowCaptor.capture(), cutoffCaptor.capture());
 
         assertThat(cutoffCaptor.getValue()).isEqualTo(nowCaptor.getValue().minusDays(1));
+    }
+
+    @Test
+    void loginAsForDevelopment은_소유자_계정이_있으면_토큰을_발급한다() {
+        UserAccount owner = userAccount(999999L);
+        when(userAccountRepository.findById(999999L)).thenReturn(Optional.of(owner));
+        when(appJwtService.issueAccessToken(any())).thenReturn("access-token");
+
+        AuthService.IssuedTokens issuedTokens = authService.loginAsForDevelopment(999999L);
+
+        assertThat(issuedTokens.accessToken()).isEqualTo("access-token");
+        assertThat(issuedTokens.refreshToken()).isNotBlank();
+        verify(userRefreshTokenRepository, times(1)).save(any(UserRefreshToken.class));
+    }
+
+    @Test
+    void loginAsForDevelopment은_소유자_계정이_없으면_NotFoundException을_던진다() {
+        when(userAccountRepository.findById(999999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.loginAsForDevelopment(999999L)).isInstanceOf(NotFoundException.class);
+        verify(userRefreshTokenRepository, never()).save(any());
     }
 
     private UserRefreshToken usableTokenOf(UserAccount user) {

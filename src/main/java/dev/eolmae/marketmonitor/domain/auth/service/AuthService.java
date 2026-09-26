@@ -2,6 +2,8 @@ package dev.eolmae.marketmonitor.domain.auth.service;
 
 import dev.eolmae.marketmonitor.common.enums.Zone;
 import dev.eolmae.marketmonitor.common.event.UserSignedUpEvent;
+import dev.eolmae.marketmonitor.common.exception.ErrorCode;
+import dev.eolmae.marketmonitor.common.exception.NotFoundException;
 import dev.eolmae.marketmonitor.domain.auth.dto.AuthSessionResponse;
 import dev.eolmae.marketmonitor.domain.auth.entity.UserAccount;
 import dev.eolmae.marketmonitor.domain.auth.entity.UserRefreshToken;
@@ -106,6 +108,16 @@ public class AuthService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "세션을 갱신할 수 없습니다."));
         token.replace();
         return createTokens(token.getUser());
+    }
+
+    // 로컬 개발 전용 로그인(DevLoginController)에서만 호출한다. 소유자 계정으로 구글 로그인과 동일한
+    // 토큰 발급 경로(createTokens)를 태운다.
+    @Transactional
+    public IssuedTokens loginAsForDevelopment(Long userId) {
+        UserAccount user = userAccountRepository
+                .findById(userId)
+                .orElseThrow(() -> new NotFoundException(ErrorCode.DEV_LOGIN_OWNER_NOT_FOUND, userId));
+        return createTokens(user);
     }
 
     @Transactional

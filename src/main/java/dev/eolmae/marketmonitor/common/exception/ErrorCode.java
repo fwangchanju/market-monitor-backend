@@ -28,6 +28,7 @@ public enum ErrorCode {
 
     // Auth
     REFRESH_TOKEN_CLEANUP_FAILED("갱신 토큰 정리 배치 실행에 실패했습니다."),
+    DEV_LOGIN_OWNER_NOT_FOUND("개발용 로그인 소유자 계정을 찾을 수 없습니다."),
 
     // Stock 수집
     STOCK_INFO_SYNC_FAILED("종목 기준정보 동기화에 실패했습니다."),

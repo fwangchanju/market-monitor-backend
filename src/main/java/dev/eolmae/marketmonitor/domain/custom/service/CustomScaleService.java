@@ -12,7 +12,6 @@ import dev.eolmae.marketmonitor.domain.custom.repository.CustomScaleThresholdRep
 import java.util.Comparator;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,7 +22,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class CustomScaleService {
 
     private final CustomScaleThresholdRepository customScaleThresholdRepository;
-    private final JdbcTemplate jdbcTemplate;
 
     @Transactional(readOnly = true)
     public CustomScaleResponse getScale() {
@@ -34,25 +32,11 @@ public class CustomScaleService {
         return getUserScale(userId);
     }
 
+    /** 색상 스케일 기본값은 더 이상 백엔드가 들고 있지 않다 — 프론트가 내장 프리셋으로 폴백한다
+     * (marketMapColorScale.ts). 빈 목록만 내려준다. */
     @Transactional(readOnly = true)
     public CustomScaleResponse getDefaultScale() {
-        // default_scale_threshold는 매핑된 JPA 엔티티가 없는 순수 참조 테이블(가입 시 복제만 되고
-        // 앱 코드에서 별도로 관리하지 않음)이라 QueryDSL Q타입이 없다. 엔티티를 새로 추가하는 것은
-        // 이 리팩터링 범위를 벗어나 PR 설명에 남기고 유지한다.
-        List<ScaleThresholdItem> thresholds = jdbcTemplate.query(
-                "SELECT threshold_percent, color, color_label FROM default_scale_threshold ORDER BY threshold_percent",
-                (resultSet, rowNumber) -> new ScaleThresholdItem(
-                        resultSet
-                                .getBigDecimal("threshold_percent")
-                                .movePointRight(2)
-                                .longValue(),
-                        resultSet.getBigDecimal("threshold_percent"),
-                        resultSet.getString("color"),
-                        resultSet.getString("color_label") == null
-                                ? null
-                                : dev.eolmae.marketmonitor.domain.custom.enums.ColorLabel.valueOf(
-                                        resultSet.getString("color_label"))));
-        return new CustomScaleResponse(thresholds);
+        return new CustomScaleResponse(List.of());
     }
 
     @Transactional(readOnly = true)

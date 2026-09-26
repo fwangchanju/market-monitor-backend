@@ -53,6 +53,7 @@ public class CustomStockSectorService {
         Long userId = CurrentUser.requireId();
         requireActiveStock(stockCode);
         requireOwnedSector(sectorId, userId);
+        // ON CONFLICT ... DO UPDATE upsert — JPQL/QueryDSL에 없는 문법이라 JdbcTemplate으로 직접 쓴다.
         jdbcTemplate.update("""
                 INSERT INTO custom_stock_sector (user_id, stock_code, sector_id, created_at, updated_at)
                 VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
@@ -80,6 +81,7 @@ public class CustomStockSectorService {
         remaining.removeAll(validStockCodes);
 
         if (!validStockCodes.isEmpty()) {
+            // ON CONFLICT ... DO UPDATE upsert — 위와 동일한 이유로 배치 처리도 JdbcTemplate을 쓴다.
             jdbcTemplate.batchUpdate("""
                     INSERT INTO custom_stock_sector (user_id, stock_code, sector_id, created_at, updated_at)
                     VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
@@ -103,6 +105,7 @@ public class CustomStockSectorService {
             customStockAliasRepository.deleteById(id);
             return;
         }
+        // ON CONFLICT ... DO UPDATE upsert — JPQL/QueryDSL에 없는 문법이라 JdbcTemplate으로 직접 쓴다.
         jdbcTemplate.update("""
                 INSERT INTO custom_stock_alias (user_id, stock_code, alias, created_at, updated_at)
                 VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
@@ -117,7 +120,7 @@ public class CustomStockSectorService {
         Map<Long, CustomSector> sectorById = customSectorRepository.findAllByUserId(userId).stream()
                 .collect(Collectors.toMap(CustomSector::getId, Function.identity()));
         Map<String, CustomStockSector> assignmentByStockCode =
-                customStockSectorRepository.findAllByUserId(userId).stream()
+                customStockSectorRepository.findAllByIdUserId(userId).stream()
                         .collect(Collectors.toMap(CustomStockSector::getStockCode, Function.identity()));
         Map<String, String> aliasByStockCode = customStockAliasRepository.findAllByIdUserId(userId).stream()
                 .collect(Collectors.toMap(CustomStockAlias::getStockCode, CustomStockAlias::getAlias));

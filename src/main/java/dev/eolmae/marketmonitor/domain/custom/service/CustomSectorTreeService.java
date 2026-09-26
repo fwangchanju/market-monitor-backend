@@ -54,7 +54,7 @@ public class CustomSectorTreeService {
                         sector.getId(), sector.getParentId(), sector.getName(), sector.getDepth(), sector.isExcluded()))
                 .toList();
         List<CustomSnapshotPayload.StockAssignment> assignments =
-                customStockSectorRepository.findAllByUserId(userId).stream()
+                customStockSectorRepository.findAllByIdUserId(userId).stream()
                         .sorted(java.util.Comparator.comparing(CustomStockSector::getStockCode))
                         .map(assignment -> new CustomSnapshotPayload.StockAssignment(
                                 assignment.getStockCode(), assignment.getSectorId()))
@@ -74,6 +74,8 @@ public class CustomSectorTreeService {
                         .map(threshold -> new CustomSnapshotPayload.ValueTierThreshold(
                                 threshold.getLabel(), threshold.getThresholdValue(), threshold.isExcludedByDefault()))
                         .toList();
+        // payload::TEXT — JSONB 캐스팅. user_preference에 매핑된 JPA 엔티티가 없고, JSONB 컬럼
+        // 자체도 JPQL/QueryDSL 문법으로 다룰 수 없다.
         String preferencesJson = jdbcTemplate.queryForObject(
                 "SELECT payload::TEXT FROM user_preference WHERE user_id = ?", String.class, userId);
         Map<String, Object> preferences = parsePreferences(preferencesJson);
@@ -206,6 +208,7 @@ public class CustomSectorTreeService {
     }
 
     private void updatePreferences(Long userId, Map<String, Object> preferences) {
+        // CAST(? AS JSONB) — 위와 동일한 이유(엔티티 없음 + JSONB 캐스팅)로 JdbcTemplate을 쓴다.
         jdbcTemplate.update(
                 "UPDATE user_preference SET payload = CAST(? AS JSONB), updated_at = CURRENT_TIMESTAMP WHERE user_id = ?",
                 toJson(preferences == null ? Map.of() : preferences),

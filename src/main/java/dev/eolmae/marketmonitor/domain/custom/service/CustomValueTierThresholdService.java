@@ -33,6 +33,9 @@ public class CustomValueTierThresholdService {
     }
 
     public List<CustomValueTierThreshold> findDefaultSortedAscending() {
+        // default_value_tier_threshold는 매핑된 JPA 엔티티가 없는 순수 참조 테이블(가입 시 복제만
+        // 되고 앱 코드에서 별도로 관리하지 않음)이라 QueryDSL Q타입이 없다. 엔티티를 새로 추가하는
+        // 것은 이 리팩터링 범위를 벗어나 PR 설명에 남기고 유지한다.
         return jdbcTemplate.query(
                 "SELECT label, threshold_value, is_excluded_by_default FROM default_value_tier_threshold ORDER BY threshold_value, label",
                 (resultSet, rowNumber) -> CustomValueTierThreshold.createDefault(

@@ -119,6 +119,8 @@ public class StockInfoCollector {
             if (existingNames.contains(name)) {
                 continue;
             }
+            // ON CONFLICT DO NOTHING + RETURNING — 동시 수집 레이스에서 실제로 삽입된 이름만 받아
+            // IndustryInfoCreatedEvent를 낸다. JPQL/QueryDSL에 없는 문법이라 JdbcTemplate으로 직접 쓴다.
             List<String> insertedNames = jdbcTemplate.query(
                     "INSERT INTO industry_info (name) VALUES (?) ON CONFLICT (name) DO NOTHING RETURNING name",
                     (resultSet, rowNumber) -> resultSet.getString("name"),

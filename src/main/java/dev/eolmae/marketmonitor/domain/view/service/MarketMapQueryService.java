@@ -582,7 +582,7 @@ public class MarketMapQueryService {
     }
 
     private Map<String, CustomStockSector> findStockCategoryMap(Long userId) {
-        return customStockSectorRepository.findAllByUserId(userId).stream()
+        return customStockSectorRepository.findAllByIdUserId(userId).stream()
                 .collect(Collectors.toMap(CustomStockSector::getStockCode, Function.identity()));
     }
 

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit -m 'fix: ka10051 stex_tp KRX_NXT 통합으로 수정, inds_cd 필터 startsWith 변경 *)",
+      "Bash(git commit -m ' *)"
+    ]
+  }
+}

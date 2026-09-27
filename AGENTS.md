@@ -1,6 +1,12 @@
 # Codex 작업 규칙
 
-이 저장소에서는 `CLAUDE.md`와 `docs/rules/process.md`의 작업 방식도 따른다. 사용자와는 한국어로 대화한다.
+이 저장소에서는 `CLAUDE.md`와 `docs/rules/process.md`의 작업 방식도 따른다. 사용자와는 한국어로 대화한다. 이 규칙은 Codex 본체와 모든 하위 에이전트에 동일하게 적용한다.
+
+## 작업별 문서와 위임
+
+- Java 코드나 DB 조회를 변경하기 전에 `docs/rules/style.md`를 읽고 따른다. 테스트를 변경할 때는 `docs/rules/testing.md`, 새 파일이나 패키지 경계를 다룰 때는 `docs/architecture.md`도 읽는다. 작업 절차는 `docs/rules/process.md`를 따른다.
+- 하위 에이전트에게 구현이나 리뷰를 맡길 때 정확한 체크아웃 경로를 전달하고, 해당 체크아웃의 `AGENTS.md`, `CLAUDE.md`, 작업 관련 규칙 문서를 직접 읽도록 지시한다. 상위 에이전트가 읽었다는 사실로 하위 에이전트의 확인을 대신하지 않는다.
+- DB 조회는 Spring Data 파생 메서드를 우선하고, 표현이 어려운 동적 조건·집계·조인은 QueryDSL을 사용한다. 문자열 SQL이나 `JdbcTemplate`은 DB 고유 문법 등으로 이 방식이 불가능한 경우에만 사용하고, 이유를 메서드 주석과 PR 설명에 남긴다. 기존 코드의 사용 사례를 새 코드의 기본 패턴으로 일반화하지 않는다.
 
 ## 실행 권한
 

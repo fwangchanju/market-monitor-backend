@@ -29,7 +29,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class SignupInitializationService {
 
     static final long INDUSTRY_USER_SYNC_LOCK = 941270361L;
-    private static final long TEMPLATE_USER_ID = 1L;
+    /** 가입 직후 사용자에게 복사해 주는 값과 비로그인 기본값의 기준이 되는 사용자(템플릿 사용자). */
+    public static final long TEMPLATE_USER_ID = 1L;
 
     private final JdbcTemplate jdbcTemplate;
     private final CustomSectorRepository customSectorRepository;

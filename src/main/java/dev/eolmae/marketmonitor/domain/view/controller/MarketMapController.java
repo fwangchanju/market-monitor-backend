@@ -35,10 +35,12 @@ public class MarketMapController {
             @RequestParam MarketQuery market,
             @RequestParam boolean isCustom,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-                    LocalDateTime snapshotTime) {
+                    LocalDateTime snapshotTime,
+            @RequestParam(defaultValue = "false") boolean nxtOnly) {
+        // nxtOnly는 거래소 분류(isCustom=false)에만 적용한다 — MARKETRY 분류는 사용자 트리라 NXT 필터를 쓰지 않는다.
         return isCustom
                 ? marketMapQueryService.getCustomMarketMap(market, snapshotTime)
-                : marketMapQueryService.getDefaultMarketMap(market, snapshotTime);
+                : marketMapQueryService.getDefaultMarketMap(market, snapshotTime, nxtOnly);
     }
 
     @GetMapping("/value-tiers")

@@ -4,7 +4,6 @@ import dev.eolmae.marketmonitor.common.exception.ConflictException;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.NotFoundException;
 import dev.eolmae.marketmonitor.domain.auth.service.CurrentUser;
-import dev.eolmae.marketmonitor.domain.auth.service.SignupInitializationService;
 import dev.eolmae.marketmonitor.domain.custom.dto.CustomScaleResponse;
 import dev.eolmae.marketmonitor.domain.custom.dto.ScaleThresholdItem;
 import dev.eolmae.marketmonitor.domain.custom.dto.ScaleThresholdRequest;
@@ -33,12 +32,11 @@ public class CustomScaleService {
         return getUserScale(userId);
     }
 
-    /** 비로그인에게 주는 기본 색상 스케일 — 가입 직후 사용자가 복사해 받는 값과 같도록 템플릿 사용자의 스케일을 내려준다.
-     * 템플릿 사용자의 색을 바꾸면 비로그인 기본값과 새 가입자의 색이 함께 바뀐다. 템플릿 사용자의 구간이 없으면 빈 목록이고,
-     * 프론트가 내장 프리셋으로 폴백한다(marketMapColorScale.ts). */
+    /** 색상 스케일 기본값은 백엔드가 들고 있지 않다 — 프론트가 내장 프리셋으로 폴백한다(marketMapColorScale.ts).
+     * 비로그인과 가입 직후 사용자(가입할 때 색상 구간을 복제하지 않는다)가 같은 기본 색을 쓰도록 빈 목록만 내려준다. */
     @Transactional(readOnly = true)
     public CustomScaleResponse getDefaultScale() {
-        return getUserScale(SignupInitializationService.TEMPLATE_USER_ID);
+        return new CustomScaleResponse(List.of());
     }
 
     @Transactional(readOnly = true)

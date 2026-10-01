@@ -43,11 +43,21 @@ class MarketMapControllerTest {
 
     @Test
     void getMarketMap_snapshotTime이_없으면_null로_바인딩된다() throws Exception {
-        when(marketMapQueryService.getDefaultMarketMap(eq(MarketQuery.KOSPI), isNull()))
+        when(marketMapQueryService.getDefaultMarketMap(eq(MarketQuery.KOSPI), isNull(), eq(false)))
                 .thenReturn(MarketMapResponse.empty());
 
         mockMvc.perform(get("/api/map?market=KOSPI&isCustom=false"));
 
-        verify(marketMapQueryService).getDefaultMarketMap(eq(MarketQuery.KOSPI), isNull());
+        verify(marketMapQueryService).getDefaultMarketMap(eq(MarketQuery.KOSPI), isNull(), eq(false));
+    }
+
+    @Test
+    void getMarketMap_nxtOnly가_거래소_분류에_전달된다() throws Exception {
+        when(marketMapQueryService.getDefaultMarketMap(eq(MarketQuery.KOSPI), isNull(), eq(true)))
+                .thenReturn(MarketMapResponse.empty());
+
+        mockMvc.perform(get("/api/map?market=KOSPI&isCustom=false&nxtOnly=true"));
+
+        verify(marketMapQueryService).getDefaultMarketMap(eq(MarketQuery.KOSPI), isNull(), eq(true));
     }
 }

@@ -79,14 +79,22 @@ public class MarketMapQueryService {
     /** 기본 마켓맵: stock_info 섹터 그대로(override 없이) 기준, 자식 없는 1뎁스 노드로 감싸서 반환
      * (getCustomMarketMap과 응답 모양 통일). snapshotTime이 없으면 최신, 있으면 그 시각 그대로(결정 4). */
     public MarketMapResponse getDefaultMarketMap(MarketQuery marketQuery, LocalDateTime snapshotTime) {
+        return getDefaultMarketMap(marketQuery, snapshotTime, false);
+    }
+
+    /** nxtOnly면 NXT 거래 가능 종목만 담는다. 업종 분류와 가격은 그대로다(가격은 KRX·NXT 통합 가격). */
+    public MarketMapResponse getDefaultMarketMap(MarketQuery marketQuery, LocalDateTime snapshotTime, boolean nxtOnly) {
         List<Market> markets = marketQuery.toMarkets();
         return resolveSnapshotTime(markets, snapshotTime)
-                .map(resolvedSnapshotTime -> buildDefaultMarketMap(markets, resolvedSnapshotTime))
+                .map(resolvedSnapshotTime -> buildDefaultMarketMap(markets, resolvedSnapshotTime, nxtOnly))
                 .orElseGet(MarketMapResponse::empty);
     }
 
-    private MarketMapResponse buildDefaultMarketMap(List<Market> markets, LocalDateTime latestSnapshotTime) {
-        List<StockInfo> candidates = filterCandidates(markets);
+    private MarketMapResponse buildDefaultMarketMap(
+            List<Market> markets, LocalDateTime latestSnapshotTime, boolean nxtOnly) {
+        List<StockInfo> candidates = filterCandidates(markets).stream()
+                .filter(stockInfo -> !nxtOnly || stockInfo.isNxtEnabled())
+                .toList();
         Map<String, CachedStockPrice> priceMap = findPriceByStockCode(markets, latestSnapshotTime);
         List<CustomValueTierThreshold> sortedTiers = customValueTierThresholdService.findDefaultSortedAscending();
         Set<Long> industryIds = candidates.stream()

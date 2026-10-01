@@ -135,10 +135,15 @@ public class MarketMapQueryService {
     /** 커스텀 마켓맵: 어드민이 구성한 섹터 트리 기준. 트리에 배정 안 된 종목은 stock_info 섹터로
      * 묶은 노드를 같은 레벨에 섞어서 반환. snapshotTime이 없으면 최신, 있으면 그 시각 그대로(결정 4). */
     public MarketMapResponse getCustomMarketMap(MarketQuery marketQuery, LocalDateTime snapshotTime) {
+        return getCustomMarketMap(marketQuery, snapshotTime, false);
+    }
+
+    /** nxtOnly면 내 분류 트리에서 NXT 거래 가능 종목만 남긴다. 분류와 가격(KRX·NXT 통합 가격)은 그대로다. */
+    public MarketMapResponse getCustomMarketMap(MarketQuery marketQuery, LocalDateTime snapshotTime, boolean nxtOnly) {
         Long userId = CurrentUser.requireId();
         List<Market> markets = marketQuery.toMarkets();
         return resolveSnapshotTime(markets, snapshotTime)
-                .map(resolvedSnapshotTime -> buildCustomMarketMap(markets, resolvedSnapshotTime, userId))
+                .map(resolvedSnapshotTime -> buildCustomMarketMap(markets, resolvedSnapshotTime, userId, nxtOnly))
                 .orElseGet(MarketMapResponse::empty);
     }
 
@@ -494,12 +499,12 @@ public class MarketMapQueryService {
         if (sectorPriceSnapshotService.notExistsSnapshot(market, snapshotTime)) {
             return List.of();
         }
-        return buildSectorTree(List.of(market), snapshotTime, customDataUserId());
+        return buildSectorTree(List.of(market), snapshotTime, customDataUserId(), false);
     }
 
     private MarketMapResponse buildCustomMarketMap(
-            List<Market> markets, LocalDateTime latestSnapshotTime, Long userId) {
-        List<MarketMapSectorNode> tree = buildSectorTree(markets, latestSnapshotTime, userId);
+            List<Market> markets, LocalDateTime latestSnapshotTime, Long userId, boolean nxtOnly) {
+        List<MarketMapSectorNode> tree = buildSectorTree(markets, latestSnapshotTime, userId, nxtOnly);
         return new MarketMapResponse(
                 latestSnapshotTime,
                 tree,
@@ -514,8 +519,10 @@ public class MarketMapQueryService {
     }
 
     private List<MarketMapSectorNode> buildSectorTree(
-            List<Market> markets, LocalDateTime latestSnapshotTime, Long userId) {
-        List<StockInfo> candidates = filterCandidates(markets);
+            List<Market> markets, LocalDateTime latestSnapshotTime, Long userId, boolean nxtOnly) {
+        List<StockInfo> candidates = filterCandidates(markets).stream()
+                .filter(stockInfo -> !nxtOnly || stockInfo.isNxtEnabled())
+                .toList();
         List<CustomSector> sectors = customSectorRepository.findAllByUserId(userId);
         Map<Long, List<CustomSector>> childrenByParentId = new HashMap<>();
         for (CustomSector sector : sectors) {

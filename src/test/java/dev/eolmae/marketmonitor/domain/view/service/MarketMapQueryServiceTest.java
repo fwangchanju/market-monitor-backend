@@ -196,6 +196,40 @@ class MarketMapQueryServiceTest {
     }
 
     @Test
+    void getCustomMarketMap_nxtOnly면_내_분류에서_NXT_거래_가능_종목만_남긴다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        CustomSector semiconductor = sector(1L, null, "반도체");
+        when(marketMapSectorRepository.findAll()).thenReturn(List.of(semiconductor));
+        when(marketMapStockSectorRepository.findAll())
+                .thenReturn(List.of(
+                        CustomStockSector.create(LEGACY_OWNER_ID, "005930", 1L),
+                        CustomStockSector.create(LEGACY_OWNER_ID, "000660", 1L)));
+        StockInfo samsung = StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", null, 100L, BigDecimal.TEN, true);
+        StockInfo skHynix = StockInfo.create("000660", "SK하이닉스", Market.KOSPI, "0", null, 50L, BigDecimal.TEN, false);
+        when(stockInfoCacheService.getCache())
+                .thenReturn(Map.of(samsung.getStockCode(), samsung, skHynix.getStockCode(), skHynix));
+        when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
+                .thenReturn(Optional.of(snapshotTime));
+        when(sectorPriceCacheService.getCache(Market.KOSPI, snapshotTime))
+                .thenReturn(Map.ofEntries(
+                        priceSnapshot("005930", snapshotTime, BigDecimal.TEN),
+                        priceSnapshot("000660", snapshotTime, BigDecimal.TEN)));
+        when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
+
+        MarketMapResponse nxtOnly = service.getCustomMarketMap(MarketQuery.KOSPI, null, true);
+        MarketMapResponse all = service.getCustomMarketMap(MarketQuery.KOSPI, null, false);
+
+        assertThat(nxtOnly.items())
+                .flatExtracting(MarketMapSectorNode::items)
+                .extracting("stockCode")
+                .containsExactly("005930");
+        assertThat(all.items())
+                .flatExtracting(MarketMapSectorNode::items)
+                .extracting("stockCode")
+                .containsExactlyInAnyOrder("005930", "000660");
+    }
+
+    @Test
     void getDefaultMarketMap_nxtOnly면_NXT_거래_가능_종목만_담는다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
         StockInfo samsung = StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", null, 100L, BigDecimal.TEN, true);

@@ -49,8 +49,8 @@ class StockInfoCollectorTest {
                 "0",
                 "정상",
                 List.of(
-                        new StockInfoResponse.StockItem("005930", "삼성전자", "0", "반도체", "100", "10000"),
-                        new StockInfoResponse.StockItem("051910", "LG화학", "0", "", "50", "20000")));
+                        new StockInfoResponse.StockItem("005930", "삼성전자", "0", "반도체", "100", "10000", null),
+                        new StockInfoResponse.StockItem("051910", "LG화학", "0", "", "50", "20000", null)));
         when(kiwoomApiClient.post(any(StockInfoRequest.class), eq(StockInfoResponse.class)))
                 .thenReturn(response);
         when(stockInfoRepository.findAll()).thenReturn(List.of());
@@ -68,6 +68,31 @@ class StockInfoCollectorTest {
                 .publishEvent(Mockito.<Object>argThat(event -> event instanceof StockInfoSyncedEvent synced
                         && synced.stockCodes().size() == 2
                         && synced.stockCodes().containsAll(List.of("005930", "051910"))));
+    }
+
+    @Test
+    void sync_nxtEnable이_Y인_종목만_NXT_거래_가능으로_저장한다() {
+        when(kiwoomApiClient.post(any(StockInfoRequest.class), eq(StockInfoResponse.class)))
+                .thenReturn(new StockInfoResponse(
+                        "0",
+                        "정상",
+                        List.of(
+                                new StockInfoResponse.StockItem("005930", "삼성전자", "0", "반도체", "100", "10000", "Y"),
+                                new StockInfoResponse.StockItem("051910", "LG화학", "0", "", "50", "20000", ""),
+                                new StockInfoResponse.StockItem("000660", "SK하이닉스", "0", "", "50", "20000", null))));
+        when(stockInfoRepository.findAll()).thenReturn(List.of());
+        when(industryInfoRepository.findByNameIn(Mockito.anyCollection())).thenReturn(List.of());
+        Mockito.doReturn(List.of("반도체"))
+                .when(jdbcTemplate)
+                .query(Mockito.anyString(), Mockito.<RowMapper<String>>any(), Mockito.<Object[]>any());
+
+        collector.sync();
+
+        verify(stockInfoRepository).saveAllAndFlush(Mockito.<List<StockInfo>>argThat(saved -> saved.stream()
+                .filter(StockInfo::isNxtEnabled)
+                .map(StockInfo::getStockCode)
+                .toList()
+                .equals(List.of("005930"))));
     }
 
     @AfterEach
@@ -112,9 +137,9 @@ class StockInfoCollectorTest {
                 "0",
                 "정상",
                 List.of(
-                        new StockInfoResponse.StockItem("005930", "삼성전자", "0", "반도체", "100", "10000"),
-                        new StockInfoResponse.StockItem("57JJJJ", "삼성전자ELW", "3", "ELW", "100", "1000"),
-                        new StockInfoResponse.StockItem("069500", "KODEX200", "8", "ETF", "100", "30000")));
+                        new StockInfoResponse.StockItem("005930", "삼성전자", "0", "반도체", "100", "10000", null),
+                        new StockInfoResponse.StockItem("57JJJJ", "삼성전자ELW", "3", "ELW", "100", "1000", null),
+                        new StockInfoResponse.StockItem("069500", "KODEX200", "8", "ETF", "100", "30000", null)));
         when(kiwoomApiClient.post(any(StockInfoRequest.class), eq(StockInfoResponse.class)))
                 .thenReturn(response);
         when(stockInfoRepository.findAll()).thenReturn(List.of());
@@ -138,10 +163,12 @@ class StockInfoCollectorTest {
 
     @Test
     void sync_비활성_기존_종목의_재활성화에는_신규상장_이벤트를_발행하지_않는다() {
-        StockInfo inactive = StockInfo.create("005930", "Samsung", Market.KOSPI, "0", null, 100L, null);
+        StockInfo inactive = StockInfo.create("005930", "Samsung", Market.KOSPI, "0", null, 100L, null, false);
         inactive.markInactive();
         StockInfoResponse response = new StockInfoResponse(
-                "0", "normal", List.of(new StockInfoResponse.StockItem("005930", "Samsung", "0", "", "100", "10000")));
+                "0",
+                "normal",
+                List.of(new StockInfoResponse.StockItem("005930", "Samsung", "0", "", "100", "10000", null)));
         when(kiwoomApiClient.post(any(StockInfoRequest.class), eq(StockInfoResponse.class)))
                 .thenReturn(response);
         when(stockInfoRepository.findAll()).thenReturn(List.of(inactive));

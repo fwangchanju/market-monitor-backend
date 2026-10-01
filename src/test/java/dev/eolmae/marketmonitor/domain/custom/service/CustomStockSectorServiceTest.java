@@ -58,7 +58,8 @@ class CustomStockSectorServiceTest {
             jdbcTemplate);
 
     private final CustomSector sector = CustomSector.createParent(USER_ID, "산업");
-    private final StockInfo stock = StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", null, 100L, BigDecimal.TEN);
+    private final StockInfo stock =
+            StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", null, 100L, BigDecimal.TEN, false);
 
     @BeforeEach
     void setUp() {

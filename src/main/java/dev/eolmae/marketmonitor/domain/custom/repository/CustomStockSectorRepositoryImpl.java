@@ -3,6 +3,7 @@ package dev.eolmae.marketmonitor.domain.custom.repository;
 import static dev.eolmae.marketmonitor.domain.custom.entity.QCustomStockSector.customStockSector;
 
 import com.querydsl.jpa.impl.JPAQueryFactory;
+import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 
@@ -33,5 +34,14 @@ public class CustomStockSectorRepositoryImpl implements CustomStockSectorReposit
                 .delete(customStockSector)
                 .where(customStockSector.id.userId.eq(userId))
                 .execute();
+    }
+
+    @Override
+    public LocalDateTime findLatestUpdatedAtByUserId(Long userId) {
+        return queryFactory
+                .select(customStockSector.updatedAt.max())
+                .from(customStockSector)
+                .where(customStockSector.id.userId.eq(userId))
+                .fetchOne();
     }
 }

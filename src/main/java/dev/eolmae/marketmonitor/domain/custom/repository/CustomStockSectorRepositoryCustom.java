@@ -1,5 +1,6 @@
 package dev.eolmae.marketmonitor.domain.custom.repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface CustomStockSectorRepositoryCustom {
@@ -17,4 +18,7 @@ public interface CustomStockSectorRepositoryCustom {
      * flush()로 몰아서 내보내는 순서에 의존한다. 파생 deleteBy로 바꾸면 이 삭제도 큐잉되어 순서가
      * 달라진다. */
     void deleteAllByIdUserId(Long userId);
+
+    /** 해당 사용자의 종목 분류가 마지막으로 배정·변경된 시각. 배정 행이 하나도 없으면 null. */
+    LocalDateTime findLatestUpdatedAtByUserId(Long userId);
 }

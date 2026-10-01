@@ -8,20 +8,16 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import dev.eolmae.marketmonitor.common.event.UserSignedUpEvent;
-import dev.eolmae.marketmonitor.domain.custom.entity.CustomScaleThreshold;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomSector;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomStockAlias;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomStockSector;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomValueTierThreshold;
 import dev.eolmae.marketmonitor.domain.custom.entity.UserPreference;
-import dev.eolmae.marketmonitor.domain.custom.enums.ColorLabel;
-import dev.eolmae.marketmonitor.domain.custom.repository.CustomScaleThresholdRepository;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomSectorRepository;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomStockAliasRepository;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomStockSectorRepository;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomValueTierThresholdRepository;
 import dev.eolmae.marketmonitor.domain.custom.repository.UserPreferenceRepository;
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -42,8 +38,6 @@ class SignupInitializationServiceTest {
     private final CustomSectorRepository customSectorRepository = mock(CustomSectorRepository.class);
     private final CustomStockSectorRepository customStockSectorRepository = mock(CustomStockSectorRepository.class);
     private final CustomStockAliasRepository customStockAliasRepository = mock(CustomStockAliasRepository.class);
-    private final CustomScaleThresholdRepository customScaleThresholdRepository =
-            mock(CustomScaleThresholdRepository.class);
     private final CustomValueTierThresholdRepository customValueTierThresholdRepository =
             mock(CustomValueTierThresholdRepository.class);
     private final UserPreferenceRepository userPreferenceRepository = mock(UserPreferenceRepository.class);
@@ -52,7 +46,6 @@ class SignupInitializationServiceTest {
             customSectorRepository,
             customStockSectorRepository,
             customStockAliasRepository,
-            customScaleThresholdRepository,
             customValueTierThresholdRepository,
             userPreferenceRepository);
 
@@ -119,12 +112,9 @@ class SignupInitializationServiceTest {
     }
 
     @Test
-    void 별칭과_색상_구간과_시가총액_구간과_설정을_복제한다() {
+    void 별칭과_시가총액_구간을_복제하고_설정은_복제하지_않는다() {
         when(customStockAliasRepository.findAllByIdUserId(TEMPLATE_USER_ID))
                 .thenReturn(List.of(CustomStockAlias.create(TEMPLATE_USER_ID, "005930", "삼전")));
-        when(customScaleThresholdRepository.findAllByUserId(TEMPLATE_USER_ID))
-                .thenReturn(List.of(CustomScaleThreshold.create(
-                        TEMPLATE_USER_ID, new BigDecimal("3.00"), "#ff0000", ColorLabel.RED)));
         when(customValueTierThresholdRepository.findAllByUserIdOrderByThresholdValueAsc(TEMPLATE_USER_ID))
                 .thenReturn(List.of(CustomValueTierThreshold.create(TEMPLATE_USER_ID, "소형주", 0L, true)));
         UserPreference templatePreference = UserPreference.createEmpty(TEMPLATE_USER_ID);
@@ -138,14 +128,6 @@ class SignupInitializationServiceTest {
                 .extracting(CustomStockAlias::getUserId, CustomStockAlias::getStockCode, CustomStockAlias::getAlias)
                 .containsExactly(tuple(USER_ID, "005930", "삼전"));
         assertThat(aliases).allMatch(CustomStockAlias::isNew);
-        List<CustomScaleThreshold> scales = captureSaveAll(customScaleThresholdRepository);
-        assertThat(scales)
-                .extracting(
-                        CustomScaleThreshold::getUserId,
-                        CustomScaleThreshold::getColor,
-                        CustomScaleThreshold::getColorLabel)
-                .containsExactly(tuple(USER_ID, "#ff0000", ColorLabel.RED));
-        assertThat(scales.getFirst().getThresholdPercent()).isEqualByComparingTo("3.00");
         assertThat(captureSaveAll(customValueTierThresholdRepository))
                 .extracting(
                         CustomValueTierThreshold::getUserId,
@@ -155,7 +137,7 @@ class SignupInitializationServiceTest {
                 .containsExactly(tuple(USER_ID, "소형주", 0L, true));
         assertThat(savedPreference())
                 .extracting(UserPreference::getUserId, UserPreference::getPayload)
-                .containsExactly(USER_ID, "{\"theme\":\"dark\"}");
+                .containsExactly(USER_ID, "{}");
     }
 
     @Test
@@ -165,7 +147,6 @@ class SignupInitializationServiceTest {
         assertThat(savedSectors).isEmpty();
         assertThat(captureSaveAll(customStockSectorRepository)).isEmpty();
         assertThat(captureSaveAll(customStockAliasRepository)).isEmpty();
-        assertThat(captureSaveAll(customScaleThresholdRepository)).isEmpty();
         assertThat(captureSaveAll(customValueTierThresholdRepository)).isEmpty();
         assertThat(savedPreference())
                 .extracting(UserPreference::getUserId, UserPreference::getPayload)

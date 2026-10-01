@@ -7,6 +7,7 @@ public record StockSectorListItem(
         String stockCode,
         Market market,
         String stockName,
+        boolean nxtEnabled,
         String alias,
         BigDecimal totalMarketValue,
         String marketValueTier,

@@ -178,6 +178,7 @@ public class CustomStockSectorService {
                 stock.getStockCode(),
                 stock.getMarketType(),
                 stock.getStockName(),
+                stock.isNxtEnabled(),
                 alias,
                 totalMarketValue,
                 marketValueTier,

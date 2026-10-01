@@ -19,5 +19,7 @@ public record StockInfoResponse(
             @JsonProperty("marketCode") String marketCode,
             @JsonProperty("upName") String upName,
             @JsonProperty("listCount") String listCount,
-            @JsonProperty("lastPrice") String lastPrice) {}
+            @JsonProperty("lastPrice") String lastPrice,
+            // NXT 거래 가능 여부 — "Y"만 가능이다(문서에 다른 값의 뜻은 없다).
+            @JsonProperty("nxtEnable") String nxtEnable) {}
 }

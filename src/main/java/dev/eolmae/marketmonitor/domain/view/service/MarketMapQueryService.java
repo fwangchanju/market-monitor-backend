@@ -117,7 +117,11 @@ public class MarketMapQueryService {
                 })
                 .toList();
 
-        return new MarketMapResponse(latestSnapshotTime, nodes, findSingleMarketOverview(markets, latestSnapshotTime));
+        return new MarketMapResponse(
+                latestSnapshotTime,
+                nodes,
+                findSingleMarketOverview(markets, latestSnapshotTime),
+                findClassificationUpdatedAt());
     }
 
     /** 커스텀 마켓맵: 어드민이 구성한 섹터 트리 기준. 트리에 배정 안 된 종목은 stock_info 섹터로
@@ -488,7 +492,17 @@ public class MarketMapQueryService {
     private MarketMapResponse buildCustomMarketMap(
             List<Market> markets, LocalDateTime latestSnapshotTime, Long userId) {
         List<MarketMapSectorNode> tree = buildSectorTree(markets, latestSnapshotTime, userId);
-        return new MarketMapResponse(latestSnapshotTime, tree, findSingleMarketOverview(markets, latestSnapshotTime));
+        return new MarketMapResponse(
+                latestSnapshotTime,
+                tree,
+                findSingleMarketOverview(markets, latestSnapshotTime),
+                findClassificationUpdatedAt());
+    }
+
+    /** 사용자별 분류가 아니라 운영자(ownerUserId)의 종목 분류 최종 변경 시각 — 모든 사용자에게 같은 값을 보여준다. */
+    private LocalDateTime findClassificationUpdatedAt() {
+        Long ownerUserId = marketMonitorProperties.ownerUserId();
+        return ownerUserId == null ? null : customStockSectorRepository.findLatestUpdatedAtByUserId(ownerUserId);
     }
 
     private List<MarketMapSectorNode> buildSectorTree(

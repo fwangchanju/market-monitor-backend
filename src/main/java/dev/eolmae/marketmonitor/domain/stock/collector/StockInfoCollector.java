@@ -78,7 +78,8 @@ public class StockInfoCollector {
                     fetched.marketCode(),
                     industryId(fetched, industryByName),
                     fetched.listCount(),
-                    fetched.lastPrice());
+                    fetched.lastPrice(),
+                    fetched.nxtEnabled());
         }
 
         // DB에 없던 신규 종목
@@ -90,7 +91,8 @@ public class StockInfoCollector {
                         fetched.marketCode(),
                         industryId(fetched, industryByName),
                         fetched.listCount(),
-                        fetched.lastPrice()))
+                        fetched.lastPrice(),
+                        fetched.nxtEnabled()))
                 .toList();
         stockInfoRepository.saveAllAndFlush(newStocks);
         List<String> newOrdinaryStockCodes = newStocks.stream()
@@ -191,7 +193,8 @@ public class StockInfoCollector {
                             item.marketCode(),
                             Strings.trimToEmpty(item.upName()),
                             KiwoomValueParser.parseLong(item.listCount()),
-                            KiwoomValueParser.parseBigDecimal(item.lastPrice())));
+                            KiwoomValueParser.parseBigDecimal(item.lastPrice()),
+                            "Y".equals(Strings.trimToEmpty(item.nxtEnable()))));
         }
 
         log.debug("종목 정보 시장별 동기화 완료: market={}", market);
@@ -205,7 +208,8 @@ public class StockInfoCollector {
             String marketCode,
             String categoryName,
             Long listCount,
-            BigDecimal lastPrice) {}
+            BigDecimal lastPrice,
+            boolean nxtEnabled) {}
 
     private enum MrktTp {
         KOSPI("0"),

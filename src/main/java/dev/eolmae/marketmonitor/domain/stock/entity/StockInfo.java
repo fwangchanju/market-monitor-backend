@@ -45,6 +45,9 @@ public class StockInfo {
     private boolean active;
 
     @Column(nullable = false)
+    private boolean nxtEnabled;
+
+    @Column(nullable = false)
     private LocalDateTime createdAt;
 
     @Column(nullable = false)
@@ -59,7 +62,8 @@ public class StockInfo {
             String marketCode,
             Long industryId,
             Long listCount,
-            BigDecimal lastPrice) {
+            BigDecimal lastPrice,
+            boolean nxtEnabled) {
         var entity = new StockInfo();
         entity.stockCode = stockCode;
         entity.stockName = stockName;
@@ -68,6 +72,7 @@ public class StockInfo {
         entity.industryId = industryId;
         entity.listCount = listCount;
         entity.lastPrice = lastPrice;
+        entity.nxtEnabled = nxtEnabled;
         entity.active = true;
         entity.createdAt = LocalDateTime.now(Zone.KST.zoneId());
         entity.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
@@ -80,13 +85,15 @@ public class StockInfo {
             String marketCode,
             Long industryId,
             Long listCount,
-            BigDecimal lastPrice) {
+            BigDecimal lastPrice,
+            boolean nxtEnabled) {
         this.stockName = stockName;
         this.marketType = marketType;
         this.marketCode = marketCode;
         this.industryId = industryId;
         this.listCount = listCount;
         this.lastPrice = lastPrice;
+        this.nxtEnabled = nxtEnabled;
         this.active = true;
         this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());
     }

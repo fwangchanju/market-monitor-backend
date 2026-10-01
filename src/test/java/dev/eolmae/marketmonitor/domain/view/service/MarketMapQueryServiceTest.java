@@ -1046,7 +1046,7 @@ class MarketMapQueryServiceTest {
     /** 트리 기반 랭킹 테스트용 종목 — listCount를 1로 고정해 price()의 totalMarketValue를 그대로
      * 시가총액으로 쓴다(currentPrice * listCount = currentPrice). */
     private StockInfo stock(String stockCode, Market market) {
-        return StockInfo.create(stockCode, stockCode, market, "0", null, 1L, BigDecimal.TEN);
+        return StockInfo.create(stockCode, stockCode, market, "0", null, 1L, BigDecimal.TEN, false);
     }
 
     /** market은 stubPrices가 이미 (market, time) 단위로 캐시를 스텁하는 키라 여기서는 안 쓴다 —
@@ -1088,7 +1088,7 @@ class MarketMapQueryServiceTest {
     }
 
     private StockInfo stockInfo(String stockCode, String stockName, Long listCount, BigDecimal lastPrice) {
-        return StockInfo.create(stockCode, stockName, Market.KOSPI, "0", null, listCount, lastPrice);
+        return StockInfo.create(stockCode, stockName, Market.KOSPI, "0", null, listCount, lastPrice, false);
     }
 
     private Map.Entry<String, CachedStockPrice> priceSnapshot(

@@ -33,12 +33,22 @@ class MarketMapControllerTest {
     @Test
     void getMarketMap_snapshotTime이_LocalDateTime으로_바인딩된다() throws Exception {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 9, 22, 10, 5, 0);
-        when(marketMapQueryService.getCustomMarketMap(MarketQuery.KOSPI, snapshotTime))
+        when(marketMapQueryService.getCustomMarketMap(MarketQuery.KOSPI, snapshotTime, false))
                 .thenReturn(MarketMapResponse.empty());
 
         mockMvc.perform(get("/api/map?market=KOSPI&isCustom=true&snapshotTime=2026-09-22T10:05:00"));
 
-        verify(marketMapQueryService).getCustomMarketMap(MarketQuery.KOSPI, snapshotTime);
+        verify(marketMapQueryService).getCustomMarketMap(MarketQuery.KOSPI, snapshotTime, false);
+    }
+
+    @Test
+    void getMarketMap_nxtOnly가_내_분류에도_전달된다() throws Exception {
+        when(marketMapQueryService.getCustomMarketMap(eq(MarketQuery.KOSPI), isNull(), eq(true)))
+                .thenReturn(MarketMapResponse.empty());
+
+        mockMvc.perform(get("/api/map?market=KOSPI&isCustom=true&nxtOnly=true"));
+
+        verify(marketMapQueryService).getCustomMarketMap(eq(MarketQuery.KOSPI), isNull(), eq(true));
     }
 
     @Test

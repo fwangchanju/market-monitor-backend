@@ -5,12 +5,14 @@ import dev.eolmae.marketmonitor.domain.notification.client.TelegramClient;
 import dev.eolmae.marketmonitor.domain.notification.properties.TelegramProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 /** 개발자(DEVELOPER_CHAT_ID)에게 에스컬레이션 알림을 발송하는 리스너. {@link EscalationEvent} 수신 → 텔레그램. */
 @Slf4j
 @Component
+@Profile("prod")
 @RequiredArgsConstructor
 public class EscalationNotifier {
 

@@ -19,9 +19,11 @@ import dev.eolmae.marketmonitor.domain.notification.properties.MarketMonitorProp
 import dev.eolmae.marketmonitor.domain.stock.entity.IndustryInfo;
 import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
+import dev.eolmae.marketmonitor.domain.stock.properties.MarketHoursProperties;
 import dev.eolmae.marketmonitor.domain.stock.repository.IndustryInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketOverviewSnapshotRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.SectorPriceSnapshotRepository;
+import dev.eolmae.marketmonitor.domain.stock.service.ClosingPriceReader;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceCacheService;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceCacheService.CachedStockPrice;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceSnapshotService;
@@ -36,6 +38,7 @@ import dev.eolmae.marketmonitor.domain.view.enums.AverageMode;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -96,7 +99,9 @@ class MarketMapQueryServiceTest {
             marketValueTierThresholdService,
             marketOverviewSnapshotRepository,
             industryInfoRepository,
-            marketMonitorProperties);
+            marketMonitorProperties,
+            Mockito.mock(ClosingPriceReader.class),
+            new MarketHoursProperties(LocalTime.of(15, 30), LocalTime.of(15, 40)));
 
     // 구간 스텁 공통 셋업 — 진짜 구간 서비스로 바뀌면서 트리를 빌드하는 모든 테스트에 구간이 필요해졌다
     // (5-1). 구간이 여럿 필요한 테스트는 이 기본값을 자기 stubTierThresholds 호출로 덮어쓴다.

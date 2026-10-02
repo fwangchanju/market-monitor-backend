@@ -25,7 +25,7 @@ import org.springframework.web.server.ResponseStatusException;
 public class UserProfileService {
 
     static final int MAX_UPLOAD_BYTES = 512 * 1024;
-    private static final Pattern NICKNAME_PATTERN = Pattern.compile("^[가-힣A-Za-z0-9_]{2,12}$");
+    private static final Pattern NICKNAME_PATTERN = Pattern.compile("^[가-힣A-Za-z0-9]{2,12}$");
     private static final String NICKNAME_UNIQUE_INDEX = "uk_user_profile_nickname_lower";
     private static final int SAVE_ATTEMPTS = 2;
 

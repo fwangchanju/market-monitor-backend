@@ -71,7 +71,9 @@ class UserProfileServiceTest {
 
     @Test
     void 규칙에_맞지_않는_닉네임은_BadRequestException을_던지고_저장하지_않는다() {
-        String[] invalidNicknames = {null, "", "   ", "가", "열세글자를넘는닉네임입니다만", "닉 네임", "닉네임!", "😀😀😀", "ㅋㅋ", "café"};
+        String[] invalidNicknames = {
+            null, "", "   ", "가", "열세글자를넘는닉네임입니다만", "닉 네임", "닉네임!", "😀😀😀", "ㅋㅋ", "café", "닉네임_1", "_닉네임"
+        };
 
         for (String nickname : invalidNicknames) {
             assertThatThrownBy(() -> userProfileService.updateNickname(USER_ID, nickname))
@@ -82,9 +84,9 @@ class UserProfileServiceTest {
     }
 
     @Test
-    void 경계_길이_2자와_12자와_밑줄_영문_숫자는_통과한다() {
+    void 경계_길이_2자와_12자와_영문_숫자는_통과한다() {
         when(userProfileRepository.findById(USER_ID)).thenReturn(Optional.empty());
-        String[] validNicknames = {"가나", "가나다라마바사아자차카타", "Ab_12", "user_01"};
+        String[] validNicknames = {"가나", "가나다라마바사아자차카타", "Ab12", "user01"};
 
         for (String nickname : validNicknames) {
             userProfileService.updateNickname(USER_ID, nickname);

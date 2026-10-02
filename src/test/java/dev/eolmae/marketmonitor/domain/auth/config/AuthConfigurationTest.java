@@ -57,6 +57,39 @@ class AuthConfigurationTest {
         }
     }
 
+    @Test
+    void 인증_없이_프로필_API를_요청하면_모두_401을_응답한다() throws Exception {
+        try (AnnotationConfigApplicationContext context =
+                new AnnotationConfigApplicationContext(SecurityTestConfig.class)) {
+            FilterChainProxy filterChainProxy = new FilterChainProxy(context.getBean(SecurityFilterChain.class));
+
+            // 쓰기 요청은 Origin 검사(OriginCheckFilter)가 인가보다 먼저라서 허용된 Origin을 넣어야 401이 나온다.
+            assertThat(statusOf(filterChainProxy, "GET", "/api/profile", null)).isEqualTo(401);
+            assertThat(statusOf(filterChainProxy, "GET", "/api/profile/image", null))
+                    .isEqualTo(401);
+            assertThat(statusOf(filterChainProxy, "PUT", "/api/profile/nickname", "http://localhost"))
+                    .isEqualTo(401);
+            assertThat(statusOf(filterChainProxy, "PUT", "/api/profile/image", "http://localhost"))
+                    .isEqualTo(401);
+            assertThat(statusOf(filterChainProxy, "DELETE", "/api/profile/image", "http://localhost"))
+                    .isEqualTo(401);
+        }
+    }
+
+    private int statusOf(FilterChainProxy filterChainProxy, String method, String path, String origin)
+            throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest(method, path);
+        request.setServletPath(path);
+        if (origin != null) {
+            request.addHeader("Origin", origin);
+        }
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filterChainProxy.doFilter(request, response, new MockFilterChain());
+
+        return response.getStatus();
+    }
+
     @Configuration
     @EnableWebSecurity
     static class SecurityTestConfig {

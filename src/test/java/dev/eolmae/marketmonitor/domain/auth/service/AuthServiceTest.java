@@ -12,6 +12,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import dev.eolmae.marketmonitor.common.exception.NotFoundException;
+import dev.eolmae.marketmonitor.domain.auth.dto.AuthSessionResponse;
+import dev.eolmae.marketmonitor.domain.auth.dto.ProfileResponse;
 import dev.eolmae.marketmonitor.domain.auth.entity.UserAccount;
 import dev.eolmae.marketmonitor.domain.auth.entity.UserRefreshToken;
 import dev.eolmae.marketmonitor.domain.auth.enums.Role;
@@ -38,6 +40,7 @@ class AuthServiceTest {
     private final ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
     private final AppJwtService appJwtService = mock(AppJwtService.class);
     private final JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    private final UserProfileService userProfileService = mock(UserProfileService.class);
 
     private final AuthService authService = new AuthService(
             restClient,
@@ -46,7 +49,8 @@ class AuthServiceTest {
             userRefreshTokenRepository,
             eventPublisher,
             appJwtService,
-            jdbcTemplate);
+            jdbcTemplate,
+            userProfileService);
 
     @Test
     void refresh는_옛_토큰을_폐기가_아니라_교체한다() {
@@ -136,6 +140,33 @@ class AuthServiceTest {
 
         assertThatThrownBy(() -> authService.loginAsForDevelopment(999999L)).isInstanceOf(NotFoundException.class);
         verify(userRefreshTokenRepository, never()).save(any());
+    }
+
+    @Test
+    void session은_프로필의_닉네임과_사진_버전을_함께_담는다() {
+        AuthenticatedUserPrincipal principal = new AuthenticatedUserPrincipal(42L, Role.USER);
+        UserAccount user = userAccount(42L);
+        when(userAccountRepository.findById(42L)).thenReturn(Optional.of(user));
+        when(userProfileService.getProfile(42L)).thenReturn(new ProfileResponse("마켓러", true, 1_700_000_000_000L));
+
+        AuthSessionResponse session = authService.session(principal);
+
+        assertThat(session.authenticated()).isTrue();
+        assertThat(session.nickname()).isEqualTo("마켓러");
+        assertThat(session.profileImageVersion()).isEqualTo(1_700_000_000_000L);
+    }
+
+    @Test
+    void session은_프로필이_없으면_닉네임과_사진_버전이_null이다() {
+        AuthenticatedUserPrincipal principal = new AuthenticatedUserPrincipal(42L, Role.USER);
+        UserAccount user = userAccount(42L);
+        when(userAccountRepository.findById(42L)).thenReturn(Optional.of(user));
+        when(userProfileService.getProfile(42L)).thenReturn(ProfileResponse.empty());
+
+        AuthSessionResponse session = authService.session(principal);
+
+        assertThat(session.nickname()).isNull();
+        assertThat(session.profileImageVersion()).isNull();
     }
 
     private UserRefreshToken usableTokenOf(UserAccount user) {

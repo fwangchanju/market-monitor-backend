@@ -5,6 +5,7 @@ import dev.eolmae.marketmonitor.common.event.UserSignedUpEvent;
 import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.NotFoundException;
 import dev.eolmae.marketmonitor.domain.auth.dto.AuthSessionResponse;
+import dev.eolmae.marketmonitor.domain.auth.dto.ProfileResponse;
 import dev.eolmae.marketmonitor.domain.auth.entity.UserAccount;
 import dev.eolmae.marketmonitor.domain.auth.entity.UserRefreshToken;
 import dev.eolmae.marketmonitor.domain.auth.properties.AuthProperties;
@@ -53,6 +54,7 @@ public class AuthService {
     private final ApplicationEventPublisher eventPublisher;
     private final AppJwtService appJwtService;
     private final JdbcTemplate jdbcTemplate;
+    private final UserProfileService userProfileService;
 
     @Transactional
     public IssuedTokens loginWithGoogle(String code, String codeVerifier, String redirectUri) {
@@ -155,8 +157,14 @@ public class AuthService {
         }
         return userAccountRepository
                 .findById(principal.userId())
-                .map(user -> new AuthSessionResponse(true, user.getId(), user.getEmail(), user.getRole()))
+                .map(this::toSessionResponse)
                 .orElseGet(AuthSessionResponse::anonymous);
+    }
+
+    private AuthSessionResponse toSessionResponse(UserAccount user) {
+        ProfileResponse profile = userProfileService.getProfile(user.getId());
+        return new AuthSessionResponse(
+                true, user.getId(), user.getEmail(), user.getRole(), profile.nickname(), profile.imageVersion());
     }
 
     private IssuedTokens createTokens(UserAccount user) {

@@ -1,6 +1,7 @@
 package dev.eolmae.marketmonitor.domain.view.service;
 
 import dev.eolmae.marketmonitor.common.enums.Market;
+import dev.eolmae.marketmonitor.common.util.KstClock;
 import dev.eolmae.marketmonitor.domain.auth.service.CurrentUser;
 import dev.eolmae.marketmonitor.domain.custom.dto.CustomValueTierItem;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomSector;
@@ -16,8 +17,11 @@ import dev.eolmae.marketmonitor.domain.notification.properties.MarketMonitorProp
 import dev.eolmae.marketmonitor.domain.stock.entity.IndustryInfo;
 import dev.eolmae.marketmonitor.domain.stock.entity.MarketOverviewSnapshot;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
+import dev.eolmae.marketmonitor.domain.stock.properties.MarketHoursProperties;
 import dev.eolmae.marketmonitor.domain.stock.repository.IndustryInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.MarketOverviewSnapshotRepository;
+import dev.eolmae.marketmonitor.domain.stock.service.ClosingPriceReader;
+import dev.eolmae.marketmonitor.domain.stock.service.ClosingPrices;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceCacheService;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceCacheService.CachedStockPrice;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceSnapshotService;
@@ -35,8 +39,10 @@ import dev.eolmae.marketmonitor.domain.view.dto.SnapshotAverages;
 import dev.eolmae.marketmonitor.domain.view.dto.SnapshotResponse;
 import dev.eolmae.marketmonitor.domain.view.dto.TopSectorItem;
 import dev.eolmae.marketmonitor.domain.view.enums.AverageMode;
+import dev.eolmae.marketmonitor.domain.view.enums.ChangeRateBasis;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -49,9 +55,11 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @Transactional(readOnly = true)
 @RequiredArgsConstructor
@@ -75,6 +83,8 @@ public class MarketMapQueryService {
     private final MarketOverviewSnapshotRepository marketOverviewSnapshotRepository;
     private final IndustryInfoRepository industryInfoRepository;
     private final MarketMonitorProperties marketMonitorProperties;
+    private final ClosingPriceReader closingPriceReader;
+    private final MarketHoursProperties marketHoursProperties;
 
     /** 기본 마켓맵: stock_info 섹터 그대로(override 없이) 기준, 자식 없는 1뎁스 노드로 감싸서 반환
      * (getCustomMarketMap과 응답 모양 통일). snapshotTime이 없으면 최신, 있으면 그 시각 그대로(결정 4). */
@@ -84,18 +94,25 @@ public class MarketMapQueryService {
 
     /** nxtOnly면 NXT 거래 가능 종목만 담는다. 업종 분류와 가격은 그대로다(가격은 KRX·NXT 통합 가격). */
     public MarketMapResponse getDefaultMarketMap(MarketQuery marketQuery, LocalDateTime snapshotTime, boolean nxtOnly) {
+        return getDefaultMarketMap(marketQuery, snapshotTime, nxtOnly, ChangeRateBasis.DAILY);
+    }
+
+    /** basis가 AFTER_HOURS면 등락률을 그날 정규장 종가 대비로 계산해서 담는다(적용 조건은 {@link #applyBasis}). */
+    public MarketMapResponse getDefaultMarketMap(
+            MarketQuery marketQuery, LocalDateTime snapshotTime, boolean nxtOnly, ChangeRateBasis basis) {
         List<Market> markets = marketQuery.toMarkets();
         return resolveSnapshotTime(markets, snapshotTime)
-                .map(resolvedSnapshotTime -> buildDefaultMarketMap(markets, resolvedSnapshotTime, nxtOnly))
+                .map(resolvedSnapshotTime -> buildDefaultMarketMap(markets, resolvedSnapshotTime, nxtOnly, basis))
                 .orElseGet(MarketMapResponse::empty);
     }
 
     private MarketMapResponse buildDefaultMarketMap(
-            List<Market> markets, LocalDateTime latestSnapshotTime, boolean nxtOnly) {
+            List<Market> markets, LocalDateTime latestSnapshotTime, boolean nxtOnly, ChangeRateBasis basis) {
         List<StockInfo> candidates = filterCandidates(markets).stream()
                 .filter(stockInfo -> !nxtOnly || stockInfo.isNxtEnabled())
                 .toList();
-        Map<String, CachedStockPrice> priceMap = findPriceByStockCode(markets, latestSnapshotTime);
+        Map<String, CachedStockPrice> priceMap =
+                applyBasis(findPriceByStockCode(markets, latestSnapshotTime), latestSnapshotTime, basis);
         List<CustomValueTierThreshold> sortedTiers = customValueTierThresholdService.findDefaultSortedAscending();
         Set<Long> industryIds = candidates.stream()
                 .map(StockInfo::getIndustryId)
@@ -140,10 +157,16 @@ public class MarketMapQueryService {
 
     /** nxtOnly면 내 분류 트리에서 NXT 거래 가능 종목만 남긴다. 분류와 가격(KRX·NXT 통합 가격)은 그대로다. */
     public MarketMapResponse getCustomMarketMap(MarketQuery marketQuery, LocalDateTime snapshotTime, boolean nxtOnly) {
+        return getCustomMarketMap(marketQuery, snapshotTime, nxtOnly, ChangeRateBasis.DAILY);
+    }
+
+    public MarketMapResponse getCustomMarketMap(
+            MarketQuery marketQuery, LocalDateTime snapshotTime, boolean nxtOnly, ChangeRateBasis basis) {
         Long userId = CurrentUser.requireId();
         List<Market> markets = marketQuery.toMarkets();
         return resolveSnapshotTime(markets, snapshotTime)
-                .map(resolvedSnapshotTime -> buildCustomMarketMap(markets, resolvedSnapshotTime, userId, nxtOnly))
+                .map(resolvedSnapshotTime ->
+                        buildCustomMarketMap(markets, resolvedSnapshotTime, userId, nxtOnly, basis))
                 .orElseGet(MarketMapResponse::empty);
     }
 
@@ -499,12 +522,16 @@ public class MarketMapQueryService {
         if (sectorPriceSnapshotService.notExistsSnapshot(market, snapshotTime)) {
             return List.of();
         }
-        return buildSectorTree(List.of(market), snapshotTime, customDataUserId(), false);
+        return buildSectorTree(List.of(market), snapshotTime, customDataUserId(), false, ChangeRateBasis.DAILY);
     }
 
     private MarketMapResponse buildCustomMarketMap(
-            List<Market> markets, LocalDateTime latestSnapshotTime, Long userId, boolean nxtOnly) {
-        List<MarketMapSectorNode> tree = buildSectorTree(markets, latestSnapshotTime, userId, nxtOnly);
+            List<Market> markets,
+            LocalDateTime latestSnapshotTime,
+            Long userId,
+            boolean nxtOnly,
+            ChangeRateBasis basis) {
+        List<MarketMapSectorNode> tree = buildSectorTree(markets, latestSnapshotTime, userId, nxtOnly, basis);
         return new MarketMapResponse(
                 latestSnapshotTime,
                 tree,
@@ -519,7 +546,11 @@ public class MarketMapQueryService {
     }
 
     private List<MarketMapSectorNode> buildSectorTree(
-            List<Market> markets, LocalDateTime latestSnapshotTime, Long userId, boolean nxtOnly) {
+            List<Market> markets,
+            LocalDateTime latestSnapshotTime,
+            Long userId,
+            boolean nxtOnly,
+            ChangeRateBasis basis) {
         List<StockInfo> candidates = filterCandidates(markets).stream()
                 .filter(stockInfo -> !nxtOnly || stockInfo.isNxtEnabled())
                 .toList();
@@ -534,7 +565,8 @@ public class MarketMapQueryService {
         Map<String, CustomStockSector> stockSectorMap = findStockSectorMap(userId);
         Map<String, String> aliasByStockCode = customStockAliasRepository.findAllByIdUserId(userId).stream()
                 .collect(Collectors.toMap(CustomStockAlias::getStockCode, CustomStockAlias::getAlias));
-        Map<String, CachedStockPrice> priceMap = findPriceByStockCode(markets, latestSnapshotTime);
+        Map<String, CachedStockPrice> priceMap =
+                applyBasis(findPriceByStockCode(markets, latestSnapshotTime), latestSnapshotTime, basis);
         List<CustomValueTierThreshold> sortedTiers = customValueTierThresholdService.findAllSortedAscending(userId);
 
         Map<Long, List<MarketMapItem>> itemsBySectorId = candidates.stream()
@@ -579,6 +611,33 @@ public class MarketMapQueryService {
         return markets.stream()
                 .flatMap(market -> sectorPriceCacheService.getCache(market, snapshotTime).entrySet().stream())
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    /**
+     * basis가 AFTER_HOURS면 종목 등락률을 그날 정규장 종가 대비로 바꾼다. 아래 경우에는 키움 값 그대로 돌려준다 —
+     * 키움 값(change_rate)은 어느 경우에도 덮어쓰지 않는다.
+     *
+     * <ul>
+     *   <li>기준이 DAILY
+     *   <li>스냅샷이 오늘이 아니거나 15:40 이전(장중에는 시간외 등락률이 없다)
+     *   <li>그날 종가 윈도우가 통째로 비어 기준가가 없다(WARN) — 그날은 시간외 값을 포기한다
+     * </ul>
+     */
+    private Map<String, CachedStockPrice> applyBasis(
+            Map<String, CachedStockPrice> priceMap, LocalDateTime snapshotTime, ChangeRateBasis basis) {
+        if (basis != ChangeRateBasis.AFTER_HOURS) {
+            return priceMap;
+        }
+        LocalDate today = KstClock.now().toLocalDate();
+        if (!AfterHoursChangeRates.isApplicable(snapshotTime, today, marketHoursProperties.afterHoursStart())) {
+            return priceMap;
+        }
+        ClosingPrices closing = closingPriceReader.closingPricesFor(today);
+        if (closing.priceByStockCode().isEmpty()) {
+            log.warn("시간외 등락률 기준가가 없어 키움 등락률을 그대로 쓴다: snapshotTime={}", snapshotTime);
+            return priceMap;
+        }
+        return AfterHoursChangeRates.apply(priceMap, closing);
     }
 
     private List<StockInfo> filterCandidates(List<Market> markets) {

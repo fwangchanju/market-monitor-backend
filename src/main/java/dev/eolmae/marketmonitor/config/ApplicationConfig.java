@@ -27,7 +27,7 @@ public class ApplicationConfig {
     @Bean(CACHE_MANAGER)
     @Primary
     public CacheManager cacheManager() {
-        return new CaffeineCacheManager(CacheKey.STOCK_INFO);
+        return new CaffeineCacheManager(CacheKey.STOCK_INFO, CacheKey.CLOSING_PRICE);
     }
 
     @Bean

@@ -42,7 +42,6 @@ import dev.eolmae.marketmonitor.domain.view.enums.AverageMode;
 import dev.eolmae.marketmonitor.domain.view.enums.ChangeRateBasis;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -619,7 +618,7 @@ public class MarketMapQueryService {
      *
      * <ul>
      *   <li>기준이 DAILY
-     *   <li>스냅샷이 오늘이 아니거나 15:40 이전(장중에는 시간외 등락률이 없다)
+     *   <li>스냅샷이 그날 15:40 이전(장중에는 시간외 등락률이 없다)
      *   <li>그날 종가 윈도우가 통째로 비어 기준가가 없다(WARN) — 그날은 시간외 값을 포기한다
      * </ul>
      */
@@ -628,11 +627,11 @@ public class MarketMapQueryService {
         if (basis != ChangeRateBasis.AFTER_HOURS) {
             return priceMap;
         }
-        LocalDate today = KstClock.now().toLocalDate();
-        if (!AfterHoursChangeRates.isApplicable(snapshotTime, today, marketHoursProperties.afterHoursStart())) {
+        if (!AfterHoursChangeRates.isApplicable(snapshotTime, marketHoursProperties.afterHoursStart())) {
             return priceMap;
         }
-        ClosingPrices closing = closingPriceReader.closingPricesFor(today);
+        ClosingPrices closing = closingPriceReader.closingPricesFor(
+                snapshotTime.toLocalDate(), KstClock.now().toLocalDate());
         if (closing.priceByStockCode().isEmpty()) {
             log.warn("시간외 등락률 기준가가 없어 키움 등락률을 그대로 쓴다: snapshotTime={}", snapshotTime);
             return priceMap;

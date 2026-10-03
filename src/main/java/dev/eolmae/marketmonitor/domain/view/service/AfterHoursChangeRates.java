@@ -4,7 +4,6 @@ import dev.eolmae.marketmonitor.domain.stock.service.ClosingPrices;
 import dev.eolmae.marketmonitor.domain.stock.service.SectorPriceCacheService.CachedStockPrice;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.HashMap;
@@ -20,12 +19,12 @@ final class AfterHoursChangeRates {
     private AfterHoursChangeRates() {}
 
     /**
-     * 시간외 기준을 적용할 수 있는 스냅샷인지. 오늘 날짜이고 {@code afterHoursStart}(15:40) 이후일 때만이다 — 장중에는
-     * 시간외 등락률이 존재하지 않고(그 구간은 키움 값을 쓴다), 지난 날짜는 오늘의 종가 캐시로 계산할 수 없다.
+     * 시간외 기준을 적용할 수 있는 스냅샷인지. 그 스냅샷 날짜의 {@code afterHoursStart}(15:40) 이후일 때만이다 — 장중에는
+     * 시간외 등락률이 존재하지 않는다(그 구간은 키움 값을 쓴다). 날짜는 따지지 않는다: 장이 끝난 뒤 다음 개장까지는
+     * 마지막 스냅샷(전 거래일 15:40 이후)이 계속 보이고, 그 스냅샷 날짜의 종가로 계산한다.
      */
-    static boolean isApplicable(LocalDateTime snapshotTime, LocalDate today, LocalTime afterHoursStart) {
-        return snapshotTime.toLocalDate().equals(today)
-                && !snapshotTime.toLocalTime().isBefore(afterHoursStart);
+    static boolean isApplicable(LocalDateTime snapshotTime, LocalTime afterHoursStart) {
+        return !snapshotTime.toLocalTime().isBefore(afterHoursStart);
     }
 
     /**

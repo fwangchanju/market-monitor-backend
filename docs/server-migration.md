@@ -148,7 +148,7 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 | 이미지 | `market-monitor`, `-nginx`, `-renderer`, `-assets` | `marketry`, `marketry-nginx`, `marketry-renderer`, `marketry-assets` |
 | 컨테이너 | `market-monitor-*` | `marketry-*` |
 | DB | `market_monitor_db` | `marketry_db` |
-| Docker 네트워크 | `proxy` | `marketry-net` (키움 프록시와 헷갈리지 않게) |
+| Docker 네트워크 | `proxy` | `marketry-network` (키움 프록시와 헷갈리지 않게) |
 | Java 패키지 | `dev.eolmae.marketmonitor` | `dev.eolmae.marketry` |
 | 설정 접두사 | `market-monitor.*` | `marketry.*` |
 
@@ -184,7 +184,7 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 - [ ] 프론트 assets 이미지, nginx 이미지, 렌더러 이미지 멀티 빌드
 - [ ] `kiwoomRestClient` 프록시 설정(값이 비면 직접 연결)
 - [ ] 파괴적 마이그레이션 CI 검사, 필수 체크로 등록하고 bypass 비움
-- [ ] 맥미니 `marketry-net` 네트워크는 서브넷을 지정해서 만든다(`docker network create --subnet ...`). 다시 만들어도 대역이 바뀌지 않게 한다
+- [ ] 맥미니 `marketry-network` 네트워크는 서브넷을 지정해서 만든다(`docker network create --subnet ...`). 다시 만들어도 대역이 바뀌지 않게 한다
 - [ ] 맥미니용 compose: cloudflared 추가, 호스트 포트 제거, 렌더러 같은 네트워크, nginx 네트워크 별칭, 렌더러 메모리 제한 1GB
 - [ ] 배포 워크플로: Tailscale 액션(`tag:ci`, 임시 노드), 대상 호스트를 맥미니로, SSH는 동작 이름과 태그만 전달
 - [ ] 게이트 스크립트, 일일 백업, 개발 스냅샷, 로컬 DB 교체 스크립트의 원본을 레포에 둔다(설치는 손으로)
@@ -241,7 +241,7 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 - [ ] 키움 허용 IP에서 서버 1 제거
 - [ ] DuckDNS 리디렉트 종료 시점 결정
 - [ ] 보관 일수 재조정(DB 크기 기준)
-- [ ] nginx `set_real_ip_from`을 맥미니 `marketry-net` 네트워크 대역 하나로 좁힌다. 지금은 대역을 몰라 사설 대역 셋을 다 열어 두었다
+- [ ] nginx `set_real_ip_from`을 맥미니 `marketry-network` 네트워크 대역 하나로 좁힌다. 지금은 대역을 몰라 사설 대역 셋을 다 열어 두었다
 - [ ] `operations.md`를 새 구성으로 고쳐 쓰고 이 파일 삭제
 - [ ] 결정 사항을 `decisions.md`로 회수
 

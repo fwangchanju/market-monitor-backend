@@ -40,7 +40,7 @@ public class MarketMapController {
             @RequestParam(defaultValue = "false") boolean nxtOnly,
             @RequestParam(defaultValue = "daily") String basis) {
         // nxtOnly는 거래소 분류와 MARKETRY(내 분류) 모두에서 NXT 거래 가능 종목만 남긴다.
-        // basis=afterHours면 등락률을 그날 정규장 종가 대비로 계산한다(15:40 이후, 오늘 스냅샷에서만 적용).
+        // basis=afterHours면 등락률을 그날 정규장 종가 대비로 계산한다(그 스냅샷 날짜의 15:40 이후에만 적용).
         ChangeRateBasis changeRateBasis = ChangeRateBasis.parse(basis);
         return isCustom
                 ? marketMapQueryService.getCustomMarketMap(market, snapshotTime, nxtOnly, changeRateBasis)

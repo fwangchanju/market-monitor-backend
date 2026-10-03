@@ -128,13 +128,33 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 `auth.dev-login.enabled=true`, `scheduling.enabled=false`로 뜬다. 텔레그램과 키움 키는 개발 환경에 두지
 않는다.
 
-`deploy`가 매일 백업 직후 개발용 스냅샷을 만들어 `/Users/Shared/mm-dev-snapshot/`에 둔다. `chanju`는
+`deploy`가 매일 백업 직후 개발용 스냅샷을 만들어 `/Users/Shared/marketry-dev-snapshot/`에 둔다. `chanju`는
 읽기만 한다. 스냅샷은 `users` 이메일을 가리고 `user_refresh_token`은 `--exclude-table-data`로 행만 뺀다.
 테이블까지 빼면 엔티티 검증과 dev-login이 깨진다. `users`를 통째로 빼는 안은 커스텀 테이블의 외래키가
 깨져서 접었다.
 
 `chanju`의 예약 작업이 05:00에 로컬 DB를 지우고 스냅샷으로 다시 만든다. 같은 일을 하는 수동 명령도 둔다.
 브랜치에만 있는 마이그레이션은 다음 `bootRun` 때 Flyway가 적용한다.
+
+### 이름
+
+이관하면서 프로젝트 이름을 `marketry`로 통일한다. 서버 경로, 컨테이너, compose, DB, 이미지는 어차피 맥미니에서
+새로 만들기 때문에 처음부터 새 이름으로 만들면 추가 비용이 거의 없다. 이관을 끝낸 뒤에 바꾸면 방금 만든 것을
+운영 중에 다시 고쳐야 해서 더 번거롭다.
+
+| 대상 | 지금 | 바꿀 이름 |
+|---|---|---|
+| 레포 | `market-monitor-backend`, `market-monitor-frontend` | `marketry-backend`, `marketry-frontend` |
+| 이미지 | `market-monitor`, `-nginx`, `-renderer`, `-assets` | `marketry`, `marketry-nginx`, `marketry-renderer`, `marketry-assets` |
+| 컨테이너 | `market-monitor-*` | `marketry-*` |
+| DB | `market_monitor_db` | `marketry_db` |
+| Java 패키지 | `dev.eolmae.marketmonitor` | `dev.eolmae.marketry` |
+| 설정 접두사 | `market-monitor.*` | `marketry.*` |
+
+레포 이름을 바꾸면 GitHub가 옛 주소를 새 주소로 연결해 줘서 기존 clone과 서버의 `git fetch`는 깨지지 않는다.
+프론트 배포 워크플로가 백엔드 레포 이름으로 nginx 재빌드를 부르는 곳(`repository: ...`)만 직접 고친다.
+
+오라클 쪽은 옛 이름 그대로 둔다. 이관을 되돌릴 때 오라클에 남은 옛 이미지와 컨테이너를 그대로 다시 올린다.
 
 ---
 
@@ -149,7 +169,15 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 - [ ] 옛 DuckDNS 주소에서 새 도메인으로 보내는 리디렉트
 - [ ] 새 도메인으로 로그인, 화면, 텔레그램 캡처 확인
 
-### 2. 코드 변경 (이관 전에 병합하고 지금 서버에 배포해 둔다)
+### 2. 이름 변경 (맥미니 설정 전에)
+
+- [ ] GitHub에서 두 레포 이름 변경
+- [ ] 프론트 배포 워크플로의 백엔드 레포 참조 수정
+- [ ] Java 패키지와 설정 접두사 변경. 동작이 바뀌지 않는 기계적 변경이라 별도 PR로 한다
+- [ ] 문서, `CLAUDE.md`, `AGENTS.md`, `spring.application.name`, 프론트 `package.json`, 이미지 라벨의 이름 참조
+- [ ] 이미지, 컨테이너, DB, 서버 경로 이름은 3단계 코드 변경에서 맥미니용으로 새로 만들 때 반영한다
+
+### 3. 코드 변경 (이관 전에 병합하고 지금 서버에 배포해 둔다)
 
 - [ ] 애플리케이션 이미지 amd64/arm64 멀티 빌드. 빌드 스테이지에 `--platform=$BUILDPLATFORM`
 - [ ] 프론트 assets 이미지, nginx 이미지, 렌더러 이미지 멀티 빌드
@@ -159,7 +187,7 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 - [ ] 배포 워크플로: Tailscale 액션(`tag:ci`, 임시 노드), 대상 호스트를 맥미니로, SSH는 동작 이름과 태그만 전달
 - [ ] 게이트 스크립트, 일일 백업, 개발 스냅샷, 로컬 DB 교체 스크립트의 원본을 레포에 둔다(설치는 손으로)
 
-### 3. 맥미니 기반
+### 4. 맥미니 기반
 
 - [ ] FileVault 끄기(복호화에 시간이 걸린다)
 - [ ] `admin` 생성 후 `chanju`를 일반 계정으로 내림. Homebrew 소유권 정리
@@ -177,7 +205,7 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 - [ ] GitHub 인증을 fine-grained PAT로 교체(`gh`와 git 자격증명 모두)
 - [ ] 개발 환경: OrbStack, JDK 21, Node, 개발 DB, 로컬 실행 스크립트, 05:00 로컬 DB 교체 작업
 
-### 4. 키움 프록시 (오라클 서버 2)
+### 5. 키움 프록시 (오라클 서버 2)
 
 - [ ] 서버 2 공인 IP가 예약 IP인지 확인, 아니면 전환
 - [ ] 서버 2 IP를 키움 허용 IP에 추가. 서버 1 IP는 이관이 끝날 때까지 둔다
@@ -186,7 +214,7 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 - [ ] Tailscale ACL 적용(위 표)
 - [ ] 맥미니에서 프록시를 거쳐 키움 토큰 발급 확인
 
-### 5. 이관 당일 (주말)
+### 6. 이관 당일 (주말)
 
 금요일 장 마감 뒤부터 일요일 사이에 한다. 월요일 장 시작 전까지 못 고치면 되돌린다.
 
@@ -194,17 +222,18 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 - [ ] DB 덤프, 맥미니 운영 DB에 적재
 - [ ] 맥미니 운영 기동(`KIWOOM_PROXY_HOST` 설정)
 - [ ] 지금 서버 cloudflared 중지, 맥미니 cloudflared 기동
+- [ ] 터널 경로의 서비스 주소를 맥미니 nginx 컨테이너 이름(`marketry-nginx:80`)으로 바꾼다. 되돌릴 때는 원래 값으로
 - [ ] 웹 화면과 로그인 확인
 - [ ] 텔레그램 캡처 수동 발송 확인. 실제 채팅방으로 나가니 필요하면 잠시 개발자 채팅방으로 돌린다
 - [ ] 스케줄러와 수집 확인
 - [ ] GitHub Actions로 맥미니에 배포 한 번 돌려 게이트, 덤프, 헬스체크 확인
 
-### 6. 되돌리기
+### 7. 되돌리기
 
 지금 서버는 컨테이너를 내리기만 하고 지우지 않는다. 되돌릴 때는 맥미니 cloudflared를 내리고 지금 서버의
 애플리케이션과 cloudflared를 다시 올린다. 이관 뒤 맥미니에 쌓인 데이터는 버린다. 주말이라 거의 없다.
 
-### 7. 안정화 뒤 정리
+### 8. 안정화 뒤 정리
 
 - [ ] 며칠 운영해 본 뒤 오라클 서버 1 정리
 - [ ] 키움 허용 IP에서 서버 1 제거

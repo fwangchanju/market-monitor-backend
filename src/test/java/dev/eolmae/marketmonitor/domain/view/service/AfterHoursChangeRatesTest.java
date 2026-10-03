@@ -65,24 +65,31 @@ class AfterHoursChangeRatesTest {
     }
 
     @Test
-    void 오늘의_15시40분_이후_스냅샷에만_적용할_수_있다() {
-        assertThat(AfterHoursChangeRates.isApplicable(TODAY.atTime(15, 40), TODAY, AFTER_HOURS_START))
+    void 그날의_15시40분_이후_스냅샷에는_적용할_수_있다() {
+        assertThat(AfterHoursChangeRates.isApplicable(TODAY.atTime(15, 40), AFTER_HOURS_START))
                 .isTrue();
-        assertThat(AfterHoursChangeRates.isApplicable(TODAY.atTime(20, 0), TODAY, AFTER_HOURS_START))
+        assertThat(AfterHoursChangeRates.isApplicable(TODAY.atTime(20, 0), AFTER_HOURS_START))
                 .isTrue();
     }
 
     @Test
     void 장중_스냅샷에는_적용할_수_없다() {
-        assertThat(AfterHoursChangeRates.isApplicable(TODAY.atTime(15, 39), TODAY, AFTER_HOURS_START))
+        assertThat(AfterHoursChangeRates.isApplicable(TODAY.atTime(15, 39), AFTER_HOURS_START))
                 .isFalse();
-        assertThat(AfterHoursChangeRates.isApplicable(TODAY.atTime(9, 0), TODAY, AFTER_HOURS_START))
+        assertThat(AfterHoursChangeRates.isApplicable(TODAY.atTime(9, 0), AFTER_HOURS_START))
                 .isFalse();
     }
 
     @Test
-    void 지난_날짜_스냅샷에는_적용할_수_없다() {
-        assertThat(AfterHoursChangeRates.isApplicable(TODAY.minusDays(1).atTime(17, 0), TODAY, AFTER_HOURS_START))
+    void 지난_날짜의_15시40분_이후_스냅샷에도_적용할_수_있다() {
+        // 장이 끝난 뒤 다음 개장까지는 전 거래일 마지막 스냅샷이 계속 보인다.
+        assertThat(AfterHoursChangeRates.isApplicable(TODAY.minusDays(1).atTime(17, 0), AFTER_HOURS_START))
+                .isTrue();
+    }
+
+    @Test
+    void 지난_날짜의_장중_스냅샷에는_적용할_수_없다() {
+        assertThat(AfterHoursChangeRates.isApplicable(TODAY.minusDays(1).atTime(10, 0), AFTER_HOURS_START))
                 .isFalse();
     }
 }

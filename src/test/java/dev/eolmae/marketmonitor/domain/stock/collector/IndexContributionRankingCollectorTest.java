@@ -115,10 +115,10 @@ class IndexContributionRankingCollectorTest {
                 .when(transactionTemplate)
                 .executeWithoutResult(any());
 
-        StockInfo ordinaryShare =
-                StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", 1L, 6_000_000_000L, BigDecimal.valueOf(70_000));
+        StockInfo ordinaryShare = StockInfo.create(
+                "005930", "삼성전자", Market.KOSPI, "0", 1L, 6_000_000_000L, BigDecimal.valueOf(70_000), false);
         StockInfo etf = StockInfo.create(
-                "069500", "KODEX 200", Market.KOSPI, "8", null, 100_000_000L, BigDecimal.valueOf(30_000));
+                "069500", "KODEX 200", Market.KOSPI, "8", null, 100_000_000L, BigDecimal.valueOf(30_000), false);
         Map<String, StockInfo> stockInfoCache = Map.of("005930", ordinaryShare, "069500", etf);
         when(stockInfoCacheService.getCache()).thenReturn(stockInfoCache);
 

@@ -11,6 +11,7 @@ import dev.eolmae.marketmonitor.domain.custom.service.CustomScaleService;
 import dev.eolmae.marketmonitor.domain.custom.service.CustomSectorService;
 import dev.eolmae.marketmonitor.domain.custom.service.CustomValueTierThresholdService;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapResponse;
+import dev.eolmae.marketmonitor.domain.view.enums.ChangeRateBasis;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
 import java.time.LocalDateTime;
@@ -33,21 +34,71 @@ class MarketMapControllerTest {
     @Test
     void getMarketMap_snapshotTime이_LocalDateTime으로_바인딩된다() throws Exception {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 9, 22, 10, 5, 0);
-        when(marketMapQueryService.getCustomMarketMap(MarketQuery.KOSPI, snapshotTime))
+        when(marketMapQueryService.getCustomMarketMap(MarketQuery.KOSPI, snapshotTime, false, ChangeRateBasis.DAILY))
                 .thenReturn(MarketMapResponse.empty());
 
         mockMvc.perform(get("/api/map?market=KOSPI&isCustom=true&snapshotTime=2026-09-22T10:05:00"));
 
-        verify(marketMapQueryService).getCustomMarketMap(MarketQuery.KOSPI, snapshotTime);
+        verify(marketMapQueryService).getCustomMarketMap(MarketQuery.KOSPI, snapshotTime, false, ChangeRateBasis.DAILY);
+    }
+
+    @Test
+    void getMarketMap_nxtOnly가_내_분류에도_전달된다() throws Exception {
+        when(marketMapQueryService.getCustomMarketMap(
+                        eq(MarketQuery.KOSPI), isNull(), eq(true), eq(ChangeRateBasis.DAILY)))
+                .thenReturn(MarketMapResponse.empty());
+
+        mockMvc.perform(get("/api/map?market=KOSPI&isCustom=true&nxtOnly=true"));
+
+        verify(marketMapQueryService)
+                .getCustomMarketMap(eq(MarketQuery.KOSPI), isNull(), eq(true), eq(ChangeRateBasis.DAILY));
     }
 
     @Test
     void getMarketMap_snapshotTime이_없으면_null로_바인딩된다() throws Exception {
-        when(marketMapQueryService.getDefaultMarketMap(eq(MarketQuery.KOSPI), isNull()))
+        when(marketMapQueryService.getDefaultMarketMap(
+                        eq(MarketQuery.KOSPI), isNull(), eq(false), eq(ChangeRateBasis.DAILY)))
                 .thenReturn(MarketMapResponse.empty());
 
         mockMvc.perform(get("/api/map?market=KOSPI&isCustom=false"));
 
-        verify(marketMapQueryService).getDefaultMarketMap(eq(MarketQuery.KOSPI), isNull());
+        verify(marketMapQueryService)
+                .getDefaultMarketMap(eq(MarketQuery.KOSPI), isNull(), eq(false), eq(ChangeRateBasis.DAILY));
+    }
+
+    @Test
+    void getMarketMap_nxtOnly가_거래소_분류에_전달된다() throws Exception {
+        when(marketMapQueryService.getDefaultMarketMap(
+                        eq(MarketQuery.KOSPI), isNull(), eq(true), eq(ChangeRateBasis.DAILY)))
+                .thenReturn(MarketMapResponse.empty());
+
+        mockMvc.perform(get("/api/map?market=KOSPI&isCustom=false&nxtOnly=true"));
+
+        verify(marketMapQueryService)
+                .getDefaultMarketMap(eq(MarketQuery.KOSPI), isNull(), eq(true), eq(ChangeRateBasis.DAILY));
+    }
+
+    @Test
+    void getMarketMap_basis가_afterHours면_시간외_기준으로_전달된다() throws Exception {
+        when(marketMapQueryService.getDefaultMarketMap(
+                        eq(MarketQuery.KOSPI), isNull(), eq(false), eq(ChangeRateBasis.AFTER_HOURS)))
+                .thenReturn(MarketMapResponse.empty());
+
+        mockMvc.perform(get("/api/map?market=KOSPI&isCustom=false&basis=afterHours"));
+
+        verify(marketMapQueryService)
+                .getDefaultMarketMap(eq(MarketQuery.KOSPI), isNull(), eq(false), eq(ChangeRateBasis.AFTER_HOURS));
+    }
+
+    @Test
+    void getMarketMap_모르는_basis_값은_기본_기준으로_본다() throws Exception {
+        when(marketMapQueryService.getDefaultMarketMap(
+                        eq(MarketQuery.KOSPI), isNull(), eq(false), eq(ChangeRateBasis.DAILY)))
+                .thenReturn(MarketMapResponse.empty());
+
+        mockMvc.perform(get("/api/map?market=KOSPI&isCustom=false&basis=whatever"));
+
+        verify(marketMapQueryService)
+                .getDefaultMarketMap(eq(MarketQuery.KOSPI), isNull(), eq(false), eq(ChangeRateBasis.DAILY));
     }
 }

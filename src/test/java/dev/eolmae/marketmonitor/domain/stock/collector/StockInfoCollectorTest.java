@@ -10,6 +10,7 @@ import dev.eolmae.marketmonitor.common.enums.Market;
 import dev.eolmae.marketmonitor.common.event.IndustryInfoCreatedEvent;
 import dev.eolmae.marketmonitor.common.event.StockInfoSyncedEvent;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
+import dev.eolmae.marketmonitor.domain.stock.client.NextradeStockListClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.StockInfoRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.StockInfoResponse;
 import dev.eolmae.marketmonitor.domain.stock.entity.StockInfo;
@@ -17,6 +18,7 @@ import dev.eolmae.marketmonitor.domain.stock.repository.IndustryInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.repository.StockInfoRepository;
 import dev.eolmae.marketmonitor.domain.stock.service.StockInfoCacheService;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
@@ -30,6 +32,7 @@ import org.springframework.transaction.support.TransactionSynchronizationUtils;
 class StockInfoCollectorTest {
 
     private final KiwoomApiClient kiwoomApiClient = Mockito.mock(KiwoomApiClient.class);
+    private final NextradeStockListClient nextradeStockListClient = Mockito.mock(NextradeStockListClient.class);
     private final StockInfoRepository stockInfoRepository = Mockito.mock(StockInfoRepository.class);
     private final IndustryInfoRepository industryInfoRepository = Mockito.mock(IndustryInfoRepository.class);
     private final JdbcTemplate jdbcTemplate = Mockito.mock(JdbcTemplate.class);
@@ -37,6 +40,7 @@ class StockInfoCollectorTest {
     private final ApplicationEventPublisher eventPublisher = Mockito.mock(ApplicationEventPublisher.class);
     private final StockInfoCollector collector = new StockInfoCollector(
             kiwoomApiClient,
+            nextradeStockListClient,
             stockInfoRepository,
             industryInfoRepository,
             stockInfoCacheService,
@@ -49,8 +53,8 @@ class StockInfoCollectorTest {
                 "0",
                 "정상",
                 List.of(
-                        new StockInfoResponse.StockItem("005930", "삼성전자", "0", "반도체", "100", "10000"),
-                        new StockInfoResponse.StockItem("051910", "LG화학", "0", "", "50", "20000")));
+                        new StockInfoResponse.StockItem("005930", "삼성전자", "0", "반도체", "100", "10000", null),
+                        new StockInfoResponse.StockItem("051910", "LG화학", "0", "", "50", "20000", null)));
         when(kiwoomApiClient.post(any(StockInfoRequest.class), eq(StockInfoResponse.class)))
                 .thenReturn(response);
         when(stockInfoRepository.findAll()).thenReturn(List.of());
@@ -68,6 +72,95 @@ class StockInfoCollectorTest {
                 .publishEvent(Mockito.<Object>argThat(event -> event instanceof StockInfoSyncedEvent synced
                         && synced.stockCodes().size() == 2
                         && synced.stockCodes().containsAll(List.of("005930", "051910"))));
+    }
+
+    @Test
+    void sync_nxtEnable이_Y인_종목만_NXT_거래_가능으로_저장한다() {
+        when(kiwoomApiClient.post(any(StockInfoRequest.class), eq(StockInfoResponse.class)))
+                .thenReturn(new StockInfoResponse(
+                        "0",
+                        "정상",
+                        List.of(
+                                new StockInfoResponse.StockItem("005930", "삼성전자", "0", "반도체", "100", "10000", "Y"),
+                                new StockInfoResponse.StockItem("051910", "LG화학", "0", "", "50", "20000", ""),
+                                new StockInfoResponse.StockItem("000660", "SK하이닉스", "0", "", "50", "20000", null))));
+        when(stockInfoRepository.findAll()).thenReturn(List.of());
+        when(industryInfoRepository.findByNameIn(Mockito.anyCollection())).thenReturn(List.of());
+        Mockito.doReturn(List.of("반도체"))
+                .when(jdbcTemplate)
+                .query(Mockito.anyString(), Mockito.<RowMapper<String>>any(), Mockito.<Object[]>any());
+
+        collector.sync();
+
+        verify(stockInfoRepository).saveAllAndFlush(Mockito.<List<StockInfo>>argThat(saved -> saved.stream()
+                .filter(StockInfo::isNxtEnabled)
+                .map(StockInfo::getStockCode)
+                .toList()
+                .equals(List.of("005930"))));
+    }
+
+    @Test
+    void sync_키움에_nxtEnable이_하나도_없으면_NEXTRADE_편입_종목으로_채운다() {
+        when(kiwoomApiClient.post(any(StockInfoRequest.class), eq(StockInfoResponse.class)))
+                .thenReturn(new StockInfoResponse(
+                        "0",
+                        "정상",
+                        List.of(
+                                new StockInfoResponse.StockItem("005930", "삼성전자", "0", "반도체", "100", "10000", null),
+                                new StockInfoResponse.StockItem("051910", "LG화학", "0", "", "50", "20000", ""))));
+        when(nextradeStockListClient.fetchTradableStockCodes()).thenReturn(Set.of("005930"));
+        when(stockInfoRepository.findAll()).thenReturn(List.of());
+        when(industryInfoRepository.findByNameIn(Mockito.anyCollection())).thenReturn(List.of());
+        Mockito.doReturn(List.of("반도체"))
+                .when(jdbcTemplate)
+                .query(Mockito.anyString(), Mockito.<RowMapper<String>>any(), Mockito.<Object[]>any());
+
+        collector.sync();
+
+        verify(stockInfoRepository).saveAllAndFlush(Mockito.<List<StockInfo>>argThat(saved -> saved.stream()
+                .filter(StockInfo::isNxtEnabled)
+                .map(StockInfo::getStockCode)
+                .toList()
+                .equals(List.of("005930"))));
+    }
+
+    @Test
+    void sync_키움에_nxtEnable_Y가_있으면_NEXTRADE를_호출하지_않는다() {
+        when(kiwoomApiClient.post(any(StockInfoRequest.class), eq(StockInfoResponse.class)))
+                .thenReturn(new StockInfoResponse(
+                        "0",
+                        "정상",
+                        List.of(new StockInfoResponse.StockItem("005930", "삼성전자", "0", "반도체", "100", "10000", "Y"))));
+        when(stockInfoRepository.findAll()).thenReturn(List.of());
+        when(industryInfoRepository.findByNameIn(Mockito.anyCollection())).thenReturn(List.of());
+        Mockito.doReturn(List.of("반도체"))
+                .when(jdbcTemplate)
+                .query(Mockito.anyString(), Mockito.<RowMapper<String>>any(), Mockito.<Object[]>any());
+
+        collector.sync();
+
+        verify(nextradeStockListClient, never()).fetchTradableStockCodes();
+    }
+
+    @Test
+    void sync_NEXTRADE_조회가_실패하면_기존_NXT_값을_유지하고_동기화는_계속한다() {
+        when(kiwoomApiClient.post(any(StockInfoRequest.class), eq(StockInfoResponse.class)))
+                .thenReturn(new StockInfoResponse(
+                        "0",
+                        "정상",
+                        List.of(new StockInfoResponse.StockItem("005930", "삼성전자", "0", "반도체", "100", "10000", null))));
+        when(nextradeStockListClient.fetchTradableStockCodes()).thenThrow(new IllegalStateException("응답 이상"));
+        StockInfo existing =
+                StockInfo.create("005930", "삼성전자", Market.KOSPI, "0", null, 100L, java.math.BigDecimal.TEN, true);
+        when(stockInfoRepository.findAll()).thenReturn(List.of(existing));
+        when(industryInfoRepository.findByNameIn(Mockito.anyCollection())).thenReturn(List.of());
+        Mockito.doReturn(List.of("반도체"))
+                .when(jdbcTemplate)
+                .query(Mockito.anyString(), Mockito.<RowMapper<String>>any(), Mockito.<Object[]>any());
+
+        collector.sync();
+
+        org.assertj.core.api.Assertions.assertThat(existing.isNxtEnabled()).isTrue();
     }
 
     @AfterEach
@@ -112,9 +205,9 @@ class StockInfoCollectorTest {
                 "0",
                 "정상",
                 List.of(
-                        new StockInfoResponse.StockItem("005930", "삼성전자", "0", "반도체", "100", "10000"),
-                        new StockInfoResponse.StockItem("57JJJJ", "삼성전자ELW", "3", "ELW", "100", "1000"),
-                        new StockInfoResponse.StockItem("069500", "KODEX200", "8", "ETF", "100", "30000")));
+                        new StockInfoResponse.StockItem("005930", "삼성전자", "0", "반도체", "100", "10000", null),
+                        new StockInfoResponse.StockItem("57JJJJ", "삼성전자ELW", "3", "ELW", "100", "1000", null),
+                        new StockInfoResponse.StockItem("069500", "KODEX200", "8", "ETF", "100", "30000", null)));
         when(kiwoomApiClient.post(any(StockInfoRequest.class), eq(StockInfoResponse.class)))
                 .thenReturn(response);
         when(stockInfoRepository.findAll()).thenReturn(List.of());
@@ -138,10 +231,12 @@ class StockInfoCollectorTest {
 
     @Test
     void sync_비활성_기존_종목의_재활성화에는_신규상장_이벤트를_발행하지_않는다() {
-        StockInfo inactive = StockInfo.create("005930", "Samsung", Market.KOSPI, "0", null, 100L, null);
+        StockInfo inactive = StockInfo.create("005930", "Samsung", Market.KOSPI, "0", null, 100L, null, false);
         inactive.markInactive();
         StockInfoResponse response = new StockInfoResponse(
-                "0", "normal", List.of(new StockInfoResponse.StockItem("005930", "Samsung", "0", "", "100", "10000")));
+                "0",
+                "normal",
+                List.of(new StockInfoResponse.StockItem("005930", "Samsung", "0", "", "100", "10000", null)));
         when(kiwoomApiClient.post(any(StockInfoRequest.class), eq(StockInfoResponse.class)))
                 .thenReturn(response);
         when(stockInfoRepository.findAll()).thenReturn(List.of(inactive));

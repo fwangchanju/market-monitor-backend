@@ -48,6 +48,8 @@ public class AuthConfiguration {
                         .hasRole("ADMIN")
                         .requestMatchers("/api/custom/**")
                         .authenticated()
+                        .requestMatchers("/api/profile", "/api/profile/**")
+                        .authenticated()
                         .requestMatchers(HttpMethod.GET, "/**")
                         .permitAll()
                         .requestMatchers(HttpMethod.HEAD, "/**")

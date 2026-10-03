@@ -18,13 +18,19 @@ class SchedulingConfigTest {
             new ApplicationContextRunner().withUserConfiguration(SchedulingConfig.class);
 
     @Test
-    void 프로퍼티가_없으면_스케줄링이_켜진다() {
-        runner.run(context -> assertThat(context).hasSingleBean(ScheduledAnnotationBeanPostProcessor.class));
+    void prod_프로필에서_프로퍼티가_없으면_스케줄링이_켜진다() {
+        runner.withPropertyValues("spring.profiles.active=prod")
+                .run(context -> assertThat(context).hasSingleBean(ScheduledAnnotationBeanPostProcessor.class));
+    }
+
+    @Test
+    void prod_프로필이_아니면_스케줄링이_꺼진다() {
+        runner.run(context -> assertThat(context).doesNotHaveBean(ScheduledAnnotationBeanPostProcessor.class));
     }
 
     @Test
     void scheduling_enabled가_false면_스케줄링이_꺼진다() {
-        runner.withPropertyValues("scheduling.enabled=false")
+        runner.withPropertyValues("spring.profiles.active=prod", "scheduling.enabled=false")
                 .run(context -> assertThat(context).doesNotHaveBean(ScheduledAnnotationBeanPostProcessor.class));
     }
 }

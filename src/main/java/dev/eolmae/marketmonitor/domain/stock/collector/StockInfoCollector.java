@@ -7,6 +7,7 @@ import dev.eolmae.marketmonitor.common.exception.ErrorCode;
 import dev.eolmae.marketmonitor.common.exception.EscalateException;
 import dev.eolmae.marketmonitor.common.util.Strings;
 import dev.eolmae.marketmonitor.domain.stock.client.KiwoomApiClient;
+import dev.eolmae.marketmonitor.domain.stock.client.NextradeStockListClient;
 import dev.eolmae.marketmonitor.domain.stock.dto.StockInfoRequest;
 import dev.eolmae.marketmonitor.domain.stock.dto.StockInfoResponse;
 import dev.eolmae.marketmonitor.domain.stock.entity.IndustryInfo;
@@ -39,6 +40,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 public class StockInfoCollector {
 
     private final KiwoomApiClient kiwoomApiClient;
+    private final NextradeStockListClient nextradeStockListClient;
     private final StockInfoRepository stockInfoRepository;
     private final IndustryInfoRepository industryInfoRepository;
     private final StockInfoCacheService stockInfoCacheService;
@@ -60,6 +62,8 @@ public class StockInfoCollector {
         int fetchedCount = fetchedStocks.size();
 
         Map<String, IndustryInfo> industryByName = syncIndustryInfo(fetchedStocks.values());
+        // null이면 이번에는 NXT 거래 가능 여부를 알 수 없다는 뜻이라 기존 값을 그대로 둔다.
+        Set<String> nxtStockCodes = resolveNxtStockCodes(fetchedStocks.values());
 
         for (StockInfo existing : stockInfoRepository.findAll()) {
             FetchStockInfo fetched = fetchedStocks.remove(existing.getStockCode());
@@ -78,7 +82,8 @@ public class StockInfoCollector {
                     fetched.marketCode(),
                     industryId(fetched, industryByName),
                     fetched.listCount(),
-                    fetched.lastPrice());
+                    fetched.lastPrice(),
+                    nxtStockCodes == null ? existing.isNxtEnabled() : nxtStockCodes.contains(existing.getStockCode()));
         }
 
         // DB에 없던 신규 종목
@@ -90,7 +95,8 @@ public class StockInfoCollector {
                         fetched.marketCode(),
                         industryId(fetched, industryByName),
                         fetched.listCount(),
-                        fetched.lastPrice()))
+                        fetched.lastPrice(),
+                        nxtStockCodes != null && nxtStockCodes.contains(fetched.stockCode())))
                 .toList();
         stockInfoRepository.saveAllAndFlush(newStocks);
         List<String> newOrdinaryStockCodes = newStocks.stream()
@@ -104,7 +110,32 @@ public class StockInfoCollector {
         // 있다 — 그래서 evict는 이 트랜잭션이 커밋된 뒤로 미룬다.
         evictCacheAfterCommit();
 
-        log.info("종목 정보 동기화 완료: 조회 종목 수={}", fetchedCount);
+        log.info(
+                "종목 정보 동기화 완료: 조회 종목 수={}, NXT 거래 가능={}",
+                fetchedCount,
+                nxtStockCodes == null ? "알 수 없음(기존 값 유지)" : nxtStockCodes.size());
+    }
+
+    /**
+     * NXT 거래 가능 종목 코드를 정한다. 키움 응답에 nxtEnable "Y"가 있으면 그것을 쓰고, 하나도 없으면(응답에 필드가 없는
+     * 경우 등) NEXTRADE 홈페이지의 편입 종목 목록으로 대신한다. 둘 다 안 되면 null을 돌려주고, 호출부는 기존 값을 유지한다.
+     */
+    private Set<String> resolveNxtStockCodes(Iterable<FetchStockInfo> fetchedStocks) {
+        Set<String> kiwoomNxtCodes = new HashSet<>();
+        for (FetchStockInfo fetched : fetchedStocks) {
+            if (fetched.nxtEnabled()) {
+                kiwoomNxtCodes.add(fetched.stockCode());
+            }
+        }
+        if (!kiwoomNxtCodes.isEmpty()) {
+            return kiwoomNxtCodes;
+        }
+        try {
+            return nextradeStockListClient.fetchTradableStockCodes();
+        } catch (Exception e) {
+            log.warn("NEXTRADE 편입 종목 조회 실패, NXT 거래 가능 여부는 기존 값을 유지한다: {}", e.getMessage());
+            return null;
+        }
     }
 
     private Map<String, IndustryInfo> syncIndustryInfo(Iterable<FetchStockInfo> fetchedStocks) {
@@ -191,7 +222,8 @@ public class StockInfoCollector {
                             item.marketCode(),
                             Strings.trimToEmpty(item.upName()),
                             KiwoomValueParser.parseLong(item.listCount()),
-                            KiwoomValueParser.parseBigDecimal(item.lastPrice())));
+                            KiwoomValueParser.parseBigDecimal(item.lastPrice()),
+                            "Y".equals(Strings.trimToEmpty(item.nxtEnable()))));
         }
 
         log.debug("종목 정보 시장별 동기화 완료: market={}", market);
@@ -205,7 +237,8 @@ public class StockInfoCollector {
             String marketCode,
             String categoryName,
             Long listCount,
-            BigDecimal lastPrice) {}
+            BigDecimal lastPrice,
+            boolean nxtEnabled) {}
 
     private enum MrktTp {
         KOSPI("0"),

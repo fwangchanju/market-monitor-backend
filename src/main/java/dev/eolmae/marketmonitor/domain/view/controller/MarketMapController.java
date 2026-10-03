@@ -6,6 +6,7 @@ import dev.eolmae.marketmonitor.domain.custom.service.CustomScaleService;
 import dev.eolmae.marketmonitor.domain.custom.service.CustomSectorService;
 import dev.eolmae.marketmonitor.domain.custom.service.CustomValueTierThresholdService;
 import dev.eolmae.marketmonitor.domain.view.dto.MarketMapResponse;
+import dev.eolmae.marketmonitor.domain.view.enums.ChangeRateBasis;
 import dev.eolmae.marketmonitor.domain.view.enums.MarketQuery;
 import dev.eolmae.marketmonitor.domain.view.service.MarketMapQueryService;
 import java.time.LocalDateTime;
@@ -35,10 +36,15 @@ public class MarketMapController {
             @RequestParam MarketQuery market,
             @RequestParam boolean isCustom,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-                    LocalDateTime snapshotTime) {
+                    LocalDateTime snapshotTime,
+            @RequestParam(defaultValue = "false") boolean nxtOnly,
+            @RequestParam(defaultValue = "daily") String basis) {
+        // nxtOnly는 거래소 분류와 MARKETRY(내 분류) 모두에서 NXT 거래 가능 종목만 남긴다.
+        // basis=afterHours면 등락률을 그날 정규장 종가 대비로 계산한다(15:40 이후, 오늘 스냅샷에서만 적용).
+        ChangeRateBasis changeRateBasis = ChangeRateBasis.parse(basis);
         return isCustom
-                ? marketMapQueryService.getCustomMarketMap(market, snapshotTime)
-                : marketMapQueryService.getDefaultMarketMap(market, snapshotTime);
+                ? marketMapQueryService.getCustomMarketMap(market, snapshotTime, nxtOnly, changeRateBasis)
+                : marketMapQueryService.getDefaultMarketMap(market, snapshotTime, nxtOnly, changeRateBasis);
     }
 
     @GetMapping("/value-tiers")

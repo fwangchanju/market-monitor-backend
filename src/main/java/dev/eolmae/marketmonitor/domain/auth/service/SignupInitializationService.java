@@ -1,13 +1,11 @@
 package dev.eolmae.marketmonitor.domain.auth.service;
 
 import dev.eolmae.marketmonitor.common.event.UserSignedUpEvent;
-import dev.eolmae.marketmonitor.domain.custom.entity.CustomScaleThreshold;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomSector;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomStockAlias;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomStockSector;
 import dev.eolmae.marketmonitor.domain.custom.entity.CustomValueTierThreshold;
 import dev.eolmae.marketmonitor.domain.custom.entity.UserPreference;
-import dev.eolmae.marketmonitor.domain.custom.repository.CustomScaleThresholdRepository;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomSectorRepository;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomStockAliasRepository;
 import dev.eolmae.marketmonitor.domain.custom.repository.CustomStockSectorRepository;
@@ -35,11 +33,10 @@ public class SignupInitializationService {
     private final CustomSectorRepository customSectorRepository;
     private final CustomStockSectorRepository customStockSectorRepository;
     private final CustomStockAliasRepository customStockAliasRepository;
-    private final CustomScaleThresholdRepository customScaleThresholdRepository;
     private final CustomValueTierThresholdRepository customValueTierThresholdRepository;
     private final UserPreferenceRepository userPreferenceRepository;
 
-    /** 템플릿 계정(user_id = 1)의 커스텀 데이터를 신규 사용자에게 복제한다. 스냅샷 이력은 복제하지 않는다. */
+    /** 템플릿 계정(user_id = 1)의 업종 분류, 종목 배정, 별칭, 시가총액 구간을 신규 사용자에게 복제한다. 스냅샷 이력, 저장 설정, 색상 구간은 복제하지 않는다. */
     @EventListener
     @Transactional
     public void onUserSignedUp(UserSignedUpEvent event) {
@@ -63,10 +60,6 @@ public class SignupInitializationService {
                 .toList());
         customStockAliasRepository.saveAll(customStockAliasRepository.findAllByIdUserId(TEMPLATE_USER_ID).stream()
                 .map(source -> CustomStockAlias.create(userId, source.getStockCode(), source.getAlias()))
-                .toList());
-        customScaleThresholdRepository.saveAll(customScaleThresholdRepository.findAllByUserId(TEMPLATE_USER_ID).stream()
-                .map(source -> CustomScaleThreshold.create(
-                        userId, source.getThresholdPercent(), source.getColor(), source.getColorLabel()))
                 .toList());
         customValueTierThresholdRepository.saveAll(
                 customValueTierThresholdRepository.findAllByUserIdOrderByThresholdValueAsc(TEMPLATE_USER_ID).stream()
@@ -96,10 +89,7 @@ public class SignupInitializationService {
     }
 
     private void copyPreference(Long userId) {
-        UserPreference preference = UserPreference.createEmpty(userId);
-        userPreferenceRepository
-                .findById(TEMPLATE_USER_ID)
-                .ifPresent(template -> preference.overwrite(template.getPayload()));
-        userPreferenceRepository.save(preference);
+        // 설정과 색상 구간은 템플릿에서 복제하지 않는다 — 비어 있으면 화면이 코드의 기본값(비로그인과 같은 값)을 쓴다.
+        userPreferenceRepository.save(UserPreference.createEmpty(userId));
     }
 }

@@ -172,12 +172,13 @@ V1을 고치면 운영 DB의 checksum과 달라져 앱이 기동하지 않는다
 |---|---|
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google 로그인 |
 | `AUTH_JWT_SECRET` | 토큰 서명 키, 32바이트 이상. **바꾸면 전원 로그아웃** |
-| `OWNER_USER_ID` | 텔레그램 캡처·캡션을 누구의 데이터로 만들지 |
-| `RENDERER_OWNER_CAPTURE_ENABLED` | `true`면 렌더러에 소유자 캡처 토큰을 넘긴다 |
 | `TUNNEL_TOKEN` | Cloudflare Tunnel 토큰. nginx 배포 때 cloudflared 컨테이너에만 전달한다 |
 
 환경변수는 컨테이너를 새로 만들 때만 읽힌다. 파일을 고친 뒤 배포(또는 `docker compose up -d`)해야 반영된다.
 로그인 복귀 주소는 `application-prod.properties`의 `market-monitor.base-url`을 따른다.
+비밀이 아닌 운영 설정은 env 파일에 두지 않는다. 소유자 계정(`market-monitor.owner-user-id`)과 소유자 캡처 여부
+(`renderer.owner-capture-enabled`)는 `application-prod.properties`에, 렌더러가 여는 주소(`CAPTURE_URL`)는
+`infra/renderer-docker-compose.yml`에 있다.
 
 Google Cloud 콘솔(Google Auth Platform): 앱은 게시(프로덕션) 상태다. 요청 범위가 `openid email profile`
 뿐이라 사용자 수 한도와 심사가 없다. 도메인을 바꾸면 리디렉션 URI와 브랜딩 링크를 같이 고친다

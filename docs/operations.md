@@ -175,8 +175,8 @@ V1을 고치면 운영 DB의 checksum과 달라져 앱이 기동하지 않는다
 | `TUNNEL_TOKEN` | Cloudflare Tunnel 토큰. nginx 배포 때 cloudflared 컨테이너에만 전달한다 |
 
 환경변수는 컨테이너를 새로 만들 때만 읽힌다. 파일을 고친 뒤 배포(또는 `docker compose up -d`)해야 반영된다.
-로그인 복귀 주소는 `application-prod.properties`의 `market-monitor.base-url`을 따른다.
-비밀이 아닌 운영 설정은 env 파일에 두지 않는다. 소유자 계정(`market-monitor.owner-user-id`)과 소유자 캡처 여부
+로그인 복귀 주소는 `application-prod.properties`의 `marketry.base-url`을 따른다.
+비밀이 아닌 운영 설정은 env 파일에 두지 않는다. 소유자 계정(`marketry.owner-user-id`)과 소유자 캡처 여부
 (`renderer.owner-capture-enabled`)는 `application-prod.properties`에, 렌더러가 여는 주소(`CAPTURE_URL`)는
 `infra/renderer-docker-compose.yml`에 있다.
 

@@ -9,8 +9,8 @@
 ### 최상위
 
 ```
-dev.eolmae.marketmonitor/
- ├─ MarketMonitorApplication   메인 클래스만
+dev.eolmae.marketry/
+ ├─ MarketryApplication        메인 클래스만
  ├─ config/    앱 전역 Spring 배선(@Configuration 빈)
  ├─ handler/   앱 전역 예외 처리(@RestControllerAdvice)
  ├─ runner/    앱 라이프사이클 훅(ApplicationRunner/CommandLineRunner)

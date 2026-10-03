@@ -9,7 +9,7 @@ plugins {
 
 group = 'dev.eolmae'
 version = '0.0.1-SNAPSHOT'
-description = 'market-monitor'
+description = 'marketry'
 
 java {
 	toolchain {

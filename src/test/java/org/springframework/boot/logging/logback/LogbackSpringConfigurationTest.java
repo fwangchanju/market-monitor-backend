@@ -9,7 +9,7 @@ import ch.qos.logback.core.rolling.RollingFileAppender;
 import ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy;
 import ch.qos.logback.core.status.Status;
 import ch.qos.logback.core.util.FileSize;
-import dev.eolmae.marketmonitor.common.logging.ThrowableFilter;
+import dev.eolmae.marketry.common.logging.ThrowableFilter;
 import java.net.URL;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;

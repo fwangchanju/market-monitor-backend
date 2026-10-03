@@ -4,10 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dev.eolmae.marketmonitor.domain.auth.enums.Role;
 import dev.eolmae.marketmonitor.domain.auth.properties.AuthProperties;
 import dev.eolmae.marketmonitor.domain.auth.service.AppJwtService;
 import dev.eolmae.marketmonitor.domain.auth.service.AuthTokenFilter;
+import dev.eolmae.marketmonitor.domain.auth.service.AuthenticatedUserPrincipal;
 import dev.eolmae.marketmonitor.domain.auth.service.OriginCheckFilter;
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
@@ -76,6 +79,56 @@ class AuthConfigurationTest {
         }
     }
 
+    @Test
+    void 약칭_수정은_관리자만_허용한다() throws Exception {
+        try (AnnotationConfigApplicationContext context =
+                new AnnotationConfigApplicationContext(SecurityTestConfig.class)) {
+            FilterChainProxy filterChainProxy = new FilterChainProxy(context.getBean(SecurityFilterChain.class));
+            AppJwtService appJwtService = context.getBean(AppJwtService.class);
+            String userToken = appJwtService.issueAccessToken(new AuthenticatedUserPrincipal(1L, Role.USER));
+            String adminToken = appJwtService.issueAccessToken(new AuthenticatedUserPrincipal(2L, Role.ADMIN));
+            String aliasPath = "/api/custom/stock-sectors/005930/alias";
+
+            assertThat(statusOfWithToken(filterChainProxy, "PATCH", aliasPath, null))
+                    .isEqualTo(401);
+            assertThat(statusOfWithToken(filterChainProxy, "PATCH", aliasPath, userToken))
+                    .isEqualTo(403);
+            assertThat(statusOfWithToken(filterChainProxy, "DELETE", aliasPath, userToken))
+                    .isEqualTo(403);
+            assertThat(statusOfWithToken(filterChainProxy, "PATCH", aliasPath, adminToken))
+                    .isEqualTo(200);
+        }
+    }
+
+    @Test
+    void 약칭이_아닌_커스텀_API는_일반_사용자도_허용한다() throws Exception {
+        try (AnnotationConfigApplicationContext context =
+                new AnnotationConfigApplicationContext(SecurityTestConfig.class)) {
+            FilterChainProxy filterChainProxy = new FilterChainProxy(context.getBean(SecurityFilterChain.class));
+            String userToken = context.getBean(AppJwtService.class)
+                    .issueAccessToken(new AuthenticatedUserPrincipal(1L, Role.USER));
+
+            assertThat(statusOfWithToken(filterChainProxy, "PUT", "/api/custom/stock-sectors/005930", userToken))
+                    .isEqualTo(200);
+        }
+    }
+
+    // 쓰기 요청이라 허용된 Origin을 넣고, 로그인 쿠키(mm_access)로 사용자를 흉내 낸다.
+    private int statusOfWithToken(FilterChainProxy filterChainProxy, String method, String path, String accessToken)
+            throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest(method, path);
+        request.setServletPath(path);
+        request.addHeader("Origin", "http://localhost");
+        if (accessToken != null) {
+            request.setCookies(new Cookie("mm_access", accessToken));
+        }
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filterChainProxy.doFilter(request, response, new MockFilterChain());
+
+        return response.getStatus();
+    }
+
     private int statusOf(FilterChainProxy filterChainProxy, String method, String path, String origin)
             throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest(method, path);
@@ -96,7 +149,9 @@ class AuthConfigurationTest {
 
         @Bean
         AuthProperties authProperties() {
-            return new AuthProperties();
+            AuthProperties properties = new AuthProperties();
+            properties.setJwtSecret("test-jwt-secret-test-jwt-secret-test-jwt-secret");
+            return properties;
         }
 
         @Bean

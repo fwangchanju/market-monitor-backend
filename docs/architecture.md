@@ -60,7 +60,7 @@ REST API (화면)      domain/notification
 보장할 수 없기 때문이다. 섹터 등락률은 저장하지 않고 조회 시점에 종목 행에서 합산한다.
 
 사용자 범위: `domain/custom`의 모든 조회·변경은 인증 주체의 `userId`로 범위를 건다
-(`CurrentUser`). 로그인 없이 도는 경로(텔레그램 캡션)는 `market-monitor.owner-user-id`의 데이터를 쓴다.
+(`CurrentUser`). 로그인 없이 도는 경로(텔레그램 캡션)는 `marketry.owner-user-id`의 데이터를 쓴다.
 
 ---
 

@@ -4,6 +4,8 @@ services:
     container_name: market-monitor-renderer
     restart: always
     init: true
+    environment:
+      CAPTURE_URL: https://marketry.co.kr
     env_file:
       - ${HOME}/env/market-monitor.env
     ports:

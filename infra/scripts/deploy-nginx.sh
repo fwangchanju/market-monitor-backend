@@ -14,8 +14,8 @@ echo "=== [nginx] Pulling image (tag: $IMAGE_TAG) ==="
 docker pull "ghcr.io/$GHCR_USER/market-monitor-nginx:$IMAGE_TAG"
 
 echo "=== [nginx] Restarting nginx ==="
-docker compose -f "$NGINX_COMPOSE_FILE" down
-docker compose -f "$NGINX_COMPOSE_FILE" up -d
+docker compose -f "$NGINX_COMPOSE_FILE" --env-file "$ENV_FILE" down
+docker compose -f "$NGINX_COMPOSE_FILE" --env-file "$ENV_FILE" up -d
 
 echo "=== [nginx] 로컬 이미지 정리 ==="
 docker image prune -f

@@ -2,6 +2,9 @@
 
 배포나 롤백이 필요하면 코드부터 뒤지지 말고 이 문서를 먼저 본다.
 
+서버 이관을 준비하고 있다. 계획과 체크리스트는 `docs/server-migration.md`에 있고, 이관이 끝나기 전까지
+이 문서는 지금 구성을 기준으로 한다.
+
 ---
 
 ## 구성
@@ -13,6 +16,11 @@
 | `ghcr.io/fwangchanju/market-monitor` | 서버 1 | Spring 애플리케이션 |
 | `ghcr.io/fwangchanju/market-monitor-nginx` | 서버 1 | nginx + 프론트 정적 자산이 구워져 있음 |
 | `ghcr.io/fwangchanju/market-monitor-renderer` | 서버 2 | 스크린샷 렌더러 |
+
+서비스 주소는 `marketry.co.kr`이다. Cloudflare Tunnel로 받으며, 서버 1의 `market-monitor-cloudflared` 컨테이너가
+`market-monitor-nginx:80`으로 넘긴다(`infra/nginx-docker-compose.yml`). 이 경로는 http라 nginx가 `X-Forwarded-Proto`를
+`https`로 고정하고, 실제 접속자 IP는 `CF-Connecting-IP`에서 가져온다. 옛 주소 `eolmae.duckdns.org`는 새 주소로 301
+리디렉트만 한다.
 
 nginx 이미지는 프론트 레포가 만든 `market-monitor-assets:latest`를 `FROM`으로 가져다 굽는다
 (`containers/nginx/Dockerfile`). 프론트 코드는 nginx 이미지 안에 박히므로, 프론트를 배포하려면
@@ -166,6 +174,7 @@ V1을 고치면 운영 DB의 checksum과 달라져 앱이 기동하지 않는다
 | `AUTH_JWT_SECRET` | 토큰 서명 키, 32바이트 이상. **바꾸면 전원 로그아웃** |
 | `OWNER_USER_ID` | 텔레그램 캡처·캡션을 누구의 데이터로 만들지 |
 | `RENDERER_OWNER_CAPTURE_ENABLED` | `true`면 렌더러에 소유자 캡처 토큰을 넘긴다 |
+| `TUNNEL_TOKEN` | Cloudflare Tunnel 토큰. nginx 배포 때 cloudflared 컨테이너에만 전달한다 |
 
 환경변수는 컨테이너를 새로 만들 때만 읽힌다. 파일을 고친 뒤 배포(또는 `docker compose up -d`)해야 반영된다.
 로그인 복귀 주소는 `application-prod.properties`의 `market-monitor.base-url`을 따른다.

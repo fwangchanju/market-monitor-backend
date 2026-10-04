@@ -254,6 +254,8 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 - [ ] 레포에 남은 옛 구성 정리: 오라클용 compose·배포 스크립트·워크플로 단계, `~/repo/market-monitor-backend` 경로,
       DuckDNS·Let's Encrypt nginx 블록과 인증서 설정, 렌더러 3000 포트 공개, `market-monitor-*` 컨테이너·DB 이름 기본값,
       `CLAUDE.md`와 `.claude/settings.json`의 옛 로컬 절대 경로
+- [ ] 이미지 빌드에서 `linux/amd64` 제거 여부 결정. 맥미니 장애 때 클라우드 서버로 급히 옮길 여지를 남기려면 둔다.
+      빌드 머신 플랫폼에서 빌드하는 구조(`--platform=$BUILDPLATFORM`)는 Actions 러너가 amd64라 그대로 둔다
 - [ ] 결정 사항을 `decisions.md`로 회수
 
 ---

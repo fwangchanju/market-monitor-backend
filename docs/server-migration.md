@@ -15,9 +15,9 @@
 만지지 않는다. 사용자가 실행할 명령을 안내하고, 레포 변경은 PR로 한다.
 
 - 1단계(도메인·터널), 2단계(이름 변경)는 끝났다. 남은 건 Google 브랜딩, 도메인 자동 연장 확인
-- 3단계 코드는 배포 워크플로만 남았다. 맥미니 구성 파일과 게이트·백업 스크립트는 `infra/macmini/`에 있다
+- 3단계 코드는 배포 워크플로만 남았다. 맥미니 구성 파일과 게이트·백업 스크립트는 `infra/prod/`에 있다
 - 4단계 맥미니 기반은 계정 분리, Colima 부팅 기동, SSH, Tailscale 데몬, 에이전트 제한, GitHub 토큰까지 됐다.
-  남은 건 `infra/macmini/README.md` 순서의 설치, Tailscale 태그·ACL, 외부 감시, 개발 환경 정리
+  남은 건 `infra/prod/README.md` 순서의 설치, Tailscale 태그·ACL, 외부 감시, 개발 환경 정리
 - 5단계(키움 프록시)는 시작 전이다
 
 다음 순서:
@@ -27,7 +27,7 @@
 3. 배포 워크플로 PR: Actions가 Tailscale(`tag:ci`, 임시 노드)로 붙어 `ssh deploy@macmini "deploy <target> <tag>"`만 보낸다.
    `:deployed`/`:previous` 포인터 갱신과 원복은 지금 `release.yml`처럼 워크플로가 맡는다. 이관 기간에는 오라클 배포 경로도 남긴다.
    Tailscale OAuth 클라이언트와 CI용 SSH 키는 사용자가 만들어 시크릿에 넣는다
-4. 맥미니 설치(`infra/macmini/README.md`), 앱은 띄우지 않는다
+4. 맥미니 설치(`infra/prod/README.md`), 앱은 띄우지 않는다
 5. 이관 당일(6단계)
 
 소유자가 웹에서 할 일: `Migration guard` 필수 체크 등록과 bypass 비우기, Google 브랜딩 수정, 가비아 자동 연장 확인.
@@ -267,11 +267,11 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 - [x] `kiwoomRestClient` 프록시 설정(`KIWOOM_PROXY_HOST`, `KIWOOM_PROXY_PORT`. 값이 비면 직접 연결)
 - [x] 파괴적 마이그레이션 CI 검사(`ci.yml`의 `Migration guard` job). 로직은 PR에서 고칠 수 없게 워크플로 안에 둔다
 - [ ] GitHub 브랜치 규칙에 `Migration guard`를 필수 체크로 등록하고 bypass 비움(소유자가 웹에서)
-- [x] 맥미니 `marketry-network` 서브넷 고정 생성 스크립트(`infra/macmini/setup-network.sh`, `172.30.0.0/24`)
-- [x] 맥미니용 compose(`infra/macmini/compose.yml`, `nginx.conf`, `env.template`): cloudflared, 호스트 포트 없음, 렌더러 같은 네트워크·메모리 1GB,
+- [x] 맥미니 `marketry-network` 서브넷 고정 생성 스크립트(`infra/prod/setup-network.sh`, `172.30.0.0/24`)
+- [x] 맥미니용 compose(`infra/prod/compose.yml`, `nginx.conf`, `env.template`): cloudflared, 호스트 포트 없음, 렌더러 같은 네트워크·메모리 1GB,
       nginx 별칭 `marketry.co.kr`로 렌더러 내부 접근. 이미지 이름은 이관 뒤 정리 때 바꾼다
 - [ ] 배포 워크플로: Tailscale 액션(`tag:ci`, 임시 노드), 대상 호스트를 맥미니로, SSH는 동작 이름과 태그만 전달
-- [x] 게이트 스크립트, 일일 백업, 개발 스냅샷, 로컬 DB 교체 스크립트의 원본을 레포에 둔다(`infra/macmini/`, `infra/local/restore-snapshot.sh`. 설치는 손으로)
+- [x] 게이트 스크립트, 일일 백업, 개발 스냅샷, 로컬 DB 교체 스크립트의 원본을 레포에 둔다(`infra/prod/`, `infra/local/restore-snapshot.sh`. 설치는 손으로)
 
 ### 4. 맥미니 기반
 
@@ -286,8 +286,8 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 - [ ] Tailscale `tag:macmini` 지정과 ACL 적용(5단계와 함께)
 - [x] 원격 로그인은 `admin`, `deploy`만 허용. 비밀번호·root 로그인 끔, `admin`은 소유자 PC 키로 접속
 - [x] `marketry-network` 만들기 전에 `172.30.0.0/24`가 Colima VM 경로·Docker 기본 브리지·집 공유기·Tailscale 대역과 겹치지 않는지 확인.
-      겹치면 `setup-network.sh`와 `infra/macmini/nginx.conf`의 값을 함께 바꾼다
-- [ ] `infra/macmini/README.md` 순서로 설치: 네트워크 생성, env 파일, GHCR 로그인, 게이트·백업 설치(`~/Optional/bin`),
+      겹치면 `setup-network.sh`와 `infra/prod/nginx.conf`의 값을 함께 바꾼다
+- [ ] `infra/prod/README.md` 순서로 설치: 네트워크 생성, env 파일, GHCR 로그인, 게이트·백업 설치(`~/Optional/bin`),
       `deploy`의 `authorized_keys`에 CI 키를 강제 명령으로 등록, 백업 LaunchDaemon. **앱은 이관 당일 전까지 띄우지 않는다**(수집·텔레그램 중복)
 - [ ] 일일 백업 예약 작업, R2 업로드, 개발 스냅샷, 공유 폴더 권한
 - [ ] 외부 감시 등록

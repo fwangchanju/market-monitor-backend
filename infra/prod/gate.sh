@@ -13,7 +13,7 @@ export PATH="$HOME/Optional/bin:$HOME/Optional/lima/bin:/usr/bin:/bin:/usr/sbin:
 export DOCKER_HOST="unix:///Users/deploy/.colima/default/docker.sock"
 
 REPO_DIR="$HOME/Projects/marketry/marketry-backend"
-COMPOSE_FILE="$REPO_DIR/infra/macmini/compose.yml"
+COMPOSE_FILE="$REPO_DIR/infra/prod/compose.yml"
 ENV_FILE="${MARKETRY_ENV_FILE:-$HOME/env/marketry.env}"
 BACKUP_DIR="$HOME/backups/predeploy"
 KEEP_DUMPS=5

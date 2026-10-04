@@ -8,7 +8,7 @@
 1. 네트워크를 만든다. 서브넷이 `nginx.conf`의 `set_real_ip_from`과 같아야 한다.
 
    ```sh
-   cd ~/Projects/marketry/marketry-backend/infra/macmini
+   cd ~/Projects/marketry/marketry-backend/infra/prod
    ./setup-network.sh
    ```
 

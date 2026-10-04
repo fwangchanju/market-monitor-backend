@@ -1,4 +1,4 @@
-FROM ghcr.io/fwangchanju/market-monitor-assets:latest AS assets
+FROM --platform=$BUILDPLATFORM ghcr.io/fwangchanju/market-monitor-assets:latest AS assets
 
 FROM nginx:alpine
 LABEL org.opencontainers.image.source=https://github.com/fwangchanju/market-monitor-backend

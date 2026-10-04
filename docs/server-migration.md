@@ -68,6 +68,28 @@
 - 개발 계정 자동 로그인을 켠 채 재부팅해 LaunchDaemon이 Colima를 띄우는 것을 확인했다. 원격 접속(RustDesk)이 개발 계정
   로그인에 기대고 있어 자동 로그인은 끄지 않는다
 
+#### 맥미니 관리 접속과 에이전트 제한 (2026-10-05)
+
+- **SSH:** `/etc/ssh/sshd_config.d/010-marketry.conf`에 `PasswordAuthentication no`, `KbdInteractiveAuthentication no`,
+  `PermitRootLogin no`. macOS 기본 파일(`100-macos.conf`)보다 먼저 읽히게 `010`으로 시작한다. 원격 로그인 허용 계정은
+  `admin`, `deploy`. 원격 사용자 디스크 전체 접근은 끈다. `admin`은 소유자 PC의 키로만 들어온다
+- **Tailscale:** 오픈소스 `tailscaled`만 로그인 전에 뜬다(App Store판과 Standalone판은 로그인 필요). `admin` 홈에 공식 Go를 받아
+  `go install tailscale.com/cmd/tailscale{,d}@latest`로 빌드하고 `sudo tailscaled install-system-daemon`으로 설치했다.
+  root로 도는 프로그램이라 개발 계정 소유 Homebrew의 Go나 tailscale을 쓰지 않는다. CLI도 `/usr/local/bin`에 root 소유로 둔다.
+  기기 이름 `macmini`, 키 만료 끔. 맥미니 쪽 MagicDNS는 쓰지 않는다(프록시는 IP로 지정)
+- **원격 화면:** RustDesk는 개발 계정 세션에서 쓴다. 설치 때 깔린 root 서비스(`com.carriez.RustDesk_service`)가 개발 계정 소유
+  앱 파일을 root로 실행하는 구조라 `/Library/LaunchDaemons.disabled/`로 옮겨 껐다. 앱 파일 소유자 변경은 macOS 앱 관리 보호에
+  막힌다. 로그인 화면에서의 원격 접속은 잃는데, 개발 계정 자동 로그인을 끄지 않는 한 문제없다. Tailscale IP로 직접 접속하려면
+  RustDesk의 직접 IP 접속을 켠다
+- **`admin`은 화면에 로그인하지 않는다.** `/Library/LaunchAgents`의 사용자 앱이 `admin` 권한으로 같이 뜨기 때문이다.
+  터미널 작업은 SSH로, 화면 설정은 개발 계정 화면에서 관리자 인증 창으로 한다
+- **에이전트 제한:** `/Library/Application Support/ClaudeCode/managed-settings.json`(root 소유)에 `sudo`, `su`, `login`, `dscl`,
+  `dseditgroup`, `ssh`, `scp`, `sftp`, `osascript` 실행과 `deploy`·`admin` 홈 읽기를 deny로 두고 `disableBypassPermissionsMode`를 건다.
+  Codex는 `/etc/codex/requirements.toml`에서 승인 정책을 `untrusted`, `on-request`로, 샌드박스를 `read-only`, `workspace-write`로 제한한다
+- **GitHub 인증:** 개발 계정은 fine-grained 토큰(두 레포, Actions·Contents·Pull requests 쓰기, Commit statuses 읽기, 만료 없음)을
+  `gh`에 넣고 `gh auth setup-git`으로 git도 쓰게 했다. 원격 주소는 HTTPS다. SSH 키는 권한 범위를 좁힐 수 없어서 맥미니 키를
+  GitHub 계정에서 지웠다. 워크플로 파일 수정이 담긴 푸시는 GitHub가 거부한다
+
 컨테이너별 메모리 제한은 렌더러에만 1GB로 건다. 6GB가 차면 리눅스가 아무 프로세스나 종료할 수 있는데,
 메모리가 불어날 만한 건 Chromium을 띄우는 렌더러뿐이다. 제한이 있으면 넘쳤을 때 렌더러만 죽고 재시작한다.
 지금 서버에서 평일 캡처를 거친 뒤 잰 최댓값(`memory.peak`)이 약 558MB였고 그 1.5~2배로 잡았다.
@@ -228,17 +250,20 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 - [x] FileVault 끄기(복호화에 시간이 걸린다)
 - [x] `admin` 생성 후 개발 계정을 일반 계정으로 내림. Homebrew는 개발 계정 소유로 두고 `deploy`는 쓰지 않는다
 - [x] `deploy` 생성, 홈 `700`
-- [x] `pmset` 잠자기 끔, 정전 후 자동 부팅, `chanju` 자동 로그인, 업데이트 자동 설치 끔
+- [x] `pmset` 잠자기 끔, 정전 후 자동 부팅, 개발 계정 자동 로그인, macOS 업데이트 자동 설치 끔
 - [x] `deploy`에 Colima 설치(Homebrew 없이 `~/Optional`), LaunchDaemon 등록
 - [x] `deploy` 레포 clone(읽기 전용 Deploy key)
 - [x] 재부팅 뒤 LaunchDaemon이 `deploy`의 Colima를 띄우는지 확인(개발 계정 자동 로그인은 켠 채로)
-- [ ] `tailscaled` 데몬 설치(App Store 앱 제거), `tag:macmini`
-- [ ] 원격 로그인은 `admin`, `deploy`만 허용. `deploy`는 키 로그인만, 강제 명령 설정
+- [x] `tailscaled` 데몬 설치(기존 Standalone 앱과 네트워크 확장 제거), 기기 이름 `macmini`, 키 만료 끔
+- [ ] Tailscale `tag:macmini` 지정과 ACL 적용(5단계와 함께)
+- [x] 원격 로그인은 `admin`, `deploy`만 허용. 비밀번호·root 로그인 끔, `admin`은 소유자 PC 키로 접속
+- [ ] `deploy` 배포 키 등록과 강제 명령 설정(게이트 스크립트와 함께)
 - [ ] 게이트 스크립트 설치, 배포 SSH 키 등록
 - [ ] 일일 백업 예약 작업, R2 업로드, 개발 스냅샷, 공유 폴더 권한
 - [ ] 외부 감시 등록
-- [ ] Claude Code 관리형 설정, Codex `requirements.toml`
-- [ ] GitHub 인증을 fine-grained PAT로 교체(`gh`와 git 자격증명 모두)
+- [x] Claude Code 관리형 설정, Codex `requirements.toml`
+- [x] GitHub 인증을 fine-grained PAT로 교체(`gh`와 git 자격증명 모두), 원격 주소 HTTPS, 맥미니 SSH 키는 GitHub에서 삭제
+- [x] 개발 계정 소유 앱이 root 서비스로 도는 구멍 점검(RustDesk root 서비스 끔)
 - [ ] 개발 환경: OrbStack, JDK 21, Node, 개발 DB, 로컬 실행 스크립트, 05:00 로컬 DB 교체 작업
 
 ### 5. 키움 프록시 (오라클 서버 2)

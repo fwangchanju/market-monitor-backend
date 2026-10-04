@@ -3,9 +3,14 @@ package dev.eolmae.marketry.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import dev.eolmae.marketry.common.cache.CacheKey;
+import dev.eolmae.marketry.domain.stock.properties.KiwoomProperties;
 import jakarta.persistence.EntityManager;
+import java.net.InetSocketAddress;
+import java.net.ProxySelector;
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.util.Optional;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.context.annotation.Bean;
@@ -15,6 +20,7 @@ import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
+@Slf4j
 @Configuration
 public class ApplicationConfig {
 
@@ -44,10 +50,23 @@ public class ApplicationConfig {
                 .build();
     }
 
+    // 키움 호출만 고정 IP 프록시를 거친다. 값이 없으면 직접 연결한다.
     @Bean
-    public RestClient kiwoomRestClient() {
+    public RestClient kiwoomRestClient(KiwoomProperties kiwoomProperties) {
+        Optional<InetSocketAddress> proxyAddress = kiwoomProxyAddress(kiwoomProperties);
+        if (proxyAddress.isEmpty()) {
+            return RestClient.builder()
+                    .requestFactory(requestFactory(Duration.ofSeconds(10)))
+                    .build();
+        }
+        InetSocketAddress address = proxyAddress.get();
+        log.info("키움 호출 프록시 사용: {}:{}", address.getHostString(), address.getPort());
+        HttpClient httpClient = HttpClient.newBuilder()
+                .connectTimeout(CONNECT_TIMEOUT)
+                .proxy(ProxySelector.of(address))
+                .build();
         return RestClient.builder()
-                .requestFactory(requestFactory(Duration.ofSeconds(10)))
+                .requestFactory(requestFactory(httpClient, Duration.ofSeconds(10)))
                 .build();
     }
 
@@ -67,9 +86,21 @@ public class ApplicationConfig {
                 .build();
     }
 
+    static Optional<InetSocketAddress> kiwoomProxyAddress(KiwoomProperties properties) {
+        String host = properties.proxyHost();
+        if (host == null || host.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.of(InetSocketAddress.createUnresolved(host.strip(), properties.proxyPort()));
+    }
+
     private ClientHttpRequestFactory requestFactory(Duration readTimeout) {
         HttpClient httpClient =
                 HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build();
+        return requestFactory(httpClient, readTimeout);
+    }
+
+    private ClientHttpRequestFactory requestFactory(HttpClient httpClient, Duration readTimeout) {
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
         factory.setReadTimeout(readTimeout);
         return factory;

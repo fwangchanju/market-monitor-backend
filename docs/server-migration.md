@@ -163,27 +163,31 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 
 ### 1. 도메인과 터널 (지금 서버에서 먼저)
 
-- [ ] 도메인 구매. `.kr` 계열은 국내 업체에서 사고 네임서버를 Cloudflare로 바꾼다. DNSSEC는 바꾸기 전에 끈다
-- [ ] Cloudflare Tunnel 생성, 지금 서버에 cloudflared 기동
-- [ ] Google Auth Platform의 리디렉션 URI와 브랜딩 링크를 새 도메인으로
-- [ ] `market-monitor.base-url` 변경 후 배포
-- [ ] 옛 DuckDNS 주소에서 새 도메인으로 보내는 리디렉트
-- [ ] 새 도메인으로 로그인, 화면, 텔레그램 캡처 확인
+- [x] 도메인 구매. `.kr` 계열은 국내 업체에서 사고 네임서버를 Cloudflare로 바꾼다. DNSSEC는 바꾸기 전에 끈다
+- [x] Cloudflare Tunnel 생성, 지금 서버에 cloudflared 기동
+- [x] Google Auth Platform 리디렉션 URI를 새 도메인으로
+- [ ] Google Auth Platform 브랜딩(앱 이름, 홈페이지, 개인정보처리방침, 승인된 도메인)을 새 도메인으로
+- [x] `market-monitor.base-url` 변경 후 배포
+- [x] 옛 DuckDNS 주소에서 새 도메인으로 보내는 리디렉트
+- [x] 새 도메인으로 로그인, 화면 확인. 텔레그램 캡처는 이관 뒤 6단계에서 확인한다
+- [ ] 도메인 자동 연장 확인(가비아)
 
 ### 2. 이름 변경 (맥미니 설정 전에)
 
-- [ ] GitHub에서 두 레포 이름 변경
-- [ ] 프론트 배포 워크플로의 백엔드 레포 참조 수정
-- [ ] Java 패키지와 설정 접두사 변경. 동작이 바뀌지 않는 기계적 변경이라 별도 PR로 한다
-- [ ] 문서, `CLAUDE.md`, `AGENTS.md`, `spring.application.name`, 프론트 `package.json`, 이미지 라벨의 이름 참조
+- [x] GitHub에서 두 레포 이름 변경
+- [x] 프론트 배포 워크플로의 백엔드 레포 참조 수정
+- [x] Java 패키지와 설정 접두사 변경. 동작이 바뀌지 않는 기계적 변경이라 별도 PR로 한다
+- [x] 문서, `CLAUDE.md`, `AGENTS.md`, `spring.application.name`, 프론트 `package.json`, 이미지 라벨의 이름 참조
 - [ ] 이미지, 컨테이너, DB, 서버 경로 이름은 3단계 코드 변경에서 맥미니용으로 새로 만들 때 반영한다
 
 ### 3. 코드 변경 (이관 전에 병합하고 지금 서버에 배포해 둔다)
 
-- [ ] 애플리케이션 이미지 amd64/arm64 멀티 빌드. 빌드 스테이지에 `--platform=$BUILDPLATFORM`
-- [ ] 프론트 assets 이미지, nginx 이미지, 렌더러 이미지 멀티 빌드
-- [ ] `kiwoomRestClient` 프록시 설정(값이 비면 직접 연결)
-- [ ] 파괴적 마이그레이션 CI 검사, 필수 체크로 등록하고 bypass 비움
+- [x] 애플리케이션 이미지 amd64/arm64 멀티 빌드. 빌드 스테이지에 `--platform=$BUILDPLATFORM`
+- [x] nginx 이미지, 렌더러 이미지 멀티 빌드. 프론트 assets는 정적 파일이라 nginx 빌드에서 빌드 머신 플랫폼으로 받으므로
+      멀티 빌드가 필요 없다. 최종 스테이지에 `RUN`이 없어 QEMU도 쓰지 않는다
+- [x] `kiwoomRestClient` 프록시 설정(`KIWOOM_PROXY_HOST`, `KIWOOM_PROXY_PORT`. 값이 비면 직접 연결)
+- [x] 파괴적 마이그레이션 CI 검사(`ci.yml`의 `Migration guard` job). 로직은 PR에서 고칠 수 없게 워크플로 안에 둔다
+- [ ] GitHub 브랜치 규칙에 `Migration guard`를 필수 체크로 등록하고 bypass 비움(소유자가 웹에서)
 - [ ] 맥미니 `marketry-network` 네트워크는 서브넷을 지정해서 만든다(`docker network create --subnet ...`). 다시 만들어도 대역이 바뀌지 않게 한다
 - [ ] 맥미니용 compose: cloudflared 추가, 호스트 포트 제거, 렌더러 같은 네트워크, nginx 네트워크 별칭, 렌더러 메모리 제한 1GB
 - [ ] 배포 워크플로: Tailscale 액션(`tag:ci`, 임시 노드), 대상 호스트를 맥미니로, SSH는 동작 이름과 태그만 전달
@@ -214,7 +218,8 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 - [ ] tinyproxy 설치: tailnet 주소에서만 listen, `api.kiwoom.com:443`만 허용
 - [ ] Tailscale 설치, `tag:proxy`
 - [ ] Tailscale ACL 적용(위 표)
-- [ ] 맥미니에서 프록시를 거쳐 키움 토큰 발급 확인
+- [ ] 4단계에서 맥미니 Tailscale을 정리할 때 같이 한다. 맥미니에서 `curl -x http://<서버 2 tailnet 주소>:8888 https://api.kiwoom.com`으로 통로만 먼저 확인한다
+- [ ] 프록시를 거친 키움 토큰 발급은 개발 환경에 키움 키가 없어서 이관 당일 맥미니 운영 앱으로 확인한다(6단계)
 
 ### 6. 이관 당일 (주말)
 
@@ -227,6 +232,7 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 - [ ] 터널 경로의 서비스 주소를 맥미니 nginx 컨테이너 이름(`marketry-nginx:80`)으로 바꾼다. 되돌릴 때는 원래 값으로
 - [ ] 웹 화면과 로그인 확인
 - [ ] 텔레그램 캡처 수동 발송 확인. 실제 채팅방으로 나가니 필요하면 잠시 개발자 채팅방으로 돌린다
+- [ ] 키움 토큰 발급이 프록시를 거쳐 되는지 로그로 확인
 - [ ] 스케줄러와 수집 확인
 - [ ] GitHub Actions로 맥미니에 배포 한 번 돌려 게이트, 덤프, 헬스체크 확인
 
@@ -243,6 +249,13 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 - [ ] 보관 일수 재조정(DB 크기 기준)
 - [ ] nginx `set_real_ip_from`을 맥미니 `marketry-network` 네트워크 대역 하나로 좁힌다. 지금은 대역을 몰라 사설 대역 셋을 다 열어 두었다
 - [ ] `operations.md`를 새 구성으로 고쳐 쓰고 이 파일 삭제
+- [ ] 오라클 서버 env 파일에서 `OWNER_USER_ID`, `RENDERER_OWNER_CAPTURE_ENABLED`, `CAPTURE_URL` 삭제. 텔레그램 캡처를 확인하기 전까지는
+      되돌리기용으로 남겨 둔다(이전 이미지는 이 값을 env에서 읽는다). 맥미니 env에는 처음부터 넣지 않는다
+- [ ] 레포에 남은 옛 구성 정리: 오라클용 compose·배포 스크립트·워크플로 단계, `~/repo/market-monitor-backend` 경로,
+      DuckDNS·Let's Encrypt nginx 블록과 인증서 설정, 렌더러 3000 포트 공개, `market-monitor-*` 컨테이너·DB 이름 기본값,
+      `CLAUDE.md`와 `.claude/settings.json`의 옛 로컬 절대 경로
+- [ ] 이미지 빌드에서 `linux/amd64` 제거 여부 결정. 맥미니 장애 때 클라우드 서버로 급히 옮길 여지를 남기려면 둔다.
+      빌드 머신 플랫폼에서 빌드하는 구조(`--platform=$BUILDPLATFORM`)는 Actions 러너가 amd64라 그대로 둔다
 - [ ] 결정 사항을 `decisions.md`로 회수
 
 ---

@@ -84,6 +84,7 @@ jobs:
           context: .
           file: Dockerfile
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: ghcr.io/fwangchanju/market-monitor:${{ steps.tag.outputs.sha_tag }}
           cache-from: type=gha,scope=application
           cache-to: type=gha,mode=max,scope=application
@@ -149,13 +150,14 @@ jobs:
             -t ghcr.io/fwangchanju/market-monitor:main \
             ghcr.io/fwangchanju/market-monitor:sha-${{ steps.resolve.outputs.merged_sha }}
 
-      - name: Clean up old GHCR package versions (최근 20개만 유지)
+      - name: Clean up old GHCR package versions (태그 20개 유지, main/deployed/previous 보호, 고아 매니페스트 삭제)
         if: steps.check.outputs.exists == 'true'
-        uses: actions/delete-package-versions@v5
+        uses: dataaxiom/ghcr-cleanup-action@v1
         with:
-          package-name: 'market-monitor'
-          package-type: 'container'
-          min-versions-to-keep: 20
+          package: market-monitor
+          keep-n-tagged: 20
+          exclude-tags: main,deployed,previous
+          delete-untagged: true
           token: ${{ secrets.CR_PAT }}
 
   # 수동 배포 (target=application/all: :main 배포, target=rollback: :previous 배포).
@@ -338,6 +340,7 @@ jobs:
           context: .
           file: containers/nginx/Dockerfile
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: ghcr.io/fwangchanju/market-monitor-nginx:latest
           cache-from: type=gha,scope=nginx
           cache-to: type=gha,mode=max,scope=nginx
@@ -395,6 +398,7 @@ jobs:
           context: .
           file: containers/renderer/Dockerfile
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: ghcr.io/fwangchanju/market-monitor-renderer:latest
           cache-from: type=gha,scope=renderer
           cache-to: type=gha,mode=max,scope=renderer

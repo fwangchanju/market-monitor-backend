@@ -30,3 +30,43 @@ jobs:
       # 이미 제외된다(1B-1).
       - name: spotlessCheck / compileJava / compileTestJava / test
         run: ./gradlew spotlessCheck compileJava compileTestJava test
+
+  migration-guard:
+    name: Migration guard
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # 검사 로직을 스크립트 파일이 아니라 워크플로 안에 둔다. .github/scripts/는 PR에서 고쳐 검사를
+      # 무력화할 수 있지만 워크플로 파일은 Workflows 권한 없이는 고칠 수 없다.
+      - name: Check destructive migrations
+        run: |
+          set -euo pipefail
+          base="origin/${{ github.base_ref }}"
+          files="$(git diff --name-only --diff-filter=AMR "${base}...HEAD" -- src/main/resources/flyway/ | grep -E '\.sql$' || true)"
+          if [ -z "$files" ]; then
+            echo "검사 대상 마이그레이션 SQL이 없습니다."
+            exit 0
+          fi
+          failed=0
+          while IFS= read -r file; do
+            # SQL 주석(-- 줄 주석, /* */ 블록 주석)을 지우되 줄 번호가 밀리지 않게 개행은 남긴다.
+            stripped="$(perl -0777 -pe 's{/\*.*?\*/}{ my $c = $&; $c =~ s/[^\n]//g; $c }gse; s/--[^\n]*//g' "$file")"
+            line_numbers="$(printf '%s\n' "$stripped" | grep -Eino '\b(DROP|TRUNCATE|DELETE)\b' | cut -d: -f1 | sort -un || true)"
+            for line_number in $line_numbers; do
+              echo "${file}:${line_number}:$(sed -n "${line_number}p" "$file")"
+              failed=1
+            done
+          done <<<"$files"
+          if [ "$failed" -ne 0 ]; then
+            echo "파괴적 변경(DROP, TRUNCATE, DELETE)은 PR이 아니라 소유자가 DB에서 직접 한다."
+            exit 1
+          fi
+          echo "파괴적 마이그레이션 SQL이 없습니다."

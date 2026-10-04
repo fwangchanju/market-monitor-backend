@@ -173,6 +173,7 @@ V1을 고치면 운영 DB의 checksum과 달라져 앱이 기동하지 않는다
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google 로그인 |
 | `AUTH_JWT_SECRET` | 토큰 서명 키, 32바이트 이상. **바꾸면 전원 로그아웃** |
 | `TUNNEL_TOKEN` | Cloudflare Tunnel 토큰. nginx 배포 때 cloudflared 컨테이너에만 전달한다 |
+| `KIWOOM_PROXY_HOST`, `KIWOOM_PROXY_PORT` | 키움 호출만 거치는 HTTP 프록시. 비우면 직접 연결한다(지금 서버는 비워 둔다). 포트 기본값 8888 |
 
 환경변수는 컨테이너를 새로 만들 때만 읽힌다. 파일을 고친 뒤 배포(또는 `docker compose up -d`)해야 반영된다.
 로그인 복귀 주소는 `application-prod.properties`의 `marketry.base-url`을 따른다.
@@ -209,11 +210,12 @@ config 문법 오류면 즉시 기동 실패하는 이진적 실패 모드라 �
 
 - **서버 로컬**: 배포 스크립트가 매번 "실행 중인 것 + 최근 2개"만 남기고 삭제한다.
   서버 디스크가 넉넉하지 않아 타이트하게 잡았다
-- **GHCR**: 최근 20개 버전만 유지한다
+- **GHCR**: 앱 이미지는 태그가 붙은 최근 20개만 유지한다. `:main`, `:deployed`, `:previous`는 개수와 상관없이
+  지우지 않고, 어느 태그에도 연결되지 않은 매니페스트만 지운다(`dataaxiom/ghcr-cleanup-action`)
 
-GHCR 정리는 태그가 붙어 있어도 오래된 것부터 지운다. 병합과 배포가 분리돼 있어서 배포 없이 병합만
-쌓이면 `:previous`가 가리키던 버전이 먼저 사라질 수 있다. 그러면 사고 시점에 롤백이 불가능해진다.
-20이라는 수치는 그 여유분이다. 배포 없이 application PR을 20건 넘게 쌓지 않는다.
+이미지는 amd64와 arm64를 한 태그에 같이 담는다. 서버의 `docker pull`은 자기 아키텍처를 골라 받는다.
+플랫폼별 매니페스트는 태그 없이 따로 저장되기 때문에, 버전 개수만 세는 정리 도구를 쓰면 살아 있는 이미지의
+일부가 지워져 `:main`이나 `:previous`가 깨진다. 정리 도구를 바꿀 때 이 점을 확인한다.
 
 ---
 

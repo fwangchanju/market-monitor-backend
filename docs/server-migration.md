@@ -244,7 +244,7 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 - [x] `kiwoomRestClient` 프록시 설정(`KIWOOM_PROXY_HOST`, `KIWOOM_PROXY_PORT`. 값이 비면 직접 연결)
 - [x] 파괴적 마이그레이션 CI 검사(`ci.yml`의 `Migration guard` job). 로직은 PR에서 고칠 수 없게 워크플로 안에 둔다
 - [ ] GitHub 브랜치 규칙에 `Migration guard`를 필수 체크로 등록하고 bypass 비움(소유자가 웹에서)
-- [ ] 맥미니 `marketry-network` 네트워크는 서브넷을 지정해서 만든다(`docker network create --subnet ...`). 다시 만들어도 대역이 바뀌지 않게 한다
+- [x] 맥미니 `marketry-network` 서브넷 고정 생성 스크립트(`infra/macmini/setup-network.sh`, `172.30.0.0/24`)
 - [ ] 맥미니용 compose: cloudflared 추가, 호스트 포트 제거, 렌더러 같은 네트워크, nginx 네트워크 별칭, 렌더러 메모리 제한 1GB
 - [ ] 배포 워크플로: Tailscale 액션(`tag:ci`, 임시 노드), 대상 호스트를 맥미니로, SSH는 동작 이름과 태그만 전달
 - [ ] 게이트 스크립트, 일일 백업, 개발 스냅샷, 로컬 DB 교체 스크립트의 원본을 레포에 둔다(설치는 손으로)
@@ -262,6 +262,8 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 - [ ] Tailscale `tag:macmini` 지정과 ACL 적용(5단계와 함께)
 - [x] 원격 로그인은 `admin`, `deploy`만 허용. 비밀번호·root 로그인 끔, `admin`은 소유자 PC 키로 접속
 - [ ] `deploy` 배포 키 등록과 강제 명령 설정(게이트 스크립트와 함께)
+- [ ] `marketry-network` 만들기 전에 `172.30.0.0/24`가 Colima VM 경로·Docker 기본 브리지·집 공유기·Tailscale 대역과 겹치지 않는지 확인.
+      겹치면 `setup-network.sh`와 `infra/macmini/nginx.conf`의 값을 함께 바꾼다
 - [ ] 게이트 스크립트 설치, 배포 SSH 키 등록
 - [ ] 일일 백업 예약 작업, R2 업로드, 개발 스냅샷, 공유 폴더 권한
 - [ ] 외부 감시 등록
@@ -305,7 +307,8 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 - [ ] 며칠 운영해 본 뒤 오라클 서버 1 정리
 - [ ] 키움 허용 IP에서 서버 1 제거
 - [ ] DuckDNS 리디렉트 종료 시점 결정
-- [ ] 보관 일수 재조정(DB 크기 기준)
+- [ ] 보관 일수 재조정(DB 크기 기준). 백업 로그로 실제 소요 시간을 보고 04:30 백업과 05:00 개발 DB 복원 간격이 충분한지 확인.
+      겹쳐도 스냅샷은 임시 파일에 쓴 뒤 이름을 바꾸므로 복원은 전날 스냅샷을 읽을 뿐 깨지지 않는다
 - [ ] nginx `set_real_ip_from`을 맥미니 `marketry-network` 네트워크 대역 하나로 좁힌다. 지금은 대역을 몰라 사설 대역 셋을 다 열어 두었다
 - [ ] `operations.md`를 새 구성으로 고쳐 쓰고 이 파일 삭제
 - [ ] 오라클 서버 env 파일에서 `OWNER_USER_ID`, `RENDERER_OWNER_CAPTURE_ENABLED`, `CAPTURE_URL` 삭제. 텔레그램 캡처를 확인하기 전까지는

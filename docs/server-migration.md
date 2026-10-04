@@ -38,6 +38,36 @@
 운영 Colima 안에는 PostgreSQL, 애플리케이션, nginx, 렌더러, cloudflared가 같은 네트워크로 뜬다.
 호스트에 여는 포트는 없다. 개발 쪽 포트(DB `15432`, 백엔드 `18081`, 프론트 `5173`)와 부딪힐 일이 없다.
 
+#### 맥미니에 실제로 구성한 것 (2026-10-04)
+
+`deploy`는 개발 계정 소유인 Homebrew(`/opt/homebrew`)를 쓰지 않는다. 개발 계정이 그 실행 파일을 바꿔치기하면
+`deploy` 권한으로 실행되기 때문이다. 그래서 Colima, Lima, Docker CLI, Docker Compose를 `deploy` 홈에 직접 받았다.
+
+```
+/Users/deploy/                       (700)
+├─ Optional/bin/                     colima, docker
+├─ Optional/lima/                    Lima 배포본(bin, libexec, share)
+├─ Optional/dl/                      내려받기 임시
+├─ .docker/cli-plugins/              docker-compose
+├─ Projects/marketry/marketry-backend/   레포(읽기 전용 Deploy key로 clone)
+├─ env/                              비밀값
+├─ backups/                          운영 DB 백업
+└─ Library/Logs/colima.log           Colima 로그
+```
+
+- 내려받기는 `/tmp`가 아니라 `deploy` 홈 안에서 한다. `/tmp`는 다른 계정도 쓰는 곳이라 같은 이름 파일을 미리 만들어 둘 수 있다
+- `~/.zshenv`에 `PATH`(`~/Optional/bin`, `~/Optional/lima/bin`, 시스템 경로만)와
+  `DOCKER_HOST=unix:///Users/deploy/.colima/default/docker.sock`을 둔다. `.zprofile`은 SSH로 명령만 보낼 때 읽히지 않는다.
+  `DOCKER_HOST`가 없으면 `docker`가 `/var/run/docker.sock`(개발 계정의 OrbStack)으로 붙으려 한다
+- git은 `/usr/bin/git`을 쓴다
+- Colima 프로필은 `default`(vz, CPU 4, 메모리 6GB, 디스크 100GB). 설정은 `~/.colima/default/colima.yaml`.
+  CPU와 메모리는 다시 띄우면 바꿀 수 있고 디스크는 늘리기만 된다
+- 부팅 기동: `/Library/LaunchDaemons/kr.co.marketry.colima.plist`(root:wheel, 644). `UserName deploy`,
+  `colima start --foreground`, `RunAtLoad`, `KeepAlive`, `HOME`과 `PATH`를 직접 지정, 로그는 `~/Library/Logs/colima.log`.
+  등록은 `sudo launchctl bootstrap system <plist>`
+- 개발 계정 자동 로그인을 켠 채 재부팅해 LaunchDaemon이 Colima를 띄우는 것을 확인했다. 원격 접속(RustDesk)이 개발 계정
+  로그인에 기대고 있어 자동 로그인은 끄지 않는다
+
 컨테이너별 메모리 제한은 렌더러에만 1GB로 건다. 6GB가 차면 리눅스가 아무 프로세스나 종료할 수 있는데,
 메모리가 불어날 만한 건 Chromium을 띄우는 렌더러뿐이다. 제한이 있으면 넘쳤을 때 렌더러만 죽고 재시작한다.
 지금 서버에서 평일 캡처를 거친 뒤 잰 최댓값(`memory.peak`)이 약 558MB였고 그 1.5~2배로 잡았다.
@@ -195,13 +225,13 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 
 ### 4. 맥미니 기반
 
-- [ ] FileVault 끄기(복호화에 시간이 걸린다)
-- [ ] `admin` 생성 후 `chanju`를 일반 계정으로 내림. Homebrew 소유권 정리
-- [ ] `deploy` 생성, 홈 `700`
-- [ ] `pmset` 잠자기 끔, 정전 후 자동 부팅, `chanju` 자동 로그인, 업데이트 자동 설치 끔
-- [ ] `deploy`에 Colima 설치, LaunchDaemon 등록
-- [ ] 아무도 로그인하지 않은 채 재부팅하고 `ssh deploy@맥미니 docker ps`가 되는지 확인.
-      안 되면 운영을 UTM 같은 리눅스 VM에 넣고 `deploy`가 소유하게 한다
+- [x] FileVault 끄기(복호화에 시간이 걸린다)
+- [x] `admin` 생성 후 개발 계정을 일반 계정으로 내림. Homebrew는 개발 계정 소유로 두고 `deploy`는 쓰지 않는다
+- [x] `deploy` 생성, 홈 `700`
+- [x] `pmset` 잠자기 끔, 정전 후 자동 부팅, `chanju` 자동 로그인, 업데이트 자동 설치 끔
+- [x] `deploy`에 Colima 설치(Homebrew 없이 `~/Optional`), LaunchDaemon 등록
+- [x] `deploy` 레포 clone(읽기 전용 Deploy key)
+- [x] 재부팅 뒤 LaunchDaemon이 `deploy`의 Colima를 띄우는지 확인(개발 계정 자동 로그인은 켠 채로)
 - [ ] `tailscaled` 데몬 설치(App Store 앱 제거), `tag:macmini`
 - [ ] 원격 로그인은 `admin`, `deploy`만 허용. `deploy`는 키 로그인만, 강제 명령 설정
 - [ ] 게이트 스크립트 설치, 배포 SSH 키 등록
@@ -256,6 +286,9 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
       `CLAUDE.md`와 `.claude/settings.json`의 옛 로컬 절대 경로
 - [ ] 이미지 빌드에서 `linux/amd64` 제거 여부 결정. 맥미니 장애 때 클라우드 서버로 급히 옮길 여지를 남기려면 둔다.
       빌드 머신 플랫폼에서 빌드하는 구조(`--platform=$BUILDPLATFORM`)는 Actions 러너가 amd64라 그대로 둔다
+- [ ] GitHub 계정 SSH keys에서 오라클 서버 키 삭제(계정 전체 쓰기 권한이 있는 키)
+- [ ] 문서·지시서에 남은 실명 흔적 정리: 개발 계정 이름, 컴퓨터 이름이 찍힌 출력. 이후 글에서는 "개발 계정"으로 쓴다.
+      GitHub 사용자 이름이 들어간 레포·이미지 주소는 바꿀 수 없으니 그대로 둔다
 - [ ] 결정 사항을 `decisions.md`로 회수
 
 ---

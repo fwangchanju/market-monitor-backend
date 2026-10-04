@@ -9,6 +9,29 @@
 "개발 쪽 에이전트가 실수로도 운영을 건드리지 못하게 하는 것"과 "그래도 사고가 나면 되돌릴 수 있게
 하는 것"에 쓰인다.
 
+## 진행 현황과 다음 작업 (2026-10-05 기준)
+
+이어서 작업하는 세션은 이 절과 아래 체크리스트부터 본다. 운영 서버·운영 Docker·맥미니 `deploy` 영역은 에이전트가 직접
+만지지 않는다. 사용자가 실행할 명령을 안내하고, 레포 변경은 PR로 한다.
+
+- 1단계(도메인·터널), 2단계(이름 변경)는 끝났다. 남은 건 Google 브랜딩, 도메인 자동 연장 확인
+- 3단계 코드는 배포 워크플로만 남았다. 맥미니 구성 파일과 게이트·백업 스크립트는 `infra/macmini/`에 있다
+- 4단계 맥미니 기반은 계정 분리, Colima 부팅 기동, SSH, Tailscale 데몬, 에이전트 제한, GitHub 토큰까지 됐다.
+  남은 건 `infra/macmini/README.md` 순서의 설치, Tailscale 태그·ACL, 외부 감시, 개발 환경 정리
+- 5단계(키움 프록시)는 시작 전이다
+
+다음 순서:
+
+1. 서버 2 공인 IP가 예약(Reserved)인지 오라클 콘솔에서 확인, 아니면 전환 → 키움 허용 IP에 추가
+2. 서버 2에 Tailscale(`tag:proxy`)과 tinyproxy 설치, Tailscale ACL과 태그(`tag:macmini`, `tag:proxy`, `tag:ci`) 적용, 맥미니에서 `curl -x`로 통로 확인
+3. 배포 워크플로 PR: Actions가 Tailscale(`tag:ci`, 임시 노드)로 붙어 `ssh deploy@macmini "deploy <target> <tag>"`만 보낸다.
+   `:deployed`/`:previous` 포인터 갱신과 원복은 지금 `release.yml`처럼 워크플로가 맡는다. 이관 기간에는 오라클 배포 경로도 남긴다.
+   Tailscale OAuth 클라이언트와 CI용 SSH 키는 사용자가 만들어 시크릿에 넣는다
+4. 맥미니 설치(`infra/macmini/README.md`), 앱은 띄우지 않는다
+5. 이관 당일(6단계)
+
+소유자가 웹에서 할 일: `Migration guard` 필수 체크 등록과 bypass 비우기, Google 브랜딩 수정, 가비아 자동 연장 확인.
+
 ---
 
 ## 목표 구성
@@ -245,9 +268,10 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 - [x] 파괴적 마이그레이션 CI 검사(`ci.yml`의 `Migration guard` job). 로직은 PR에서 고칠 수 없게 워크플로 안에 둔다
 - [ ] GitHub 브랜치 규칙에 `Migration guard`를 필수 체크로 등록하고 bypass 비움(소유자가 웹에서)
 - [x] 맥미니 `marketry-network` 서브넷 고정 생성 스크립트(`infra/macmini/setup-network.sh`, `172.30.0.0/24`)
-- [ ] 맥미니용 compose: cloudflared 추가, 호스트 포트 제거, 렌더러 같은 네트워크, nginx 네트워크 별칭, 렌더러 메모리 제한 1GB
+- [x] 맥미니용 compose(`infra/macmini/compose.yml`, `nginx.conf`, `env.template`): cloudflared, 호스트 포트 없음, 렌더러 같은 네트워크·메모리 1GB,
+      nginx 별칭 `marketry.co.kr`로 렌더러 내부 접근. 이미지 이름은 이관 뒤 정리 때 바꾼다
 - [ ] 배포 워크플로: Tailscale 액션(`tag:ci`, 임시 노드), 대상 호스트를 맥미니로, SSH는 동작 이름과 태그만 전달
-- [ ] 게이트 스크립트, 일일 백업, 개발 스냅샷, 로컬 DB 교체 스크립트의 원본을 레포에 둔다(설치는 손으로)
+- [x] 게이트 스크립트, 일일 백업, 개발 스냅샷, 로컬 DB 교체 스크립트의 원본을 레포에 둔다(`infra/macmini/`, `infra/local/restore-snapshot.sh`. 설치는 손으로)
 
 ### 4. 맥미니 기반
 
@@ -261,10 +285,10 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 - [x] `tailscaled` 데몬 설치(기존 Standalone 앱과 네트워크 확장 제거), 기기 이름 `macmini`, 키 만료 끔
 - [ ] Tailscale `tag:macmini` 지정과 ACL 적용(5단계와 함께)
 - [x] 원격 로그인은 `admin`, `deploy`만 허용. 비밀번호·root 로그인 끔, `admin`은 소유자 PC 키로 접속
-- [ ] `deploy` 배포 키 등록과 강제 명령 설정(게이트 스크립트와 함께)
 - [x] `marketry-network` 만들기 전에 `172.30.0.0/24`가 Colima VM 경로·Docker 기본 브리지·집 공유기·Tailscale 대역과 겹치지 않는지 확인.
       겹치면 `setup-network.sh`와 `infra/macmini/nginx.conf`의 값을 함께 바꾼다
-- [ ] 게이트 스크립트 설치, 배포 SSH 키 등록
+- [ ] `infra/macmini/README.md` 순서로 설치: 네트워크 생성, env 파일, GHCR 로그인, 게이트·백업 설치(`~/Optional/bin`),
+      `deploy`의 `authorized_keys`에 CI 키를 강제 명령으로 등록, 백업 LaunchDaemon. **앱은 이관 당일 전까지 띄우지 않는다**(수집·텔레그램 중복)
 - [ ] 일일 백업 예약 작업, R2 업로드, 개발 스냅샷, 공유 폴더 권한
 - [ ] 외부 감시 등록
 - [x] Claude Code 관리형 설정, Codex `requirements.toml`
@@ -287,7 +311,8 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 금요일 장 마감 뒤부터 일요일 사이에 한다. 월요일 장 시작 전까지 못 고치면 되돌린다.
 
 - [ ] 지금 서버 애플리케이션 중지
-- [ ] DB 덤프, 맥미니 운영 DB에 적재
+- [ ] DB 덤프, 맥미니 운영 DB에 적재. 원본은 `market_monitor_db`(사용자 `market_monitor`), 대상은 `marketry_db`(사용자 `marketry`)라
+      `pg_dump -Fc` 후 `pg_restore --no-owner --role=marketry`로 넣는다. postgres와 cloudflared는 게이트가 아니라 손으로 처음 `up -d` 한다
 - [ ] 맥미니 운영 기동(`KIWOOM_PROXY_HOST` 설정)
 - [ ] 지금 서버 cloudflared 중지, 맥미니 cloudflared 기동
 - [ ] 터널 경로의 서비스 주소를 맥미니 nginx 컨테이너 이름(`marketry-nginx:80`)으로 바꾼다. 되돌릴 때는 원래 값으로
@@ -327,8 +352,9 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 
 ## 열어둔 것
 
-- Colima를 `deploy` 계정에서 부팅 시 띄우는 게 실제로 되는지는 맥미니에서 시험해 봐야 안다.
-  일반 계정에서 기동이 멈춘다는 보고가 있다(abiosoft/colima#1463)
-- Codex의 `requirements.toml`이 특정 명령 단위 금지까지 되는지는 설치할 때 확인한다
+- 개발용 스냅샷은 이메일, Google `sub`, 닉네임, 프로필 이미지만 가린다. 사용자가 입력한 설정값(섹터 이름, `user_preference.payload`)은
+  그대로 둔다. 개인 정보를 적을 수 있는 칸인지 소유자가 판단한다
+- Codex는 명령 단위 금지가 없다. 샌드박스와 승인 정책(`requirements.toml`), 지침(`managed_config.toml`의 `developer_instructions`)으로 대신한다.
+  지침이 적용되는 것은 확인했다
 - 키움이 같은 앱키로 여러 곳에서 토큰을 받을 때 앞선 토큰을 무효화하는지는 모른다. 이관 방식이 지금
   서버를 먼저 내리는 쪽이라 당일에는 문제가 되지 않는다

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- 개발 계정의 ~/Library/LaunchAgents 에 복사해서 쓴다. DEV_USER와 REPO_PATH를 실제 값으로 바꾼다 -->
+    <key>Label</key>
+    <string>kr.co.marketry.dev-snapshot-restore</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/DEV_USER/REPO_PATH/infra/local/restore-snapshot.sh</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>5</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/DEV_USER/.orbstack/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/Users/DEV_USER/Library/Logs/marketry-dev-snapshot-restore.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/DEV_USER/Library/Logs/marketry-dev-snapshot-restore.log</string>
+</dict>
+</plist>

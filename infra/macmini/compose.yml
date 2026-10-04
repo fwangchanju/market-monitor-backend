@@ -1,0 +1,96 @@
+name: marketry
+
+# 맥미니 운영 구성. 모든 서비스는 호스트 포트를 열지 않고, 바깥 요청은 cloudflared 터널로만 들어온다.
+# 오라클용 user("${DEPLOY_UID}:${DEPLOY_GID}")와 LOG_DIR bind mount는 쓰지 않는다. 데이터와 로그는 Colima VM 안의 named volume에 둔다.
+services:
+  marketry-postgres:
+    image: postgres:17-alpine
+    container_name: marketry-postgres
+    restart: always
+    env_file:
+      - ${MARKETRY_ENV_FILE:-/Users/deploy/env/marketry.env}
+    environment:
+      - POSTGRES_DB=marketry_db
+      - POSTGRES_USER=marketry
+    volumes:
+      - marketry-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U marketry -d marketry_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - marketry-network
+
+  marketry-app:
+    image: ghcr.io/fwangchanju/market-monitor:${APP_TAG:-deployed}
+    container_name: marketry-app
+    restart: always
+    env_file:
+      - ${MARKETRY_ENV_FILE:-/Users/deploy/env/marketry.env}
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - SERVER_PORT=8081
+      - TZ=Asia/Seoul
+      - DB_URL=jdbc:postgresql://marketry-postgres:5432/marketry_db
+      - SPRING_DATASOURCE_USERNAME=marketry
+      - RENDERER_URL=http://marketry-renderer:3000
+    depends_on:
+      marketry-postgres:
+        condition: service_healthy
+    volumes:
+      - marketry-logs:/app/logs
+    networks:
+      - marketry-network
+
+  marketry-nginx:
+    image: ghcr.io/fwangchanju/market-monitor-nginx:${NGINX_TAG:-latest}
+    container_name: marketry-nginx
+    restart: always
+    volumes:
+      # 이미지에 구워진 오라클용 설정을 맥미니용으로 덮는다
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      marketry-network:
+        # 렌더러가 서비스 도메인으로 내부에서 바로 접근하도록 붙이는 별칭
+        aliases:
+          - marketry.co.kr
+
+  marketry-renderer:
+    image: ghcr.io/fwangchanju/market-monitor-renderer:${RENDERER_TAG:-latest}
+    container_name: marketry-renderer
+    restart: always
+    init: true
+    shm_size: 128m
+    mem_limit: 1g
+    env_file:
+      - ${MARKETRY_ENV_FILE:-/Users/deploy/env/marketry.env}
+    environment:
+      CAPTURE_URL: http://marketry.co.kr
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 300s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - marketry-network
+
+  marketry-cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: marketry-cloudflared
+    restart: always
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?TUNNEL_TOKEN이 env 파일에 없습니다}
+    networks:
+      - marketry-network
+
+volumes:
+  marketry-pgdata:
+  marketry-logs:
+
+networks:
+  marketry-network:
+    external: true

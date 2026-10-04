@@ -86,6 +86,10 @@
 - **에이전트 제한:** `/Library/Application Support/ClaudeCode/managed-settings.json`(root 소유)에 `sudo`, `su`, `login`, `dscl`,
   `dseditgroup`, `ssh`, `scp`, `sftp`, `osascript` 실행과 `deploy`·`admin` 홈 읽기를 deny로 두고 `disableBypassPermissionsMode`를 건다.
   Codex는 `/etc/codex/requirements.toml`에서 승인 정책을 `untrusted`, `on-request`로, 샌드박스를 `read-only`, `workspace-write`로 제한한다
+- **에이전트 공통 지침(root 소유):** Claude Code는 관리형 `CLAUDE.md`(`/Library/Application Support/ClaudeCode/CLAUDE.md`), Codex는
+  `/etc/codex/managed_config.toml`의 `developer_instructions`에 둔다. 내용은 "`.github/workflows/`는 고치지 않는다, 푸시가 workflow 권한으로
+  거부되면 우회하지 말고 멈춘 뒤 사용자에게 개발자 확인이 필요하다고 알린다" 두 가지다. Claude Code 관리형 설정에는 워크플로 파일
+  편집·쓰기, `gh auth` 로그인·전환·토큰 출력, `git remote set-url`/`add`도 deny로 더했다
 - **GitHub 인증:** 개발 계정은 fine-grained 토큰(두 레포, Actions·Contents·Pull requests 쓰기, Commit statuses 읽기, 만료 없음)을
   `gh`에 넣고 `gh auth setup-git`으로 git도 쓰게 했다. 원격 주소는 HTTPS다. SSH 키는 권한 범위를 좁힐 수 없어서 맥미니 키를
   GitHub 계정에서 지웠다. 워크플로 파일 수정이 담긴 푸시는 GitHub가 거부한다

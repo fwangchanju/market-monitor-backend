@@ -9,6 +9,29 @@
 "개발 쪽 에이전트가 실수로도 운영을 건드리지 못하게 하는 것"과 "그래도 사고가 나면 되돌릴 수 있게
 하는 것"에 쓰인다.
 
+## 진행 현황과 다음 작업 (2026-10-05 기준)
+
+이어서 작업하는 세션은 이 절과 아래 체크리스트부터 본다. 운영 서버·운영 Docker·맥미니 `deploy` 영역은 에이전트가 직접
+만지지 않는다. 사용자가 실행할 명령을 안내하고, 레포 변경은 PR로 한다.
+
+- 1단계(도메인·터널), 2단계(이름 변경)는 끝났다. 남은 건 Google 브랜딩, 도메인 자동 연장 확인
+- 3단계 코드는 배포 워크플로만 남았다. 맥미니 구성 파일과 게이트·백업 스크립트는 `infra/prod/`에 있다
+- 4단계 맥미니 기반은 계정 분리, Colima 부팅 기동, SSH, Tailscale 데몬, 에이전트 제한, GitHub 토큰까지 됐다.
+  남은 건 `infra/prod/README.md` 순서의 설치, Tailscale 태그·ACL, 외부 감시, 개발 환경 정리
+- 5단계(키움 프록시)는 시작 전이다
+
+다음 순서:
+
+1. 서버 2 공인 IP가 예약(Reserved)인지 오라클 콘솔에서 확인, 아니면 전환 → 키움 허용 IP에 추가
+2. 서버 2에 Tailscale(`tag:proxy`)과 tinyproxy 설치, Tailscale ACL과 태그(`tag:macmini`, `tag:proxy`, `tag:ci`) 적용, 맥미니에서 `curl -x`로 통로 확인
+3. 배포 워크플로 PR: Actions가 Tailscale(`tag:ci`, 임시 노드)로 붙어 `ssh deploy@macmini "deploy <target> <tag>"`만 보낸다.
+   `:deployed`/`:previous` 포인터 갱신과 원복은 지금 `release.yml`처럼 워크플로가 맡는다. 이관 기간에는 오라클 배포 경로도 남긴다.
+   Tailscale OAuth 클라이언트와 CI용 SSH 키는 사용자가 만들어 시크릿에 넣는다
+4. 맥미니 설치(`infra/prod/README.md`), 앱은 띄우지 않는다
+5. 이관 당일(6단계)
+
+소유자가 웹에서 할 일: `Migration guard` 필수 체크 등록과 bypass 비우기, Google 브랜딩 수정, 가비아 자동 연장 확인.
+
 ---
 
 ## 목표 구성
@@ -37,6 +60,62 @@
 
 운영 Colima 안에는 PostgreSQL, 애플리케이션, nginx, 렌더러, cloudflared가 같은 네트워크로 뜬다.
 호스트에 여는 포트는 없다. 개발 쪽 포트(DB `15432`, 백엔드 `18081`, 프론트 `5173`)와 부딪힐 일이 없다.
+
+#### 맥미니에 실제로 구성한 것 (2026-10-04)
+
+`deploy`는 개발 계정 소유인 Homebrew(`/opt/homebrew`)를 쓰지 않는다. 개발 계정이 그 실행 파일을 바꿔치기하면
+`deploy` 권한으로 실행되기 때문이다. 그래서 Colima, Lima, Docker CLI, Docker Compose를 `deploy` 홈에 직접 받았다.
+
+```
+/Users/deploy/                       (700)
+├─ Optional/bin/                     colima, docker
+├─ Optional/lima/                    Lima 배포본(bin, libexec, share)
+├─ Optional/dl/                      내려받기 임시
+├─ .docker/cli-plugins/              docker-compose
+├─ Projects/marketry/marketry-backend/   레포(읽기 전용 Deploy key로 clone)
+├─ env/                              비밀값
+├─ backups/                          운영 DB 백업
+└─ Library/Logs/colima.log           Colima 로그
+```
+
+- 내려받기는 `/tmp`가 아니라 `deploy` 홈 안에서 한다. `/tmp`는 다른 계정도 쓰는 곳이라 같은 이름 파일을 미리 만들어 둘 수 있다
+- `~/.zshenv`에 `PATH`(`~/Optional/bin`, `~/Optional/lima/bin`, 시스템 경로만)와
+  `DOCKER_HOST=unix:///Users/deploy/.colima/default/docker.sock`을 둔다. `.zprofile`은 SSH로 명령만 보낼 때 읽히지 않는다.
+  `DOCKER_HOST`가 없으면 `docker`가 `/var/run/docker.sock`(개발 계정의 OrbStack)으로 붙으려 한다
+- git은 `/usr/bin/git`을 쓴다
+- Colima 프로필은 `default`(vz, CPU 4, 메모리 6GB, 디스크 100GB). 설정은 `~/.colima/default/colima.yaml`.
+  CPU와 메모리는 다시 띄우면 바꿀 수 있고 디스크는 늘리기만 된다
+- 부팅 기동: `/Library/LaunchDaemons/kr.co.marketry.colima.plist`(root:wheel, 644). `UserName deploy`,
+  `colima start --foreground`, `RunAtLoad`, `KeepAlive`, `HOME`과 `PATH`를 직접 지정, 로그는 `~/Library/Logs/colima.log`.
+  등록은 `sudo launchctl bootstrap system <plist>`
+- 개발 계정 자동 로그인을 켠 채 재부팅해 LaunchDaemon이 Colima를 띄우는 것을 확인했다. 원격 접속(RustDesk)이 개발 계정
+  로그인에 기대고 있어 자동 로그인은 끄지 않는다
+
+#### 맥미니 관리 접속과 에이전트 제한 (2026-10-05)
+
+- **SSH:** `/etc/ssh/sshd_config.d/010-marketry.conf`에 `PasswordAuthentication no`, `KbdInteractiveAuthentication no`,
+  `PermitRootLogin no`. macOS 기본 파일(`100-macos.conf`)보다 먼저 읽히게 `010`으로 시작한다. 원격 로그인 허용 계정은
+  `admin`, `deploy`. 원격 사용자 디스크 전체 접근은 끈다. `admin`은 소유자 PC의 키로만 들어온다
+- **Tailscale:** 오픈소스 `tailscaled`만 로그인 전에 뜬다(App Store판과 Standalone판은 로그인 필요). `admin` 홈에 공식 Go를 받아
+  `go install tailscale.com/cmd/tailscale{,d}@latest`로 빌드하고 `sudo tailscaled install-system-daemon`으로 설치했다.
+  root로 도는 프로그램이라 개발 계정 소유 Homebrew의 Go나 tailscale을 쓰지 않는다. CLI도 `/usr/local/bin`에 root 소유로 둔다.
+  기기 이름 `macmini`, 키 만료 끔. 맥미니 쪽 MagicDNS는 쓰지 않는다(프록시는 IP로 지정)
+- **원격 화면:** RustDesk는 개발 계정 세션에서 쓴다. 설치 때 깔린 root 서비스(`com.carriez.RustDesk_service`)가 개발 계정 소유
+  앱 파일을 root로 실행하는 구조라 `/Library/LaunchDaemons.disabled/`로 옮겨 껐다. 앱 파일 소유자 변경은 macOS 앱 관리 보호에
+  막힌다. 로그인 화면에서의 원격 접속은 잃는데, 개발 계정 자동 로그인을 끄지 않는 한 문제없다. Tailscale IP로 직접 접속하려면
+  RustDesk의 직접 IP 접속을 켠다
+- **`admin`은 화면에 로그인하지 않는다.** `/Library/LaunchAgents`의 사용자 앱이 `admin` 권한으로 같이 뜨기 때문이다.
+  터미널 작업은 SSH로, 화면 설정은 개발 계정 화면에서 관리자 인증 창으로 한다
+- **에이전트 제한:** `/Library/Application Support/ClaudeCode/managed-settings.json`(root 소유)에 `sudo`, `su`, `login`, `dscl`,
+  `dseditgroup`, `ssh`, `scp`, `sftp`, `osascript` 실행과 `deploy`·`admin` 홈 읽기를 deny로 두고 `disableBypassPermissionsMode`를 건다.
+  Codex는 `/etc/codex/requirements.toml`에서 승인 정책을 `untrusted`, `on-request`로, 샌드박스를 `read-only`, `workspace-write`로 제한한다
+- **에이전트 공통 지침(root 소유):** Claude Code는 관리형 `CLAUDE.md`(`/Library/Application Support/ClaudeCode/CLAUDE.md`), Codex는
+  `/etc/codex/managed_config.toml`의 `developer_instructions`에 둔다. 내용은 "`.github/workflows/`는 고치지 않는다, 푸시가 workflow 권한으로
+  거부되면 우회하지 말고 멈춘 뒤 사용자에게 개발자 확인이 필요하다고 알린다" 두 가지다. Claude Code 관리형 설정에는 워크플로 파일
+  편집·쓰기, `gh auth` 로그인·전환·토큰 출력, `git remote set-url`/`add`도 deny로 더했다
+- **GitHub 인증:** 개발 계정은 fine-grained 토큰(두 레포, Actions·Contents·Pull requests 쓰기, Commit statuses 읽기, 만료 없음)을
+  `gh`에 넣고 `gh auth setup-git`으로 git도 쓰게 했다. 원격 주소는 HTTPS다. SSH 키는 권한 범위를 좁힐 수 없어서 맥미니 키를
+  GitHub 계정에서 지웠다. 워크플로 파일 수정이 담긴 푸시는 GitHub가 거부한다
 
 컨테이너별 메모리 제한은 렌더러에만 1GB로 건다. 6GB가 차면 리눅스가 아무 프로세스나 종료할 수 있는데,
 메모리가 불어날 만한 건 Chromium을 띄우는 렌더러뿐이다. 제한이 있으면 넘쳤을 때 렌더러만 죽고 재시작한다.
@@ -188,27 +267,33 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 - [x] `kiwoomRestClient` 프록시 설정(`KIWOOM_PROXY_HOST`, `KIWOOM_PROXY_PORT`. 값이 비면 직접 연결)
 - [x] 파괴적 마이그레이션 CI 검사(`ci.yml`의 `Migration guard` job). 로직은 PR에서 고칠 수 없게 워크플로 안에 둔다
 - [ ] GitHub 브랜치 규칙에 `Migration guard`를 필수 체크로 등록하고 bypass 비움(소유자가 웹에서)
-- [ ] 맥미니 `marketry-network` 네트워크는 서브넷을 지정해서 만든다(`docker network create --subnet ...`). 다시 만들어도 대역이 바뀌지 않게 한다
-- [ ] 맥미니용 compose: cloudflared 추가, 호스트 포트 제거, 렌더러 같은 네트워크, nginx 네트워크 별칭, 렌더러 메모리 제한 1GB
+- [x] 맥미니 `marketry-network` 서브넷 고정 생성 스크립트(`infra/prod/setup-network.sh`, `172.30.0.0/24`)
+- [x] 맥미니용 compose(`infra/prod/compose.yml`, `nginx.conf`, `env.template`): cloudflared, 호스트 포트 없음, 렌더러 같은 네트워크·메모리 1GB,
+      nginx 별칭 `marketry.co.kr`로 렌더러 내부 접근. 이미지 이름은 이관 뒤 정리 때 바꾼다
 - [ ] 배포 워크플로: Tailscale 액션(`tag:ci`, 임시 노드), 대상 호스트를 맥미니로, SSH는 동작 이름과 태그만 전달
-- [ ] 게이트 스크립트, 일일 백업, 개발 스냅샷, 로컬 DB 교체 스크립트의 원본을 레포에 둔다(설치는 손으로)
+- [x] 게이트 스크립트, 일일 백업, 개발 스냅샷, 로컬 DB 교체 스크립트의 원본을 레포에 둔다(`infra/prod/`, `infra/local/restore-snapshot.sh`. 설치는 손으로)
 
 ### 4. 맥미니 기반
 
-- [ ] FileVault 끄기(복호화에 시간이 걸린다)
-- [ ] `admin` 생성 후 `chanju`를 일반 계정으로 내림. Homebrew 소유권 정리
-- [ ] `deploy` 생성, 홈 `700`
-- [ ] `pmset` 잠자기 끔, 정전 후 자동 부팅, `chanju` 자동 로그인, 업데이트 자동 설치 끔
-- [ ] `deploy`에 Colima 설치, LaunchDaemon 등록
-- [ ] 아무도 로그인하지 않은 채 재부팅하고 `ssh deploy@맥미니 docker ps`가 되는지 확인.
-      안 되면 운영을 UTM 같은 리눅스 VM에 넣고 `deploy`가 소유하게 한다
-- [ ] `tailscaled` 데몬 설치(App Store 앱 제거), `tag:macmini`
-- [ ] 원격 로그인은 `admin`, `deploy`만 허용. `deploy`는 키 로그인만, 강제 명령 설정
-- [ ] 게이트 스크립트 설치, 배포 SSH 키 등록
+- [x] FileVault 끄기(복호화에 시간이 걸린다)
+- [x] `admin` 생성 후 개발 계정을 일반 계정으로 내림. Homebrew는 개발 계정 소유로 두고 `deploy`는 쓰지 않는다
+- [x] `deploy` 생성, 홈 `700`
+- [x] `pmset` 잠자기 끔, 정전 후 자동 부팅, 개발 계정 자동 로그인, macOS 업데이트 자동 설치 끔
+- [x] `deploy`에 Colima 설치(Homebrew 없이 `~/Optional`), LaunchDaemon 등록
+- [x] `deploy` 레포 clone(읽기 전용 Deploy key)
+- [x] 재부팅 뒤 LaunchDaemon이 `deploy`의 Colima를 띄우는지 확인(개발 계정 자동 로그인은 켠 채로)
+- [x] `tailscaled` 데몬 설치(기존 Standalone 앱과 네트워크 확장 제거), 기기 이름 `macmini`, 키 만료 끔
+- [ ] Tailscale `tag:macmini` 지정과 ACL 적용(5단계와 함께)
+- [x] 원격 로그인은 `admin`, `deploy`만 허용. 비밀번호·root 로그인 끔, `admin`은 소유자 PC 키로 접속
+- [x] `marketry-network` 만들기 전에 `172.30.0.0/24`가 Colima VM 경로·Docker 기본 브리지·집 공유기·Tailscale 대역과 겹치지 않는지 확인.
+      겹치면 `setup-network.sh`와 `infra/prod/nginx.conf`의 값을 함께 바꾼다
+- [ ] `infra/prod/README.md` 순서로 설치: 네트워크 생성, env 파일, GHCR 로그인, 게이트·백업 설치(`~/Optional/bin`),
+      `deploy`의 `authorized_keys`에 CI 키를 강제 명령으로 등록, 백업 LaunchDaemon. **앱은 이관 당일 전까지 띄우지 않는다**(수집·텔레그램 중복)
 - [ ] 일일 백업 예약 작업, R2 업로드, 개발 스냅샷, 공유 폴더 권한
 - [ ] 외부 감시 등록
-- [ ] Claude Code 관리형 설정, Codex `requirements.toml`
-- [ ] GitHub 인증을 fine-grained PAT로 교체(`gh`와 git 자격증명 모두)
+- [x] Claude Code 관리형 설정, Codex `requirements.toml`
+- [x] GitHub 인증을 fine-grained PAT로 교체(`gh`와 git 자격증명 모두), 원격 주소 HTTPS, 맥미니 SSH 키는 GitHub에서 삭제
+- [x] 개발 계정 소유 앱이 root 서비스로 도는 구멍 점검(RustDesk root 서비스 끔)
 - [ ] 개발 환경: OrbStack, JDK 21, Node, 개발 DB, 로컬 실행 스크립트, 05:00 로컬 DB 교체 작업
 
 ### 5. 키움 프록시 (오라클 서버 2)
@@ -226,7 +311,8 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 금요일 장 마감 뒤부터 일요일 사이에 한다. 월요일 장 시작 전까지 못 고치면 되돌린다.
 
 - [ ] 지금 서버 애플리케이션 중지
-- [ ] DB 덤프, 맥미니 운영 DB에 적재
+- [ ] DB 덤프, 맥미니 운영 DB에 적재. 원본은 `market_monitor_db`(사용자 `market_monitor`), 대상은 `marketry_db`(사용자 `marketry`)라
+      `pg_dump -Fc` 후 `pg_restore --no-owner --role=marketry`로 넣는다. postgres와 cloudflared는 게이트가 아니라 손으로 처음 `up -d` 한다
 - [ ] 맥미니 운영 기동(`KIWOOM_PROXY_HOST` 설정)
 - [ ] 지금 서버 cloudflared 중지, 맥미니 cloudflared 기동
 - [ ] 터널 경로의 서비스 주소를 맥미니 nginx 컨테이너 이름(`marketry-nginx:80`)으로 바꾼다. 되돌릴 때는 원래 값으로
@@ -246,7 +332,8 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 - [ ] 며칠 운영해 본 뒤 오라클 서버 1 정리
 - [ ] 키움 허용 IP에서 서버 1 제거
 - [ ] DuckDNS 리디렉트 종료 시점 결정
-- [ ] 보관 일수 재조정(DB 크기 기준)
+- [ ] 보관 일수 재조정(DB 크기 기준). 백업 로그로 실제 소요 시간을 보고 04:30 백업과 05:00 개발 DB 복원 간격이 충분한지 확인.
+      겹쳐도 스냅샷은 임시 파일에 쓴 뒤 이름을 바꾸므로 복원은 전날 스냅샷을 읽을 뿐 깨지지 않는다
 - [ ] nginx `set_real_ip_from`을 맥미니 `marketry-network` 네트워크 대역 하나로 좁힌다. 지금은 대역을 몰라 사설 대역 셋을 다 열어 두었다
 - [ ] `operations.md`를 새 구성으로 고쳐 쓰고 이 파일 삭제
 - [ ] 오라클 서버 env 파일에서 `OWNER_USER_ID`, `RENDERER_OWNER_CAPTURE_ENABLED`, `CAPTURE_URL` 삭제. 텔레그램 캡처를 확인하기 전까지는
@@ -256,14 +343,18 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
       `CLAUDE.md`와 `.claude/settings.json`의 옛 로컬 절대 경로
 - [ ] 이미지 빌드에서 `linux/amd64` 제거 여부 결정. 맥미니 장애 때 클라우드 서버로 급히 옮길 여지를 남기려면 둔다.
       빌드 머신 플랫폼에서 빌드하는 구조(`--platform=$BUILDPLATFORM`)는 Actions 러너가 amd64라 그대로 둔다
+- [ ] GitHub 계정 SSH keys에서 오라클 서버 키 삭제(계정 전체 쓰기 권한이 있는 키)
+- [ ] 문서·지시서에 남은 실명 흔적 정리: 개발 계정 이름, 컴퓨터 이름이 찍힌 출력. 이후 글에서는 "개발 계정"으로 쓴다.
+      GitHub 사용자 이름이 들어간 레포·이미지 주소는 바꿀 수 없으니 그대로 둔다
 - [ ] 결정 사항을 `decisions.md`로 회수
 
 ---
 
 ## 열어둔 것
 
-- Colima를 `deploy` 계정에서 부팅 시 띄우는 게 실제로 되는지는 맥미니에서 시험해 봐야 안다.
-  일반 계정에서 기동이 멈춘다는 보고가 있다(abiosoft/colima#1463)
-- Codex의 `requirements.toml`이 특정 명령 단위 금지까지 되는지는 설치할 때 확인한다
+- 개발용 스냅샷은 이메일, Google `sub`, 닉네임, 프로필 이미지만 가린다. 사용자가 입력한 설정값(섹터 이름, `user_preference.payload`)은
+  그대로 둔다. 개인 정보를 적을 수 있는 칸인지 소유자가 판단한다
+- Codex는 명령 단위 금지가 없다. 샌드박스와 승인 정책(`requirements.toml`), 지침(`managed_config.toml`의 `developer_instructions`)으로 대신한다.
+  지침이 적용되는 것은 확인했다
 - 키움이 같은 앱키로 여러 곳에서 토큰을 받을 때 앞선 토큰을 무효화하는지는 모른다. 이관 방식이 지금
   서버를 먼저 내리는 쪽이라 당일에는 문제가 되지 않는다

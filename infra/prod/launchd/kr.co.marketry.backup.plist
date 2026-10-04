@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>kr.co.marketry.backup</string>
+    <key>UserName</key>
+    <string>deploy</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/deploy/Optional/bin/marketry-backup</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>4</integer>
+        <key>Minute</key>
+        <integer>30</integer>
+    </dict>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>HOME</key>
+        <string>/Users/deploy</string>
+        <key>PATH</key>
+        <string>/Users/deploy/Optional/bin:/Users/deploy/Optional/lima/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>/Users/deploy/Library/Logs/marketry-backup.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/deploy/Library/Logs/marketry-backup.log</string>
+</dict>
+</plist>

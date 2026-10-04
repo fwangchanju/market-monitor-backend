@@ -262,7 +262,7 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 - [ ] Tailscale `tag:macmini` 지정과 ACL 적용(5단계와 함께)
 - [x] 원격 로그인은 `admin`, `deploy`만 허용. 비밀번호·root 로그인 끔, `admin`은 소유자 PC 키로 접속
 - [ ] `deploy` 배포 키 등록과 강제 명령 설정(게이트 스크립트와 함께)
-- [ ] `marketry-network` 만들기 전에 `172.30.0.0/24`가 Colima VM 경로·Docker 기본 브리지·집 공유기·Tailscale 대역과 겹치지 않는지 확인.
+- [x] `marketry-network` 만들기 전에 `172.30.0.0/24`가 Colima VM 경로·Docker 기본 브리지·집 공유기·Tailscale 대역과 겹치지 않는지 확인.
       겹치면 `setup-network.sh`와 `infra/macmini/nginx.conf`의 값을 함께 바꾼다
 - [ ] 게이트 스크립트 설치, 배포 SSH 키 등록
 - [ ] 일일 백업 예약 작업, R2 업로드, 개발 스냅샷, 공유 폴더 권한

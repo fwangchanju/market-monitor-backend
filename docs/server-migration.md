@@ -182,10 +182,12 @@ DB만 OrbStack 컨테이너로 띄우고 백엔드와 프론트는 손으로 띄
 
 ### 3. 코드 변경 (이관 전에 병합하고 지금 서버에 배포해 둔다)
 
-- [ ] 애플리케이션 이미지 amd64/arm64 멀티 빌드. 빌드 스테이지에 `--platform=$BUILDPLATFORM`
-- [ ] 프론트 assets 이미지, nginx 이미지, 렌더러 이미지 멀티 빌드
-- [ ] `kiwoomRestClient` 프록시 설정(값이 비면 직접 연결)
-- [ ] 파괴적 마이그레이션 CI 검사, 필수 체크로 등록하고 bypass 비움
+- [x] 애플리케이션 이미지 amd64/arm64 멀티 빌드. 빌드 스테이지에 `--platform=$BUILDPLATFORM`
+- [x] nginx 이미지, 렌더러 이미지 멀티 빌드. 프론트 assets는 정적 파일이라 nginx 빌드에서 빌드 머신 플랫폼으로 받으므로
+      멀티 빌드가 필요 없다. 최종 스테이지에 `RUN`이 없어 QEMU도 쓰지 않는다
+- [x] `kiwoomRestClient` 프록시 설정(`KIWOOM_PROXY_HOST`, `KIWOOM_PROXY_PORT`. 값이 비면 직접 연결)
+- [x] 파괴적 마이그레이션 CI 검사(`ci.yml`의 `Migration guard` job). 로직은 PR에서 고칠 수 없게 워크플로 안에 둔다
+- [ ] GitHub 브랜치 규칙에 `Migration guard`를 필수 체크로 등록하고 bypass 비움(소유자가 웹에서)
 - [ ] 맥미니 `marketry-network` 네트워크는 서브넷을 지정해서 만든다(`docker network create --subnet ...`). 다시 만들어도 대역이 바뀌지 않게 한다
 - [ ] 맥미니용 compose: cloudflared 추가, 호스트 포트 제거, 렌더러 같은 네트워크, nginx 네트워크 별칭, 렌더러 메모리 제한 1GB
 - [ ] 배포 워크플로: Tailscale 액션(`tag:ci`, 임시 노드), 대상 호스트를 맥미니로, SSH는 동작 이름과 태그만 전달

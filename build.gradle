@@ -91,6 +91,37 @@ tasks.register('manualTest', Test) {
 	}
 }
 
+tasks.register('kiwoomProxyTest', Test) {
+	group = 'verification'
+	description = '이관 전 키움 프록시 인증과 읽기 전용 조회만 확인한다. 프로세스에 인증·프록시 설정을 주입해야 한다.'
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+	useJUnitPlatform {
+		includeTags 'manual'
+	}
+	filter {
+		includeTestsMatching '*KiwoomProxyManualTest'
+	}
+	// 환경값과 외부 연결 상태를 매번 검사한다. 과거 실행 결과로 대신하지 않는다.
+	outputs.upToDateWhen { false }
+	outputs.cacheIf { false }
+	testLogging {
+		events 'passed', 'failed'
+		showStandardStreams = true
+	}
+}
+
+tasks.register('kiwoomProxyCheckJar', org.springframework.boot.gradle.tasks.bundling.BootJar) {
+	group = 'verification'
+	description = '사용자가 맥미니에서 실행할 독립 키움 프록시 검사 프로그램을 만든다.'
+	dependsOn tasks.named('testClasses')
+	mainClass = 'dev.eolmae.marketry.domain.stock.client.KiwoomProxyCheck'
+	targetJavaVersion = JavaVersion.VERSION_21
+	includeTools = false
+	archiveFileName = 'kiwoom-proxy-check.jar'
+	classpath = sourceSets.test.runtimeClasspath
+}
+
 rewrite {
 	activeRecipe('org.openrewrite.java.migrate.UpgradeToJava21')
 	activeRecipe('org.openrewrite.staticanalysis.CommonStaticAnalysis')

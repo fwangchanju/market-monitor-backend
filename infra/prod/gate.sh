@@ -14,10 +14,12 @@ export DOCKER_HOST="unix:///Users/deploy/.colima/default/docker.sock"
 
 REPO_DIR="$HOME/Projects/marketry/marketry-backend"
 COMPOSE_FILE="$REPO_DIR/infra/prod/compose.yml"
-ENV_FILE="${MARKETRY_ENV_FILE:-$HOME/env/marketry.env}"
-BACKUP_DIR="$HOME/backups/predeploy"
+ENV_FILE="${MARKETRY_ENV_FILE:-$HOME/Projects/marketry/env/marketry.env}"
+export MARKETRY_ENV_FILE="$ENV_FILE"
+BACKUP_DIR="$HOME/Projects/marketry/backups/predeploy"
 KEEP_DUMPS=5
 LOCK_DIR="$HOME/.marketry-gate.lock"
+IMAGE_STATE_DIR="$HOME/.marketry-gate-images"
 
 HEALTH_TIMEOUT=600
 HEALTH_INTERVAL=5
@@ -25,6 +27,10 @@ MAX_RESTART_COUNT=3
 
 TARGET=""
 TAG=""
+SERVICES=()
+CONTAINER_SNAPSHOT=""
+PREDEPLOY_SNAPSHOT=""
+CLEANUP_PLAN=""
 
 log() {
   echo "=== [gate] $* ==="
@@ -46,6 +52,12 @@ parse_command() {
   fi
   TARGET="${BASH_REMATCH[1]}"
   TAG="${BASH_REMATCH[2]}"
+  case "$TARGET" in
+    application) SERVICES=(marketry-app) ;;
+    nginx) SERVICES=(marketry-nginx) ;;
+    renderer) SERVICES=(marketry-renderer) ;;
+    all) SERVICES=(marketry-app marketry-nginx marketry-renderer) ;;
+  esac
 }
 
 acquire_lock() {
@@ -113,29 +125,189 @@ compose() {
 }
 
 deploy_services() {
-  local services=()
-  case "$TARGET" in
-    application) services=(marketry-app) ;;
-    nginx) services=(marketry-nginx) ;;
-    renderer) services=(marketry-renderer) ;;
-    all) services=(marketry-app marketry-nginx marketry-renderer) ;;
-  esac
-
   case "$TARGET" in
     application | all) export APP_TAG="$TAG" ;;
   esac
   case "$TARGET" in
-    nginx | all) export NGINX_TAG="$TAG" ;;
+    nginx) export NGINX_TAG="$TAG" ;;
+    all) export NGINX_TAG=latest ;;
   esac
   case "$TARGET" in
-    renderer | all) export RENDERER_TAG="$TAG" ;;
+    renderer) export RENDERER_TAG="$TAG" ;;
+    all) export RENDERER_TAG=latest ;;
   esac
 
-  log "이미지 받기: ${services[*]} (tag: $TAG)"
-  compose pull "${services[@]}"
+  log "이미지 받기: ${SERVICES[*]} (app: ${APP_TAG:-deployed}, nginx: ${NGINX_TAG:-latest}, renderer: ${RENDERER_TAG:-latest})"
+  compose pull "${SERVICES[@]}"
 
-  log "기동: ${services[*]}"
-  compose up -d --no-deps "${services[@]}"
+  log "기동: ${SERVICES[*]}"
+  compose up -d --no-deps "${SERVICES[@]}"
+}
+
+image_repository() {
+  case "$1" in
+    marketry-app) echo ghcr.io/fwangchanju/market-monitor ;;
+    marketry-nginx) echo ghcr.io/fwangchanju/market-monitor-nginx ;;
+    marketry-renderer) echo ghcr.io/fwangchanju/market-monitor-renderer ;;
+    *) return 1 ;;
+  esac
+}
+
+valid_image_id() {
+  local re='^sha256:[a-f0-9]{64}$'
+  [[ "$1" =~ $re ]]
+}
+
+validate_image_ids() {
+  local id
+  for id in $1; do
+    valid_image_id "$id" || return 1
+  done
+}
+
+# 상태는 실행하지 않고 데이터로 읽는다. current/previous는 성공한 배포 상태다.
+read_image_state() {
+  STATE_CURRENT=-
+  STATE_PREVIOUS=-
+  STATE_IDS=""
+  [ -e "$1" ] || return 0
+  local kind id extra seen_current=0 seen_previous=0
+  while read -r kind id extra; do
+    [ -z "$extra" ] || return 1
+    if [ "$id" != - ]; then
+      valid_image_id "$id" || return 1
+    fi
+    case "$kind" in
+      current) [ "$seen_current" -eq 0 ] || return 1; STATE_CURRENT="$id"; seen_current=1 ;;
+      previous) [ "$seen_previous" -eq 0 ] || return 1; STATE_PREVIOUS="$id"; seen_previous=1 ;;
+      image) valid_image_id "$id" || return 1; STATE_IDS="$STATE_IDS $id" ;;
+      *) return 1 ;;
+    esac
+  done < "$1"
+  [ "$seen_current" -eq 1 ] && [ "$seen_previous" -eq 1 ]
+}
+
+write_image_state() {
+  local file="$1" tmp id
+  tmp=$(mktemp "$file.tmp.XXXXXX") || return 1
+  if ! {
+    printf 'current %s\nprevious %s\n' "$STATE_CURRENT" "$STATE_PREVIOUS"
+    for id in $STATE_IDS; do printf 'image %s\n' "$id"; done
+  } > "$tmp"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  if ! chmod 600 "$tmp" || ! mv "$tmp" "$file"; then
+    rm -f "$tmp"
+    return 1
+  fi
+}
+
+snapshot_container_images() {
+  local containers name id extra
+  containers=$(docker ps -aq) || return 1
+  CONTAINER_SNAPSHOT=""
+  if [ -n "$containers" ]; then
+    CONTAINER_SNAPSHOT=$(docker inspect --format '{{.Name}} {{.Image}}' $containers) || return 1
+    while read -r name id extra; do
+      [ -n "$name" ] && [ -z "$extra" ] && valid_image_id "$id" || return 1
+    done <<< "$CONTAINER_SNAPSHOT"
+  fi
+}
+
+container_image() {
+  local name id
+  while read -r name id; do
+    if [ "$name" = "/$1" ]; then printf '%s\n' "$id"; return; fi
+  done <<< "$CONTAINER_SNAPSHOT"
+  echo -
+}
+
+remember_images() {
+  local repository="$1" listed
+  listed=$(docker image ls --quiet --no-trunc "$repository") || return 1
+  validate_image_ids "$listed" || return 1
+  STATE_IDS=$(printf '%s\n' $STATE_IDS $listed | awk 'NF' | sort -u) || return 1
+}
+
+# latest가 이동하기 전에 소유권을 확인한 ID만 기록한다. 조회 실패 시 정리를 건너뛴다.
+prepare_image_cleanup() {
+  mkdir -p "$IMAGE_STATE_DIR" && chmod 700 "$IMAGE_STATE_DIR" || return 1
+  snapshot_container_images || return 1
+  PREDEPLOY_SNAPSHOT="$CONTAINER_SNAPSHOT"
+  local service repository file
+  for service in "${SERVICES[@]}"; do
+    repository=$(image_repository "$service") || return 1
+    file="$IMAGE_STATE_DIR/$service"
+    read_image_state "$file" || return 1
+    if [ ! -e "$file" ]; then
+      STATE_CURRENT=$(container_image "$service") || return 1
+    fi
+    remember_images "$repository" && write_image_state "$file" || return 1
+  done
+}
+
+# 모든 대상의 보호 정보를 확인한 뒤 삭제한다. 중지 컨테이너도 보호한다.
+build_image_cleanup_plan() {
+  snapshot_container_images || return 1
+  local available service repository file current id metadata actual created tags digests extra
+  local records live_ids foreign_ids reference timestamp fraction latest_ids protected_ids
+  available=$(docker image ls --quiet --no-trunc) || return 1
+  validate_image_ids "$available" || return 1
+  available=$(printf '%s\n' "$available" | tr '\n' ' ') || return 1
+  CLEANUP_PLAN=""
+  for service in "${SERVICES[@]}"; do
+    repository=$(image_repository "$service") || return 1
+    file="$IMAGE_STATE_DIR/$service"
+    read_image_state "$file" || return 1
+    current=$(container_image "$service") || return 1
+    valid_image_id "$current" || return 1
+    if [ "$current" != "$STATE_CURRENT" ]; then
+      STATE_PREVIOUS="$STATE_CURRENT"
+      STATE_CURRENT="$current"
+    fi
+    write_image_state "$file" && remember_images "$repository" || return 1
+    records=""; live_ids=""; foreign_ids=""
+    for id in $STATE_IDS; do
+      case " $available " in *" $id "*) ;; *) continue ;; esac
+      metadata=$(docker image inspect --format '{{.Id}}|{{.Created}}|{{range .RepoTags}}{{.}} {{end}}|{{range .RepoDigests}}{{.}} {{end}}' "$id") || return 1
+      IFS='|' read -r actual created tags digests extra <<< "$metadata"
+      [ "$actual" = "$id" ] && [ -z "$extra" ] || return 1
+      local date_re='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,9})?Z$'
+      [[ "$created" =~ $date_re ]] || return 1
+      timestamp="${created%Z}"
+      fraction=0
+      if [[ "$timestamp" == *.* ]]; then fraction="${timestamp#*.}"; timestamp="${timestamp%%.*}"; fi
+      fraction="${fraction}000000000"
+      records="$records$timestamp.${fraction:0:9} $id"$'\n'
+      live_ids="$live_ids $id"
+      for reference in $tags $digests; do
+        case "$reference" in "$repository":* | "$repository"@*) ;; *) foreign_ids="$foreign_ids $id" ;; esac
+      done
+    done
+    STATE_IDS="$live_ids"
+    write_image_state "$file" || return 1
+    latest_ids=$(printf '%s' "$records" | sort -r | awk 'NR <= 2 {print $2}') || return 1
+    protected_ids="$STATE_CURRENT $STATE_PREVIOUS $foreign_ids $latest_ids"
+    protected_ids="$protected_ids $(printf '%s\n%s\n' "$CONTAINER_SNAPSHOT" "$PREDEPLOY_SNAPSHOT" | awk '{print $2}')"
+    protected_ids=$(printf '%s\n' "$protected_ids" | tr '\n' ' ') || return 1
+    for id in $STATE_IDS; do
+      case " $protected_ids " in
+        *" $id "*) ;;
+        *) CLEANUP_PLAN="$CLEANUP_PLAN$service $id"$'\n' ;;
+      esac
+    done
+  done
+}
+
+cleanup_images() {
+  local service id
+  while read -r service id; do
+    [ -n "$id" ] || continue
+    if ! docker image rm "$id"; then
+      log "경고: $service 오래된 이미지를 삭제하지 못해 보존합니다 ($id)"
+    fi
+  done <<< "$CLEANUP_PLAN"
 }
 
 # 컨테이너가 크래시 루프에 빠졌는지 본다. 빠졌으면 1을 반환한다
@@ -238,9 +410,22 @@ main() {
 
   acquire_lock
   predeploy_dump
+  local cleanup_ready=false
+  if prepare_image_cleanup; then
+    cleanup_ready=true
+  else
+    log "경고: 이미지 정리 준비에 실패해 이번 정리를 건너뜁니다"
+  fi
   update_repo
   deploy_services
   health_check
+  if [ "$cleanup_ready" = true ]; then
+    if build_image_cleanup_plan; then
+      cleanup_images
+    else
+      log "경고: 이미지 보호 정보 확인에 실패해 이번 정리를 건너뜁니다"
+    fi
+  fi
   log "배포 완료"
 }
 

@@ -12,7 +12,8 @@
    ./setup-network.sh
    ```
 
-2. env 파일을 만든다. `env.template`의 키를 `~/env/marketry.env`로 복사해 값을 채우고 권한을 `600`으로 둔다.
+2. env 파일을 만든다. `env.template`의 키를 `~/Projects/marketry/env/marketry.env`로 복사해 값을 채운다.
+   `env` 폴더 권한은 `700`, 파일 권한은 `600`으로 둔다. `deploy` 홈의 경로이며 소스 레포 밖이다.
    `R2_*`는 비워 두면 외부 업로드만 건너뛴다.
 
 3. GHCR에 로그인한다(읽기 권한 토큰).
@@ -26,10 +27,11 @@
    ```sh
    install -m 755 gate.sh ~/Optional/bin/marketry-gate
    install -m 755 backup.sh ~/Optional/bin/marketry-backup
-   mkdir -p ~/backups/predeploy ~/backups/daily
+   mkdir -p ~/Projects/marketry/backups/predeploy ~/Projects/marketry/backups/daily
+   chmod 700 ~/Projects/marketry/backups ~/Projects/marketry/backups/predeploy ~/Projects/marketry/backups/daily
    ```
 
-5. `~/.ssh/authorized_keys`에 배포 키를 강제 명령과 함께 등록한다. 키는 GitHub Actions 전용으로 만든다.
+5. `~/.ssh/authorized_keys`에 배포 키를 강제 명령과 함께 등록한다. 현재는 `deploy`의 레포 clone용 키를 재사용한다.
 
    ```
    command="/Users/deploy/Optional/bin/marketry-gate",restrict ssh-ed25519 AAAA... ci-deploy
@@ -39,6 +41,12 @@
 
    ```sh
    sudo install -m 644 -o root -g wheel launchd/kr.co.marketry.backup.plist /Library/LaunchDaemons/
+   sudo /usr/bin/plutil -lint /Library/LaunchDaemons/kr.co.marketry.backup.plist
+   ```
+
+   이관 당일 운영 DB를 기동한 뒤 예약 작업을 등록한다.
+
+   ```sh
    sudo launchctl bootstrap system /Library/LaunchDaemons/kr.co.marketry.backup.plist
    ```
 
@@ -49,10 +57,26 @@
    chmod 755 /Users/Shared/marketry-dev-snapshot
    ```
 
-8. 첫 기동은 손으로 한다. 이미지 태그는 환경변수로 넘기고, 생략하면 `deployed`(앱)와 `latest`(나머지)를 쓴다.
+8. 이관 당일 첫 기동은 사용자가 손으로 한다. 먼저 PostgreSQL만 띄우고 기존 앱 중지와 DB 덤프·복원을 진행한다.
 
    ```sh
-   docker compose -f compose.yml --env-file ~/env/marketry.env up -d
+   MARKETRY_ENV_FILE="$HOME/Projects/marketry/env/marketry.env" \
+     docker compose -f compose.yml --env-file "$HOME/Projects/marketry/env/marketry.env" up -d marketry-postgres
+   ```
+
+   DB 복원 뒤 앱·nginx·렌더러를 띄운다. 이미지 태그는 환경변수로 넘기고 생략하면 `deployed`(앱)와 `latest`(나머지)를 쓴다.
+
+   ```sh
+   MARKETRY_ENV_FILE="$HOME/Projects/marketry/env/marketry.env" \
+     docker compose -f compose.yml --env-file "$HOME/Projects/marketry/env/marketry.env" \
+       up -d marketry-app marketry-nginx marketry-renderer
+   ```
+
+   공개 터널은 오라클에 둔 채 내부 캡처를 검사한다. 통과한 뒤 기존 cloudflared를 중지하고 터널 서비스 주소를 맥미니용으로 바꿔 기동한다.
+
+   ```sh
+   MARKETRY_ENV_FILE="$HOME/Projects/marketry/env/marketry.env" \
+     docker compose -f compose.yml --env-file "$HOME/Projects/marketry/env/marketry.env" up -d marketry-cloudflared
    ```
 
    이후 배포는 GitHub Actions가 게이트를 거쳐서만 한다.
@@ -61,3 +85,40 @@
 
 개발 DB는 `infra/local/restore-snapshot.sh`로 스냅샷에서 다시 만든다. 05:00 예약 작업은
 `infra/local/launchd/kr.co.marketry.dev-snapshot-restore.plist`를 개발 계정의 `~/Library/LaunchAgents`에 복사해 쓴다.
+
+## 키움 프록시 사전 검사
+
+개발 계정에서 `./gradlew kiwoomProxyCheckJar`로 독립 검사 프로그램을 만든다. 만들어진
+`build/libs/kiwoom-proxy-check.jar`는 사용자가 `deploy` 소유의 `~/Optional/kiwoom-proxy-check.jar`로 복사한다.
+사용자는 개발 계정의 OrbStack에서 먼저 검증한 뒤 `deploy`의 Colima 운영 네트워크에서 같은 JAR로 검사한다.
+에이전트는 운영 환경 파일을 읽거나 아래 명령을 실행하지 않는다. 사용자가 `deploy` 계정에서 실행한다.
+실제 토큰 발급에 앞서 기존 운영 토큰에 미치는 영향을 확인한다.
+
+```sh
+env -u DOCKER_CONTEXT -u DOCKER_CONFIG "$HOME/Optional/bin/docker" \
+  --host "unix://$HOME/.colima/default/docker.sock" run --rm --network marketry-network \
+  -e MARKETRY_KIWOOM_TOKEN_TEST=1 \
+  --mount "type=bind,src=$HOME/Optional/kiwoom-proxy-check.jar,dst=/app/check.jar,readonly" \
+  --mount "type=bind,src=$HOME/Projects/marketry/env/marketry.env,dst=/run/marketry.env,readonly" \
+  eclipse-temurin:21-jre-noble \
+  java -jar /app/check.jar --env-file /run/marketry.env
+```
+
+토큰 발급 뒤 지수기여도 수집기에서 사용하는 `ka20001`의 코스피 지수 조회를 한 번만 실행한다.
+연속조회·재시도·DB 저장·수집기·텔레그램 발송은 하지 않는다. 이 API에는 날짜 입력이 없으므로 지정일 조회가 아니다.
+프로그램은 환경 파일의 키움 인증·프록시 네 변수만 사용한다. 발급 허용은 프로세스 변수로만 받는다.
+응답의 성공 코드와 숫자 지수값을 검사하고 결과만 출력한다. 실패 시 종료코드는 1이며 토큰과 응답 원문은 출력하지 않는다.
+
+## 게이트 검증과 이미지 보관
+
+`deploy all <tag>`는 앱에 요청한 태그, nginx·렌더러에 `latest`를 적용한다. 개별 서비스 배포는 요청한 태그를 적용한다.
+대상 전체의 헬스체크가 성공하면 요청한 서비스의 오래된 로컬 이미지를 정리한다.
+현재·직전 성공 이미지, 생성 시각 기준 최신 고유 이미지 2개, 다른 컨테이너가 사용하는 이미지는 보호한다.
+태그 없는 이미지는 게이트가 해당 레포에서 추적한 ID만 정리한다. 상태는 `~/.marketry-gate-images`에 기록한다.
+조회·기록 실패 시 정리를 건너뛰고 삭제 실패 시 경고를 남긴다. 강제 삭제는 하지 않는다.
+
+운영 Docker·환경 파일을 사용하지 않는 회귀 검사는 개발 계정에서 실행한다.
+
+```sh
+/bin/bash infra/prod/tests/gate-test.sh
+```

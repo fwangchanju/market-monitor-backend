@@ -9,8 +9,8 @@ set -uo pipefail
 export PATH="$HOME/Optional/bin:$HOME/Optional/lima/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 export DOCKER_HOST="unix:///Users/deploy/.colima/default/docker.sock"
 
-ENV_FILE="${MARKETRY_ENV_FILE:-$HOME/env/marketry.env}"
-DAILY_DIR="$HOME/backups/daily"
+ENV_FILE="${MARKETRY_ENV_FILE:-$HOME/Projects/marketry/env/marketry.env}"
+DAILY_DIR="$HOME/Projects/marketry/backups/daily"
 KEEP_DAYS=7
 SNAPSHOT_DIR="/Users/Shared/marketry-dev-snapshot"
 SNAPSHOT_DB="marketry_snapshot"
@@ -51,7 +51,7 @@ daily_dump() {
   DAILY_DUMP="$final"
 }
 
-# 보관 30일 정리는 R2 버킷의 수명 주기 규칙에 맡긴다. 여기서는 올리기만 한다
+# 보관 10일 정리는 R2 버킷의 수명 주기 규칙에 맡긴다. 여기서는 올리기만 한다
 upload_r2() {
   local endpoint bucket key secret
   endpoint=$(env_value R2_ENDPOINT)

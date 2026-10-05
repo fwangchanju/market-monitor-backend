@@ -173,7 +173,7 @@ V1을 고치면 운영 DB의 checksum과 달라져 앱이 기동하지 않는다
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google 로그인 |
 | `AUTH_JWT_SECRET` | 토큰 서명 키, 32바이트 이상. **바꾸면 전원 로그아웃** |
 | `TUNNEL_TOKEN` | Cloudflare Tunnel 토큰. nginx 배포 때 cloudflared 컨테이너에만 전달한다 |
-| `KIWOOM_PROXY_HOST`, `KIWOOM_PROXY_PORT` | 키움 호출만 거치는 HTTP 프록시. 비우면 직접 연결한다(지금 서버는 비워 둔다). 포트 기본값 8888 |
+| `MARKETRY_PROXY_HOST`, `MARKETRY_PROXY_PORT` | 키움 호출만 거치는 HTTP 프록시. 비우면 직접 연결한다(지금 서버는 비워 둔다). 포트 기본값 8888 |
 
 환경변수는 컨테이너를 새로 만들 때만 읽힌다. 파일을 고친 뒤 배포(또는 `docker compose up -d`)해야 반영된다.
 로그인 복귀 주소는 `application-prod.properties`의 `marketry.base-url`을 따른다.

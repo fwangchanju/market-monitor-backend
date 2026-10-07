@@ -33,12 +33,12 @@ class NewStockListingPropagationServiceTest {
     }
 
     @Test
-    void 신규_일반주를_모든_사용자의_신규상장_섹터에_일괄_배정한다() throws Exception {
+    void 신규_일반주를_모든_사용자의_신규_상장_섹터에_일괄_배정한다() throws Exception {
         service.onStockInfoSynced(new StockInfoSyncedEvent(List.of("005930", "000660")));
 
         InOrder order = Mockito.inOrder(jdbcTemplate);
         order.verify(jdbcTemplate).execute(any(ConnectionCallback.class));
-        order.verify(jdbcTemplate).update(contains("INSERT INTO custom_sector"), eq("신규상장"));
+        order.verify(jdbcTemplate).update(contains("INSERT INTO custom_sector"), eq("신규 상장"));
         ArgumentCaptor<PreparedStatementSetter> setter = ArgumentCaptor.forClass(PreparedStatementSetter.class);
         order.verify(jdbcTemplate).update(contains("INSERT INTO custom_stock_sector"), setter.capture());
 
@@ -54,6 +54,6 @@ class NewStockListingPropagationServiceTest {
         verify(connection).createArrayOf(eq("varchar"), stockCodes.capture());
         org.assertj.core.api.Assertions.assertThat(stockCodes.getValue()).containsExactly("005930", "000660");
         verify(statement).setArray(1, array);
-        verify(statement).setString(2, "신규상장");
+        verify(statement).setString(2, "신규 상장");
     }
 }

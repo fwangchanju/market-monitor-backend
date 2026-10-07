@@ -15,6 +15,9 @@ import lombok.Getter;
 @Getter
 public class CustomSector {
 
+    /** 신규 종목이 자동 배정되는 최상위 업종 이름 — 삭제할 수 없다. */
+    public static final String NEW_LISTING_NAME = "신규 상장";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -44,6 +47,11 @@ public class CustomSector {
     private LocalDateTime updatedAt;
 
     protected CustomSector() {}
+
+    /** 삭제할 수 없는 "신규 상장" 최상위 업종인지. */
+    public boolean isNewListing() {
+        return parentId == null && NEW_LISTING_NAME.equals(name);
+    }
 
     public static CustomSector createParent(Long userId, String name) {
         var entity = new CustomSector();

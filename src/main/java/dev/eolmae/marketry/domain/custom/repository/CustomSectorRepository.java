@@ -13,6 +13,8 @@ public interface CustomSectorRepository extends JpaRepository<CustomSector, Long
 
     Optional<CustomSector> findFirstByUserIdOrderByIdAsc(Long userId);
 
+    Optional<CustomSector> findFirstByUserIdOrderByUpdatedAtDesc(Long userId);
+
     Optional<CustomSector> findByIdAndUserId(Long id, Long userId);
 
     boolean existsByUserIdAndName(Long userId, String name);

@@ -100,7 +100,7 @@ public class StockInfoCollector {
                 .toList();
         stockInfoRepository.saveAllAndFlush(newStocks);
         List<String> newOrdinaryStockCodes = newStocks.stream()
-                .filter(stock -> StockMarketCode.isOrdinaryShare(stock.getMarketCode()))
+                .filter(stock -> StockMarketCode.isNewListingTarget(stock.getMarketCode(), stock.getStockName()))
                 .map(StockInfo::getStockCode)
                 .toList();
         if (!newOrdinaryStockCodes.isEmpty()) {

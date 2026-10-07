@@ -124,6 +124,9 @@ public class CustomSectorService {
         SectorMaps maps = getSectorMaps();
         Map<Long, CustomSector> sectorById = maps.sectorById();
         CustomSector target = findSector(sectorId, sectorById);
+        if (target.isNewListing()) {
+            return SectorDeletePreview.blocked(target.getName(), List.of());
+        }
 
         List<Long> subSectorIds = collectSubSectorIds(sectorId, maps.sectorByParentId());
         List<CustomStockSector> stockSectors =
@@ -141,7 +144,9 @@ public class CustomSectorService {
         Long userId = CurrentUser.requireId();
         SectorMaps maps = getSectorMaps();
         Map<Long, CustomSector> sectorById = maps.sectorById();
-        findSector(sectorId, sectorById);
+        if (findSector(sectorId, sectorById).isNewListing()) {
+            throw new ConflictException(ErrorCode.SECTOR_NEW_LISTING_PROTECTED, sectorId);
+        }
 
         List<Long> subSectorIds = collectSubSectorIds(sectorId, maps.sectorByParentId());
         List<CustomStockSector> stockSectors =

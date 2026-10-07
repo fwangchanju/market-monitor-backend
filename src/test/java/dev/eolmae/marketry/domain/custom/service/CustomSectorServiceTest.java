@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import dev.eolmae.marketry.common.exception.ConflictException;
 import dev.eolmae.marketry.common.exception.NotFoundException;
 import dev.eolmae.marketry.domain.auth.enums.Role;
 import dev.eolmae.marketry.domain.auth.service.AuthenticatedUserPrincipal;
@@ -82,5 +83,28 @@ class CustomSectorServiceTest {
         assertThatThrownBy(() -> service.rename(99L, "이름 변경")).isInstanceOf(NotFoundException.class);
 
         verify(sectorRepository).findByIdAndUserId(99L, USER_ID);
+    }
+
+    @Test
+    void delete_신규_상장_최상위_업종은_삭제할_수_없다() {
+        CustomSector listing = CustomSector.createParent(USER_ID, CustomSector.NEW_LISTING_NAME);
+        ReflectionTestUtils.setField(listing, "id", 10L);
+        when(sectorRepository.findAllByUserId(USER_ID)).thenReturn(List.of(listing));
+
+        assertThatThrownBy(() -> service.delete(10L)).isInstanceOf(ConflictException.class);
+
+        verify(sectorRepository, Mockito.never()).deleteAll(any());
+    }
+
+    @Test
+    void deletePreview_신규_상장_최상위_업종은_삭제할_수_없는_것으로_알린다() {
+        CustomSector listing = CustomSector.createParent(USER_ID, CustomSector.NEW_LISTING_NAME);
+        ReflectionTestUtils.setField(listing, "id", 10L);
+        when(sectorRepository.findAllByUserId(USER_ID)).thenReturn(List.of(listing));
+
+        var preview = service.deletePreview(10L);
+
+        assertThat(preview.deletable()).isFalse();
+        assertThat(preview.sectorName()).isEqualTo("신규 상장");
     }
 }

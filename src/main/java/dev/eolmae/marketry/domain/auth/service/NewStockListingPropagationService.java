@@ -1,6 +1,7 @@
 package dev.eolmae.marketry.domain.auth.service;
 
 import dev.eolmae.marketry.common.event.StockInfoSyncedEvent;
+import dev.eolmae.marketry.domain.custom.entity.CustomSector;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.event.EventListener;
 import org.springframework.jdbc.core.ConnectionCallback;
@@ -13,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class NewStockListingPropagationService {
 
-    private static final String LISTING_SECTOR_NAME = "신규상장";
+    private static final String LISTING_SECTOR_NAME = CustomSector.NEW_LISTING_NAME;
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -34,7 +35,7 @@ public class NewStockListingPropagationService {
             return null;
         });
 
-        // INSERT ... SELECT + ON CONFLICT DO NOTHING — 전체 사용자에게 `신규상장` 섹터를 한 번에 확보하는
+        // INSERT ... SELECT + ON CONFLICT DO NOTHING — 전체 사용자에게 `신규 상장` 섹터를 한 번에 확보하는
         // 집합 연산. JPA로 바꾸면 사용자 수만큼 조회·INSERT가 나가고, ON CONFLICT는 JPQL/QueryDSL에 없다.
         jdbcTemplate.update("""
                 INSERT INTO custom_sector (user_id, parent_id, name, depth, is_excluded, created_at, updated_at)

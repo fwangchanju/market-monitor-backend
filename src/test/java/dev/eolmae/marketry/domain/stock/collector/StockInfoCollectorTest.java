@@ -245,4 +245,30 @@ class StockInfoCollectorTest {
 
         verify(eventPublisher, never()).publishEvent(any(StockInfoSyncedEvent.class));
     }
+
+    @Test
+    void sync_신규_스팩주도_신규_상장_이벤트에_포함하고_신주인수권과_ELW는_제외한다() {
+        StockInfoResponse response = new StockInfoResponse(
+                "0",
+                "normal",
+                List.of(
+                        new StockInfoResponse.StockItem("005930", "삼성전자", "0", "반도체", "100", "10000", null),
+                        new StockInfoResponse.StockItem("0164H0", "한국제16호스팩", "30", "", "100", "2000", null),
+                        new StockInfoResponse.StockItem("0164H1", "한국제16호스팩 신주인수권", "5", "", "100", "100", null),
+                        new StockInfoResponse.StockItem("57JJJJ", "삼성스팩ELW", "3", "ELW", "100", "1000", null)));
+        when(kiwoomApiClient.post(any(StockInfoRequest.class), eq(StockInfoResponse.class)))
+                .thenReturn(response);
+        when(stockInfoRepository.findAll()).thenReturn(List.of());
+        when(industryInfoRepository.findByNameIn(Mockito.anyCollection())).thenReturn(List.of());
+        Mockito.doReturn(List.of("반도체"))
+                .when(jdbcTemplate)
+                .query(Mockito.anyString(), Mockito.<RowMapper<String>>any(), Mockito.<Object[]>any());
+
+        collector.sync();
+
+        verify(eventPublisher)
+                .publishEvent(Mockito.<Object>argThat(event -> event instanceof StockInfoSyncedEvent synced
+                        && synced.stockCodes().size() == 2
+                        && synced.stockCodes().containsAll(List.of("005930", "0164H0"))));
+    }
 }

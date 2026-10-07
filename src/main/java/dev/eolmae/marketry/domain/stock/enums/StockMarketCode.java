@@ -29,4 +29,15 @@ public enum StockMarketCode {
     public static boolean isOrdinaryShare(String marketCode) {
         return KOSPI.matches(marketCode) || KOSDAQ.matches(marketCode);
     }
+
+    /** 신규 상장 업종에 자동 배정할 대상인지: 주권이거나, 이름에 "스팩"이 들어간 종목(신주인수권·ELW는 제외). */
+    public static boolean isNewListingTarget(String marketCode, String stockName) {
+        if (isOrdinaryShare(marketCode)) {
+            return true;
+        }
+        return stockName != null
+                && stockName.contains("스팩")
+                && !NEW_SHARES.matches(marketCode)
+                && !ELW.matches(marketCode);
+    }
 }

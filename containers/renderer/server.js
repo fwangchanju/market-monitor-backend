@@ -130,7 +130,11 @@ async function handleCapture(path, selector, token) {
     const sections = await page.$$(selector)
     const images = []
     for (let i = 0; i < sections.length; i++) {
-      const buffer = await sections[i].screenshot({ type: 'png' })
+      // 설정창 이동 버튼이 본문 경계에 걸쳐 있어 캡처 순간에는 설정창 전체를 숨긴다.
+      const buffer = await sections[i].screenshot({
+        type: 'png',
+        style: '[data-settings-sidebar-shell] { visibility: hidden !important; }',
+      })
       images.push({ name: `section-${i}`, data: buffer.toString('base64') })
     }
 

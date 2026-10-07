@@ -145,7 +145,7 @@ public class MarketMapQueryService {
                 latestSnapshotTime,
                 nodes,
                 findSingleMarketOverview(markets, latestSnapshotTime),
-                findClassificationUpdatedAt());
+                findExchangeClassificationUpdatedAt());
     }
 
     /** 커스텀 마켓맵: 어드민이 구성한 섹터 트리 기준. 트리에 배정 안 된 종목은 stock_info 섹터로
@@ -535,13 +535,36 @@ public class MarketMapQueryService {
                 latestSnapshotTime,
                 tree,
                 findSingleMarketOverview(markets, latestSnapshotTime),
-                findClassificationUpdatedAt());
+                findCustomClassificationUpdatedAt());
     }
 
-    /** 사용자별 분류가 아니라 운영자(ownerUserId)의 종목 분류 최종 변경 시각 — 모든 사용자에게 같은 값을 보여준다. */
-    private LocalDateTime findClassificationUpdatedAt() {
+    /** 조회 마켓·NXT 필터와 무관하게 거래소 분류 전체의 종목 정보 동기화 시각을 보여준다. */
+    private LocalDateTime findExchangeClassificationUpdatedAt() {
+        return stockInfoCacheService.getCache().values().stream()
+                .filter(StockInfo::isActiveAndOrdinary)
+                .map(StockInfo::getUpdatedAt)
+                .max(LocalDateTime::compareTo)
+                .orElse(null);
+    }
+
+    /** 사용자별 분류가 아니라 운영자(ownerUserId)의 업종 정보·종목 배정 최종 변경 시각 — 모든 사용자에게 같은 값을 보여준다. */
+    private LocalDateTime findCustomClassificationUpdatedAt() {
         Long ownerUserId = marketryProperties.ownerUserId();
-        return ownerUserId == null ? null : customStockSectorRepository.findLatestUpdatedAtByUserId(ownerUserId);
+        if (ownerUserId == null) {
+            return null;
+        }
+        LocalDateTime assignmentUpdatedAt = customStockSectorRepository.findLatestUpdatedAtByUserId(ownerUserId);
+        LocalDateTime sectorUpdatedAt = customSectorRepository
+                .findFirstByUserIdOrderByUpdatedAtDesc(ownerUserId)
+                .map(CustomSector::getUpdatedAt)
+                .orElse(null);
+        if (assignmentUpdatedAt == null) {
+            return sectorUpdatedAt;
+        }
+        if (sectorUpdatedAt == null || assignmentUpdatedAt.isAfter(sectorUpdatedAt)) {
+            return assignmentUpdatedAt;
+        }
+        return sectorUpdatedAt;
     }
 
     private List<MarketMapSectorNode> buildSectorTree(

@@ -29,14 +29,14 @@ class SectorTierAggregationServiceTest {
     private static final long TEST_USER_ID = 1L;
     // 비로그인 폴백 대상과 다른 값으로 둬서, 실제로 이 프로퍼티 값을 읽는지(우연히 일치하는 게
     // 아닌지)를 구분해 검증한다.
-    private static final long OWNER_PROPERTY_USER_ID = 555555L;
+    private static final long PUBLISHED_PROPERTY_USER_ID = 555555L;
 
     private final CustomValueTierThresholdRepository marketValueTierThresholdRepository =
             mock(CustomValueTierThresholdRepository.class);
     private final CustomValueTierThresholdService customValueTierThresholdService =
             new CustomValueTierThresholdService(marketValueTierThresholdRepository);
     private final MarketryProperties marketryProperties =
-            new MarketryProperties("http://localhost:8081", OWNER_PROPERTY_USER_ID);
+            new MarketryProperties("http://localhost:8081", 999999L, PUBLISHED_PROPERTY_USER_ID);
     private final SectorTierAggregationService service =
             new SectorTierAggregationService(customValueTierThresholdService, marketryProperties);
 
@@ -54,10 +54,10 @@ class SectorTierAggregationServiceTest {
     }
 
     @Test
-    void aggregateBySector_비로그인이면_marketry_owner_user_id_프로퍼티_값으로_구간을_조회한다() {
+    void aggregateBySector_비로그인이면_marketry_published_user_id_프로퍼티_값으로_구간을_조회한다() {
         SecurityContextHolder.clearContext();
         CustomValueTierThreshold large = tier(10L, "대형");
-        when(marketValueTierThresholdRepository.findAllByUserIdOrderByThresholdValueAsc(OWNER_PROPERTY_USER_ID))
+        when(marketValueTierThresholdRepository.findAllByUserIdOrderByThresholdValueAsc(PUBLISHED_PROPERTY_USER_ID))
                 .thenReturn(List.of(large));
 
         MarketMapSectorNode node = leaf(1L, "반도체", List.of(item("005930", "대형", BigDecimal.TEN, 10_000)));

@@ -1,0 +1,37 @@
+package dev.eolmae.marketry.domain.view.enums;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import dev.eolmae.marketry.common.exception.BadRequestException;
+import org.junit.jupiter.api.Test;
+
+class ClassificationSourceTest {
+
+    @Test
+    void from_세_값을_대소문자_구분없이_해석한다() {
+        assertThat(ClassificationSource.from("krx")).isEqualTo(ClassificationSource.KRX);
+        assertThat(ClassificationSource.from("marketry")).isEqualTo(ClassificationSource.MARKETRY);
+        assertThat(ClassificationSource.from("MYMAP")).isEqualTo(ClassificationSource.MYMAP);
+        assertThat(ClassificationSource.from("MyMap")).isEqualTo(ClassificationSource.MYMAP);
+    }
+
+    @Test
+    void from_모르는_값은_거부한다() {
+        assertThatThrownBy(() -> ClassificationSource.from("mine")).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> ClassificationSource.from("")).isInstanceOf(BadRequestException.class);
+    }
+
+    @Test
+    void resolve_source가_없으면_옛_isCustom을_따른다() {
+        assertThat(ClassificationSource.resolve(null, true)).isEqualTo(ClassificationSource.MYMAP);
+        assertThat(ClassificationSource.resolve(null, false)).isEqualTo(ClassificationSource.KRX);
+    }
+
+    @Test
+    void resolve_source가_있으면_isCustom은_무시한다() {
+        assertThat(ClassificationSource.resolve("marketry", true)).isEqualTo(ClassificationSource.MARKETRY);
+        assertThat(ClassificationSource.resolve("marketry", false)).isEqualTo(ClassificationSource.MARKETRY);
+        assertThat(ClassificationSource.resolve("krx", true)).isEqualTo(ClassificationSource.KRX);
+    }
+}

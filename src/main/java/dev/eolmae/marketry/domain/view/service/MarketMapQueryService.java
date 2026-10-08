@@ -161,11 +161,26 @@ public class MarketMapQueryService {
 
     public MarketMapResponse getCustomMarketMap(
             MarketQuery marketQuery, LocalDateTime snapshotTime, boolean nxtOnly, ChangeRateBasis basis) {
-        Long userId = CurrentUser.requireId();
+        return getCustomMarketMap(marketQuery, snapshotTime, nxtOnly, basis, CurrentUser.requireId());
+    }
+
+    /** MARKETRY: 운영자가 올린 고정본(발행 사용자)의 분류 기준 — 로그인 없이 누구나 읽는다. */
+    public MarketMapResponse getPublishedMarketMap(
+            MarketQuery marketQuery, LocalDateTime snapshotTime, boolean nxtOnly, ChangeRateBasis basis) {
+        return getCustomMarketMap(marketQuery, snapshotTime, nxtOnly, basis, marketryProperties.publishedUserId());
+    }
+
+    /** 비즈니스 로직 오버로드: dataUserId의 분류 데이터로 커스텀 마켓맵을 만든다. */
+    private MarketMapResponse getCustomMarketMap(
+            MarketQuery marketQuery,
+            LocalDateTime snapshotTime,
+            boolean nxtOnly,
+            ChangeRateBasis basis,
+            Long dataUserId) {
         List<Market> markets = marketQuery.toMarkets();
         return resolveSnapshotTime(markets, snapshotTime)
                 .map(resolvedSnapshotTime ->
-                        buildCustomMarketMap(markets, resolvedSnapshotTime, userId, nxtOnly, basis))
+                        buildCustomMarketMap(markets, resolvedSnapshotTime, dataUserId, nxtOnly, basis))
                 .orElseGet(MarketMapResponse::empty);
     }
 
@@ -535,7 +550,7 @@ public class MarketMapQueryService {
                 latestSnapshotTime,
                 tree,
                 findSingleMarketOverview(markets, latestSnapshotTime),
-                findCustomClassificationUpdatedAt());
+                findCustomClassificationUpdatedAt(userId));
     }
 
     /** 조회 마켓·NXT 필터와 무관하게 거래소 분류 전체의 종목 정보 동기화 시각을 보여준다. */
@@ -547,15 +562,11 @@ public class MarketMapQueryService {
                 .orElse(null);
     }
 
-    /** 사용자별 분류가 아니라 운영자(ownerUserId)의 업종 정보·종목 배정 최종 변경 시각 — 모든 사용자에게 같은 값을 보여준다. */
-    private LocalDateTime findCustomClassificationUpdatedAt() {
-        Long ownerUserId = marketryProperties.ownerUserId();
-        if (ownerUserId == null) {
-            return null;
-        }
-        LocalDateTime assignmentUpdatedAt = customStockSectorRepository.findLatestUpdatedAtByUserId(ownerUserId);
+    /** 지도에 쓴 분류 데이터 주인(userId)의 업종 정보·종목 배정 최종 변경 시각 — MARKETRY면 고정본을 올린 시각, 내 히트맵이면 내가 마지막으로 고친 시각이다. */
+    private LocalDateTime findCustomClassificationUpdatedAt(Long userId) {
+        LocalDateTime assignmentUpdatedAt = customStockSectorRepository.findLatestUpdatedAtByUserId(userId);
         LocalDateTime sectorUpdatedAt = customSectorRepository
-                .findFirstByUserIdOrderByUpdatedAtDesc(ownerUserId)
+                .findFirstByUserIdOrderByUpdatedAtDesc(userId)
                 .map(CustomSector::getUpdatedAt)
                 .orElse(null);
         if (assignmentUpdatedAt == null) {
@@ -716,6 +727,6 @@ public class MarketMapQueryService {
     }
 
     private Long customDataUserId() {
-        return marketryProperties.userIdOrOwner(CurrentUser.currentId());
+        return marketryProperties.userIdOrPublished(CurrentUser.currentId());
     }
 }

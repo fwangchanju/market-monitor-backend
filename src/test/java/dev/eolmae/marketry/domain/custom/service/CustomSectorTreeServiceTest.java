@@ -125,4 +125,34 @@ class CustomSectorTreeServiceTest {
         inOrder.verify(sectorRepository).flush();
         inOrder.verify(sectorRepository).save(Mockito.any(CustomSector.class));
     }
+
+    @Test
+    void withoutAliases_약칭만_비우고_나머지는_그대로_둔다() {
+        CustomSnapshotPayload payload = new CustomSnapshotPayload(
+                2,
+                List.of(new CustomSnapshotPayload.Sector(1L, null, "산업", 0, false)),
+                List.of(new CustomSnapshotPayload.StockAssignment("005930", 1L)),
+                List.of(new CustomSnapshotPayload.StockAlias("005930", "삼전")),
+                List.of(),
+                List.of(),
+                Map.of("k", "v"));
+        String json = service.withoutAliases(toJsonUnchecked(payload));
+
+        CustomSnapshotPayload result = service.parseSnapshot(json);
+
+        assertThat(result.aliases()).isEmpty();
+        assertThat(result.sectors()).hasSize(1);
+        assertThat(result.assignments())
+                .extracting(CustomSnapshotPayload.StockAssignment::stockCode)
+                .containsExactly("005930");
+        assertThat(result.preferences()).containsEntry("k", "v");
+    }
+
+    private String toJsonUnchecked(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalStateException(e);
+        }
+    }
 }

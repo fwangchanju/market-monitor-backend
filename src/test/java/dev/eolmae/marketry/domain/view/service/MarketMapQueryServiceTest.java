@@ -35,6 +35,7 @@ import dev.eolmae.marketry.domain.view.dto.SectorRankingSummary;
 import dev.eolmae.marketry.domain.view.dto.SnapshotResponse;
 import dev.eolmae.marketry.domain.view.dto.TopSectorItem;
 import dev.eolmae.marketry.domain.view.enums.AverageMode;
+import dev.eolmae.marketry.domain.view.enums.ChangeRateBasis;
 import dev.eolmae.marketry.domain.view.enums.MarketQuery;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -57,9 +58,9 @@ import org.springframework.test.util.ReflectionTestUtils;
 class MarketMapQueryServiceTest {
 
     private static final long LEGACY_OWNER_ID = 999999L;
-    // 로그인 사용자(LEGACY_OWNER_ID)와 다른 값으로 둬서, 비로그인일 때 실제로 이 프로퍼티 값을
+    // 로그인 사용자(LEGACY_OWNER_ID)와 다른 값으로 둬서, 비로그인일 때·MARKETRY일 때 실제로 이 프로퍼티 값을
     // 읽는지(하드코딩된 값이 우연히 일치하는 게 아닌지)를 구분해 검증한다.
-    private static final long OWNER_PROPERTY_USER_ID = 555555L;
+    private static final long PUBLISHED_PROPERTY_USER_ID = 555555L;
 
     private final StockInfoCacheService stockInfoCacheService = Mockito.mock(StockInfoCacheService.class);
     private final SectorPriceSnapshotRepository sectorPriceSnapshotRepository =
@@ -76,7 +77,7 @@ class MarketMapQueryServiceTest {
     private final CustomValueTierThresholdRepository marketValueTierThresholdRepository =
             Mockito.mock(CustomValueTierThresholdRepository.class);
     private final MarketryProperties marketryProperties =
-            new MarketryProperties("http://localhost:8081", OWNER_PROPERTY_USER_ID);
+            new MarketryProperties("http://localhost:8081", LEGACY_OWNER_ID, PUBLISHED_PROPERTY_USER_ID);
     // mock 대신 진짜 객체를 쓴다 — resolveTier가 실제로 실행돼야 트리 기반 테스트의 종목이 의도한 구간에
     // 들어간다(5-1).
     private final CustomValueTierThresholdService marketValueTierThresholdService =
@@ -148,12 +149,12 @@ class MarketMapQueryServiceTest {
                         etf.getStockCode(), etf));
         when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
                 .thenReturn(Optional.of(snapshotTime));
-        when(marketMapStockSectorRepository.findLatestUpdatedAtByUserId(OWNER_PROPERTY_USER_ID))
+        when(marketMapStockSectorRepository.findLatestUpdatedAtByUserId(PUBLISHED_PROPERTY_USER_ID))
                 .thenReturn(customUpdatedAt);
 
         MarketMapResponse exchange = service.getDefaultMarketMap(MarketQuery.KOSPI, null);
         MarketMapResponse nxt = service.getDefaultMarketMap(MarketQuery.KOSPI, null, true);
-        MarketMapResponse custom = service.getCustomMarketMap(MarketQuery.KOSPI, null);
+        MarketMapResponse custom = service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateBasis.DAILY);
 
         assertThat(exchange.classificationUpdatedAt()).isEqualTo(exchangeUpdatedAt);
         assertThat(nxt.classificationUpdatedAt()).isEqualTo(exchangeUpdatedAt);
@@ -161,43 +162,79 @@ class MarketMapQueryServiceTest {
     }
 
     @Test
-    void MARKETRY_업데이트는_업종과_종목배정_중_더_최근의_운영자_수정시각이다() {
+    void MARKETRY_업데이트는_업종과_종목배정_중_더_최근의_고정본_수정시각이다() {
         LocalDateTime assignmentUpdatedAt = LocalDateTime.of(2026, 10, 6, 18, 0);
         LocalDateTime sectorUpdatedAt = LocalDateTime.of(2026, 10, 7, 9, 0);
-        CustomSector ownerSector = CustomSector.createParent(OWNER_PROPERTY_USER_ID, "수정된 업종");
+        CustomSector ownerSector = CustomSector.createParent(PUBLISHED_PROPERTY_USER_ID, "수정된 업종");
         ReflectionTestUtils.setField(ownerSector, "updatedAt", sectorUpdatedAt);
         when(stockInfoCacheService.getCache()).thenReturn(Map.of());
         when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
                 .thenReturn(Optional.of(sectorUpdatedAt));
-        when(marketMapStockSectorRepository.findLatestUpdatedAtByUserId(OWNER_PROPERTY_USER_ID))
+        when(marketMapStockSectorRepository.findLatestUpdatedAtByUserId(PUBLISHED_PROPERTY_USER_ID))
                 .thenReturn(assignmentUpdatedAt);
-        when(marketMapSectorRepository.findFirstByUserIdOrderByUpdatedAtDesc(OWNER_PROPERTY_USER_ID))
+        when(marketMapSectorRepository.findFirstByUserIdOrderByUpdatedAtDesc(PUBLISHED_PROPERTY_USER_ID))
                 .thenReturn(Optional.of(ownerSector));
 
-        assertThat(service.getCustomMarketMap(MarketQuery.KOSPI, null).classificationUpdatedAt())
+        assertThat(service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateBasis.DAILY)
+                        .classificationUpdatedAt())
                 .isEqualTo(sectorUpdatedAt);
 
         LocalDateTime newerAssignmentUpdatedAt = sectorUpdatedAt.plusHours(1);
-        when(marketMapStockSectorRepository.findLatestUpdatedAtByUserId(OWNER_PROPERTY_USER_ID))
+        when(marketMapStockSectorRepository.findLatestUpdatedAtByUserId(PUBLISHED_PROPERTY_USER_ID))
                 .thenReturn(newerAssignmentUpdatedAt);
 
-        assertThat(service.getCustomMarketMap(MarketQuery.KOSPI, null).classificationUpdatedAt())
+        assertThat(service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateBasis.DAILY)
+                        .classificationUpdatedAt())
                 .isEqualTo(newerAssignmentUpdatedAt);
     }
 
     @Test
-    void MARKETRY_업데이트는_종목배정이_없어도_운영자_업종_수정시각을_표시한다() {
+    void MARKETRY_업데이트는_종목배정이_없어도_고정본_업종_수정시각을_표시한다() {
         LocalDateTime sectorUpdatedAt = LocalDateTime.of(2026, 10, 7, 9, 0);
-        CustomSector ownerSector = CustomSector.createParent(OWNER_PROPERTY_USER_ID, "새 업종");
+        CustomSector ownerSector = CustomSector.createParent(PUBLISHED_PROPERTY_USER_ID, "새 업종");
         ReflectionTestUtils.setField(ownerSector, "updatedAt", sectorUpdatedAt);
         when(stockInfoCacheService.getCache()).thenReturn(Map.of());
         when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
                 .thenReturn(Optional.of(sectorUpdatedAt));
-        when(marketMapSectorRepository.findFirstByUserIdOrderByUpdatedAtDesc(OWNER_PROPERTY_USER_ID))
+        when(marketMapSectorRepository.findFirstByUserIdOrderByUpdatedAtDesc(PUBLISHED_PROPERTY_USER_ID))
                 .thenReturn(Optional.of(ownerSector));
 
-        assertThat(service.getCustomMarketMap(MarketQuery.KOSPI, null).classificationUpdatedAt())
+        assertThat(service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateBasis.DAILY)
+                        .classificationUpdatedAt())
                 .isEqualTo(sectorUpdatedAt);
+    }
+
+    @Test
+    void getPublishedMarketMap_로그인_없이도_발행_사용자_분류로_조회한다() {
+        SecurityContextHolder.clearContext();
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 10, 7, 10, 0);
+        LocalDateTime publishedAt = LocalDateTime.of(2026, 10, 7, 9, 0);
+        when(stockInfoCacheService.getCache()).thenReturn(Map.of());
+        when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
+                .thenReturn(Optional.of(snapshotTime));
+        when(marketMapStockSectorRepository.findLatestUpdatedAtByUserId(PUBLISHED_PROPERTY_USER_ID))
+                .thenReturn(publishedAt);
+
+        MarketMapResponse response =
+                service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateBasis.DAILY);
+
+        assertThat(response.classificationUpdatedAt()).isEqualTo(publishedAt);
+    }
+
+    @Test
+    void 내_히트맵_업데이트는_고정본이_아니라_로그인한_본인의_수정시각이다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 10, 7, 10, 0);
+        LocalDateTime myUpdatedAt = LocalDateTime.of(2026, 10, 7, 8, 0);
+        when(stockInfoCacheService.getCache()).thenReturn(Map.of());
+        when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
+                .thenReturn(Optional.of(snapshotTime));
+        when(marketMapStockSectorRepository.findLatestUpdatedAtByUserId(LEGACY_OWNER_ID))
+                .thenReturn(myUpdatedAt);
+        when(marketMapStockSectorRepository.findLatestUpdatedAtByUserId(PUBLISHED_PROPERTY_USER_ID))
+                .thenReturn(LocalDateTime.of(2026, 10, 7, 9, 0));
+
+        assertThat(service.getCustomMarketMap(MarketQuery.KOSPI, null).classificationUpdatedAt())
+                .isEqualTo(myUpdatedAt);
     }
 
     @Test
@@ -208,7 +245,8 @@ class MarketMapQueryServiceTest {
                 .thenReturn(Optional.of(snapshotTime));
         when(marketMapSectorRepository.findAll()).thenReturn(List.of(sector(1L, null, "내 업종")));
 
-        assertThat(service.getCustomMarketMap(MarketQuery.KOSPI, null).classificationUpdatedAt())
+        assertThat(service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateBasis.DAILY)
+                        .classificationUpdatedAt())
                 .isNull();
     }
 
@@ -218,7 +256,7 @@ class MarketMapQueryServiceTest {
         when(stockInfoCacheService.getCache()).thenReturn(Map.of());
         when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
                 .thenReturn(Optional.of(snapshotTime));
-        when(marketMapStockSectorRepository.findLatestUpdatedAtByUserId(OWNER_PROPERTY_USER_ID))
+        when(marketMapStockSectorRepository.findLatestUpdatedAtByUserId(PUBLISHED_PROPERTY_USER_ID))
                 .thenReturn(LocalDateTime.of(2026, 10, 6, 18, 0));
 
         MarketMapResponse response = service.getDefaultMarketMap(MarketQuery.KOSPI, null);
@@ -227,12 +265,12 @@ class MarketMapQueryServiceTest {
     }
 
     @Test
-    void customDataUserId_비로그인이면_marketry_owner_user_id_프로퍼티_값을_사용한다() {
+    void customDataUserId_비로그인이면_marketry_published_user_id_프로퍼티_값을_사용한다() {
         SecurityContextHolder.clearContext();
 
         Long userId = ReflectionTestUtils.invokeMethod(service, "customDataUserId");
 
-        assertThat(userId).isEqualTo(OWNER_PROPERTY_USER_ID);
+        assertThat(userId).isEqualTo(PUBLISHED_PROPERTY_USER_ID);
     }
 
     @Test

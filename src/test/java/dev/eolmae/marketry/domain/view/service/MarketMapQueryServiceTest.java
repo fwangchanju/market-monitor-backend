@@ -35,6 +35,7 @@ import dev.eolmae.marketry.domain.view.dto.MarketMapSectorNode;
 import dev.eolmae.marketry.domain.view.dto.SectorChangeRateMarketRanking;
 import dev.eolmae.marketry.domain.view.dto.SectorRankingSummary;
 import dev.eolmae.marketry.domain.view.dto.SnapshotResponse;
+import dev.eolmae.marketry.domain.view.dto.StockCatalogItem;
 import dev.eolmae.marketry.domain.view.dto.TopSectorItem;
 import dev.eolmae.marketry.domain.view.enums.AverageMode;
 import dev.eolmae.marketry.domain.view.enums.ChangeRateBasis;
@@ -1322,6 +1323,27 @@ class MarketMapQueryServiceTest {
 
     private StockInfo stockInfo(String stockCode, String stockName, Long listCount, BigDecimal lastPrice) {
         return StockInfo.create(stockCode, stockName, Market.KOSPI, "0", null, listCount, lastPrice, false);
+    }
+
+    @Test
+    void 종목_공통_정보는_활성_보통주만_시장_NXT_업종명으로_내려준다() {
+        StockInfo samsung = stockInfo("005930", "삼성전자", 100L, BigDecimal.TEN);
+        StockInfo inactive = stockInfo("999999", "비활성", 100L, BigDecimal.TEN);
+        StockInfo etf = StockInfo.create("069500", "ETF", Market.KOSPI, "8", null, 100L, BigDecimal.TEN, false);
+        ReflectionTestUtils.setField(samsung, "industryId", 7L);
+        ReflectionTestUtils.setField(samsung, "nxtEnabled", true);
+        ReflectionTestUtils.setField(inactive, "active", false);
+        IndustryInfo industry = IndustryInfo.create("반도체");
+        ReflectionTestUtils.setField(industry, "id", 7L);
+        when(industryInfoRepository.findAllById(Mockito.<Iterable<Long>>any())).thenReturn(List.of(industry));
+        when(stockInfoCacheService.getCache())
+                .thenReturn(Map.of(
+                        samsung.getStockCode(), samsung,
+                        inactive.getStockCode(), inactive,
+                        etf.getStockCode(), etf));
+
+        assertThat(service.getStockCatalog())
+                .containsExactly(new StockCatalogItem("005930", Market.KOSPI, true, "반도체"));
     }
 
     private Map.Entry<String, CachedStockPrice> priceSnapshot(

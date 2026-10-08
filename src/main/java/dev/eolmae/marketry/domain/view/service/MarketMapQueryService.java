@@ -39,6 +39,7 @@ import dev.eolmae.marketry.domain.view.dto.SectorRankingSummary;
 import dev.eolmae.marketry.domain.view.dto.SectorTierBreakdown;
 import dev.eolmae.marketry.domain.view.dto.SnapshotAverages;
 import dev.eolmae.marketry.domain.view.dto.SnapshotResponse;
+import dev.eolmae.marketry.domain.view.dto.StockCatalogItem;
 import dev.eolmae.marketry.domain.view.dto.TopSectorItem;
 import dev.eolmae.marketry.domain.view.enums.AverageMode;
 import dev.eolmae.marketry.domain.view.enums.ChangeRateBasis;
@@ -87,6 +88,28 @@ public class MarketMapQueryService {
     private final MarketryProperties marketryProperties;
     private final ClosingPriceReader closingPriceReader;
     private final MarketHoursProperties marketHoursProperties;
+
+    /** 회원과 무관한 종목 공통 정보(시장·NXT 거래 가능 여부·거래소 업종명). 읽기 전용 시트가 로그인 없이도 쓴다. */
+    public List<StockCatalogItem> getStockCatalog() {
+        List<StockInfo> activeStocks = stockInfoCacheService.getCache().values().stream()
+                .filter(StockInfo::isActiveAndOrdinary)
+                .toList();
+        Set<Long> industryIds = activeStocks.stream()
+                .map(StockInfo::getIndustryId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, String> industryNameById = industryIds.isEmpty()
+                ? Map.of()
+                : industryInfoRepository.findAllById(industryIds).stream()
+                        .collect(Collectors.toMap(IndustryInfo::getId, IndustryInfo::getName));
+        return activeStocks.stream()
+                .map(stock -> new StockCatalogItem(
+                        stock.getStockCode(),
+                        stock.getMarketType(),
+                        stock.isNxtEnabled(),
+                        stock.getIndustryId() == null ? null : industryNameById.get(stock.getIndustryId())))
+                .toList();
+    }
 
     /** 기본 마켓맵: stock_info 섹터 그대로(override 없이) 기준, 자식 없는 1뎁스 노드로 감싸서 반환
      * (getCustomMarketMap과 응답 모양 통일). snapshotTime이 없으면 최신, 있으면 그 시각 그대로(결정 4). */

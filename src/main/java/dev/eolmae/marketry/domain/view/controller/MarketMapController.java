@@ -6,6 +6,7 @@ import dev.eolmae.marketry.domain.custom.service.CustomScaleService;
 import dev.eolmae.marketry.domain.custom.service.CustomSectorService;
 import dev.eolmae.marketry.domain.custom.service.CustomValueTierThresholdService;
 import dev.eolmae.marketry.domain.view.dto.MarketMapResponse;
+import dev.eolmae.marketry.domain.view.dto.StockCatalogItem;
 import dev.eolmae.marketry.domain.view.enums.ChangeRateBasis;
 import dev.eolmae.marketry.domain.view.enums.ClassificationSource;
 import dev.eolmae.marketry.domain.view.enums.MarketQuery;
@@ -51,6 +52,11 @@ public class MarketMapController {
                 marketMapQueryService.getPublishedMarketMap(market, snapshotTime, nxtOnly, changeRateBasis);
             case MYMAP -> marketMapQueryService.getCustomMarketMap(market, snapshotTime, nxtOnly, changeRateBasis);
         };
+    }
+
+    @GetMapping("/stock-catalog")
+    public List<StockCatalogItem> getStockCatalog() {
+        return marketMapQueryService.getStockCatalog();
     }
 
     @GetMapping("/value-tiers")

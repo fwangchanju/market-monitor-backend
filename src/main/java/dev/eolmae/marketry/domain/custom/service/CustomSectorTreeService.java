@@ -100,19 +100,6 @@ public class CustomSectorTreeService {
         }
     }
 
-    /** 스냅샷 JSON에서 약칭만 비운다 — MARKETRY 고정본에는 약칭을 넣지 않는다. */
-    public String withoutAliases(String snapshotJson) {
-        CustomSnapshotPayload snapshot = parseSnapshot(snapshotJson);
-        return toJson(new CustomSnapshotPayload(
-                snapshot.snapshotVersion(),
-                snapshot.sectors(),
-                snapshot.assignments(),
-                List.of(),
-                snapshot.scaleThresholds(),
-                snapshot.valueTierThresholds(),
-                snapshot.preferences()));
-    }
-
     public boolean isCurrentSnapshotFormat(String snapshotJson) {
         try {
             JsonNode root = objectMapper.readTree(snapshotJson);

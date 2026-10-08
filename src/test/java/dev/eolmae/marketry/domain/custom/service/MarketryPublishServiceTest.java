@@ -51,9 +51,8 @@ class MarketryPublishServiceTest {
     }
 
     @Test
-    void publish_운영자_분류를_약칭_없이_발행_사용자_소유로_저장하고_복원한다() {
+    void publish_운영자_분류를_약칭_포함_그대로_발행_사용자_소유로_저장하고_복원한다() {
         when(treeService.serializeCurrentSnapshot(ADMIN_ID)).thenReturn("{\"raw\":true}");
-        when(treeService.withoutAliases("{\"raw\":true}")).thenReturn("{\"clean\":true}");
         when(snapshotRepository.save(any(CustomSnapshot.class))).thenAnswer(invocation -> {
             CustomSnapshot snapshot = invocation.getArgument(0);
             ReflectionTestUtils.setField(snapshot, "id", 55L);
@@ -66,15 +65,14 @@ class MarketryPublishServiceTest {
         verify(snapshotRepository).save(saved.capture());
         assertThat(saved.getValue().getUserId()).isEqualTo(PUBLISHED_ID);
         assertThat(saved.getValue().getLabel()).isEqualTo("10월 8일 고정본");
-        assertThat(saved.getValue().getSnapshotJson()).isEqualTo("{\"clean\":true}");
-        verify(treeService).restore("{\"clean\":true}", PUBLISHED_ID, 55L);
+        assertThat(saved.getValue().getSnapshotJson()).isEqualTo("{\"raw\":true}");
+        verify(treeService).restore("{\"raw\":true}", PUBLISHED_ID, 55L);
         assertThat(item.id()).isEqualTo(55L);
     }
 
     @Test
     void publish_운영자_본인_데이터는_복원하지_않는다() {
         when(treeService.serializeCurrentSnapshot(ADMIN_ID)).thenReturn("{}");
-        when(treeService.withoutAliases("{}")).thenReturn("{}");
         when(snapshotRepository.save(any(CustomSnapshot.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         service.publish("고정본");

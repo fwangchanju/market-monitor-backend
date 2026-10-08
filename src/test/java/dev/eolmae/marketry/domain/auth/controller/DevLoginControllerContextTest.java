@@ -23,7 +23,8 @@ class DevLoginControllerContextTest {
             .withBean(AuthService.class, () -> mock(AuthService.class))
             .withBean(AppJwtService.class, () -> mock(AppJwtService.class))
             .withBean(AuthCookies.class, AuthCookies::new)
-            .withBean(MarketryProperties.class, () -> new MarketryProperties("http://localhost:8081", 999999L));
+            .withBean(
+                    MarketryProperties.class, () -> new MarketryProperties("http://localhost:8081", 999999L, 900000L));
 
     @Test
     void 프로퍼티가_true이고_prod_프로필이_아니면_빈이_등록된다() {

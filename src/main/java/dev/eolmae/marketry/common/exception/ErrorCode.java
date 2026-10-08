@@ -61,7 +61,8 @@ public enum ErrorCode {
     SNAPSHOT_NOT_FOUND("이미 삭제되었거나 존재하지 않는 스냅샷입니다."),
     SCALE_THRESHOLD_NOT_FOUND("이미 삭제되었거나 존재하지 않는 색상 기준값입니다."),
     SCALE_THRESHOLD_DUPLICATE("이미 사용 중인 기준 등락률입니다."),
-    SNAPSHOT_FORMAT_UNSUPPORTED("이 스냅샷 형식은 복원할 수 없습니다.");
+    SNAPSHOT_FORMAT_UNSUPPORTED("이 스냅샷 형식은 복원할 수 없습니다."),
+    CLASSIFICATION_SOURCE_INVALID("지원하지 않는 분류입니다.");
 
     private final String message;
 }

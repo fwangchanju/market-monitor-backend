@@ -41,7 +41,7 @@ public class SectorTierAggregationService {
      * 사용자가 구간을 하나도 설정하지 않은 경우(가입 직후 등) 서비스가 백엔드 상수로 폴백해주는데,
      * 리포지토리를 직접 호출하면 그 폴백 없이 빈 목록을 받아 아래 toBreakdown에서 널 참조가 난다. */
     public Map<Long, List<SectorTierBreakdown>> aggregateBySector(List<MarketMapSectorNode> tree) {
-        Long userId = marketryProperties.userIdOrOwner(CurrentUser.currentId());
+        Long userId = marketryProperties.userIdOrPublished(CurrentUser.currentId());
         Map<String, CustomValueTierThreshold> tierByLabel =
                 customValueTierThresholdService.findAllSortedAscending(userId).stream()
                         .collect(Collectors.toMap(CustomValueTierThreshold::getLabel, Function.identity()));

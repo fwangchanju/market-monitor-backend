@@ -29,7 +29,7 @@ class ScreenshotClientManualTest {
         String rendererUrl = System.getenv().getOrDefault("RENDERER_URL", "http://market-monitor-renderer:3000");
         var client = new ScreenshotClient(
                 new RendererProperties(rendererUrl, false),
-                new MarketryProperties(rendererUrl, 999999L),
+                new MarketryProperties(rendererUrl, 999999L, 900000L),
                 new AppJwtService(new AuthProperties(), new ObjectMapper()),
                 RestClient.create());
 

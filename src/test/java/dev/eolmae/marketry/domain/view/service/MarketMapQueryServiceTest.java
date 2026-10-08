@@ -7,9 +7,11 @@ import dev.eolmae.marketry.common.enums.Market;
 import dev.eolmae.marketry.domain.auth.enums.Role;
 import dev.eolmae.marketry.domain.auth.service.AuthenticatedUserPrincipal;
 import dev.eolmae.marketry.domain.custom.entity.CustomSector;
+import dev.eolmae.marketry.domain.custom.entity.CustomSnapshot;
 import dev.eolmae.marketry.domain.custom.entity.CustomStockSector;
 import dev.eolmae.marketry.domain.custom.entity.CustomValueTierThreshold;
 import dev.eolmae.marketry.domain.custom.repository.CustomSectorRepository;
+import dev.eolmae.marketry.domain.custom.repository.CustomSnapshotRepository;
 import dev.eolmae.marketry.domain.custom.repository.CustomStockAliasRepository;
 import dev.eolmae.marketry.domain.custom.repository.CustomStockSectorRepository;
 import dev.eolmae.marketry.domain.custom.repository.CustomValueTierThresholdRepository;
@@ -71,6 +73,7 @@ class MarketMapQueryServiceTest {
             Mockito.mock(CustomStockSectorRepository.class);
     private final CustomStockAliasRepository customStockAliasRepository =
             Mockito.mock(CustomStockAliasRepository.class);
+    private final CustomSnapshotRepository customSnapshotRepository = Mockito.mock(CustomSnapshotRepository.class);
     // 구간 리포지토리 하나를 합산 클래스·구간 서비스가 같이 본다 — 트리 기반 랭킹은 이 둘이 같은 구간
     // 목록을 보는 것을 전제로 한다(합산 클래스는 findAll()로 라벨→id, 구간 서비스는
     // findAllByUserIdOrderByThresholdValueAsc()로 종목의 구간을 정한다).
@@ -96,6 +99,7 @@ class MarketMapQueryServiceTest {
             marketMapSectorRepository,
             marketMapStockSectorRepository,
             customStockAliasRepository,
+            customSnapshotRepository,
             sectorTierAggregationService,
             marketValueTierThresholdService,
             marketOverviewSnapshotRepository,
@@ -186,6 +190,30 @@ class MarketMapQueryServiceTest {
         assertThat(service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateBasis.DAILY)
                         .classificationUpdatedAt())
                 .isEqualTo(newerAssignmentUpdatedAt);
+    }
+
+    @Test
+    void MARKETRY_업데이트는_지금_올라간_버전을_올린_시각이라_되돌리면_이전_버전_시각이_된다() {
+        LocalDateTime versionCreatedAt = LocalDateTime.of(2026, 10, 6, 9, 0);
+        LocalDateTime restoredDataUpdatedAt = LocalDateTime.of(2026, 10, 8, 18, 0);
+        CustomSector liveSector = CustomSector.createParent(PUBLISHED_PROPERTY_USER_ID, "되돌린 업종");
+        ReflectionTestUtils.setField(liveSector, "updatedAt", restoredDataUpdatedAt);
+        ReflectionTestUtils.setField(liveSector, "snapshotId", 7L);
+        CustomSnapshot version = CustomSnapshot.create(PUBLISHED_PROPERTY_USER_ID, "MARKETRY 2026-10-06 09:00", "{}");
+        ReflectionTestUtils.setField(version, "createdAt", versionCreatedAt);
+        when(stockInfoCacheService.getCache()).thenReturn(Map.of());
+        when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
+                .thenReturn(Optional.of(restoredDataUpdatedAt));
+        when(marketMapSectorRepository.findFirstByUserIdOrderByIdAsc(PUBLISHED_PROPERTY_USER_ID))
+                .thenReturn(Optional.of(liveSector));
+        when(marketMapSectorRepository.findFirstByUserIdOrderByUpdatedAtDesc(PUBLISHED_PROPERTY_USER_ID))
+                .thenReturn(Optional.of(liveSector));
+        when(customSnapshotRepository.findByIdAndUserId(7L, PUBLISHED_PROPERTY_USER_ID))
+                .thenReturn(Optional.of(version));
+
+        assertThat(service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateBasis.DAILY)
+                        .classificationUpdatedAt())
+                .isEqualTo(versionCreatedAt);
     }
 
     @Test

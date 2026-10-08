@@ -5,10 +5,12 @@ import dev.eolmae.marketry.common.util.KstClock;
 import dev.eolmae.marketry.domain.auth.service.CurrentUser;
 import dev.eolmae.marketry.domain.custom.dto.CustomValueTierItem;
 import dev.eolmae.marketry.domain.custom.entity.CustomSector;
+import dev.eolmae.marketry.domain.custom.entity.CustomSnapshot;
 import dev.eolmae.marketry.domain.custom.entity.CustomStockAlias;
 import dev.eolmae.marketry.domain.custom.entity.CustomStockSector;
 import dev.eolmae.marketry.domain.custom.entity.CustomValueTierThreshold;
 import dev.eolmae.marketry.domain.custom.repository.CustomSectorRepository;
+import dev.eolmae.marketry.domain.custom.repository.CustomSnapshotRepository;
 import dev.eolmae.marketry.domain.custom.repository.CustomStockAliasRepository;
 import dev.eolmae.marketry.domain.custom.repository.CustomStockSectorRepository;
 import dev.eolmae.marketry.domain.custom.service.CustomValueTierThresholdService;
@@ -77,6 +79,7 @@ public class MarketMapQueryService {
     private final CustomSectorRepository customSectorRepository;
     private final CustomStockSectorRepository customStockSectorRepository;
     private final CustomStockAliasRepository customStockAliasRepository;
+    private final CustomSnapshotRepository customSnapshotRepository;
     private final SectorTierAggregationService sectorTierAggregationService;
     private final CustomValueTierThresholdService customValueTierThresholdService;
     private final MarketOverviewSnapshotRepository marketOverviewSnapshotRepository;
@@ -562,8 +565,31 @@ public class MarketMapQueryService {
                 .orElse(null);
     }
 
-    /** 지도에 쓴 분류 데이터 주인(userId)의 업종 정보·종목 배정 최종 변경 시각 — MARKETRY면 고정본을 올린 시각, 내 히트맵이면 내가 마지막으로 고친 시각이다. */
+    /**
+     * 지도에 쓴 분류 데이터 주인(userId)의 분류 갱신 시각 — 내 히트맵이면 내가 마지막으로 고친 시각이다.
+     * MARKETRY는 지금 올라가 있는 버전을 올린 시각이다. 이전 버전으로 되돌려도 그 버전을 올렸던 시각으로 돌아가야 해서,
+     * 되돌릴 때 데이터가 새로 만들어지며 바뀌는 수정 시각 대신 버전의 생성 시각을 쓴다.
+     */
     private LocalDateTime findCustomClassificationUpdatedAt(Long userId) {
+        if (userId.equals(marketryProperties.publishedUserId())) {
+            LocalDateTime publishedAt = findLivePublishedVersionCreatedAt(userId);
+            if (publishedAt != null) {
+                return publishedAt;
+            }
+        }
+        return findLatestCustomDataUpdatedAt(userId);
+    }
+
+    private LocalDateTime findLivePublishedVersionCreatedAt(Long publishedUserId) {
+        return customSectorRepository
+                .findFirstByUserIdOrderByIdAsc(publishedUserId)
+                .map(CustomSector::getSnapshotId)
+                .flatMap(snapshotId -> customSnapshotRepository.findByIdAndUserId(snapshotId, publishedUserId))
+                .map(CustomSnapshot::getCreatedAt)
+                .orElse(null);
+    }
+
+    private LocalDateTime findLatestCustomDataUpdatedAt(Long userId) {
         LocalDateTime assignmentUpdatedAt = customStockSectorRepository.findLatestUpdatedAtByUserId(userId);
         LocalDateTime sectorUpdatedAt = customSectorRepository
                 .findFirstByUserIdOrderByUpdatedAtDesc(userId)

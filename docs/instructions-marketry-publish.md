@@ -33,7 +33,7 @@ main에서 새 브랜치로 시작한다. **서버(이 저장소)와 프런트(`
 | 1 | 고정본은 **발행용 시스템 사용자 한 명(`users.id = 900000`)의 분류 데이터**로 저장한다. 올릴 때 운영자의 분류를 이 사용자에게 복사한다 | 지도 계산 코드(`MarketMapQueryService.buildCustomMarketMap`)가 이미 사용자 ID를 받아 그 사용자의 분류로 지도를 만든다. 사용자 ID만 바꿔 넣으면 계산 코드를 하나도 고치지 않는다 |
 | 2 | 복사는 **기존 스냅샷 저장·복원 코드를 그대로 쓴다**: `CustomSectorTreeService.serializeCurrentSnapshot(운영자)` → `CustomSectorTreeService.restore(json, 900000, 스냅샷id)` | 새 복사 로직을 만들지 않는다 |
 | 3 | 올릴 때마다 `custom_snapshot` 행을 **발행 사용자 소유로 하나 더 저장**한다. 이게 버전 목록이다. 이전 버전으로 되돌리는 것도 같은 복원 코드다. **삭제 API는 만들지 않는다** | 사용자 조건: 잘못되면 복원할 수 있어야 한다 |
-| 4 | 고정본에는 **약칭을 넣지 않는다**. 올릴 때 스냅샷 JSON의 `aliases`를 빈 목록으로 바꿔서 저장·복원한다 | 약칭은 쓰지 않기로 했다. 지도 박스 이름은 `alias ?? stockName`이라 약칭이 남으면 고정본에 그대로 보인다 |
+| 4 | 고정본에는 **운영자의 약칭이 그대로 들어간다**(스냅샷 JSON의 `aliases`를 그대로 저장·복원한다). 약칭을 **고칠 수 있는 사람은 `ADMIN`뿐**이다 — 서버는 이미 `/api/custom/stock-sectors/*/alias`를 `hasRole("ADMIN")`으로 막고 있다(`AuthConfiguration`) | 약칭을 안 쓰는 게 아니라 다른 사용자가 고치지 못하게 하는 것이다(예: LG전자를 삼성전자로 바꾸는 장난 방지). 지도 박스 이름은 `alias ?? stockName`이라 고정본에도 운영자의 약칭이 보인다 |
 | 5 | 올리기·버전 목록·되돌리기는 **`/api/admin/marketry/publications` 아래**에 둔다. `AuthConfiguration`의 기존 규칙 `/api/admin/**` = `hasRole("ADMIN")`이 그대로 적용된다. 권한 코드를 새로 쓰지 않는다 | 권한 부여는 기존 `ADMIN` 역할을 쓴다 |
 | 6 | `GET /api/map`에 선택 파라미터 **`source`**(`krx`·`marketry`·`mymap`)를 더한다. **`source`가 없으면 지금 동작 그대로**다(`isCustom=true`면 내 분류, 아니면 거래소). `source`가 있으면 `isCustom`은 무시한다 | 옛 프런트(배포돼 있는 것)가 그대로 동작해야 서버를 먼저 배포하고 롤백도 안전하다 |
 | 7 | `source=marketry`는 **로그인 없이** 읽는다. 이 경우 사용자별 값(제외 업종 등)은 읽지 않는다. `GET /**`는 이미 `permitAll`이라 보안 설정을 바꾸지 않는다 | 비로그인 공개 |
@@ -94,12 +94,9 @@ ON CONFLICT (id) DO NOTHING;
 
 1. `adminId = CurrentUser.requireId()`.
 2. `json = customSectorTreeService.serializeCurrentSnapshot(adminId)`.
-3. `json`의 `aliases`를 빈 목록으로 바꾼다 — `CustomSectorTreeService`에 `public String withoutAliases(String snapshotJson)`을 더한다
-   (`parseSnapshot`으로 읽어 `CustomSnapshotPayload`의 `aliases`만 `List.of()`로 바꿔 `toJson`으로 다시 쓴다. `toJson`은 지금 private이라
-   같은 클래스 안에서 쓴다).
-4. `saved = customSnapshotRepository.save(CustomSnapshot.create(publishedUserId, label, json))`.
-5. `customSectorTreeService.restore(json, publishedUserId, saved.getId())`.
-6. `saved`를 `SnapshotItem`으로 돌려준다.
+3. `saved = customSnapshotRepository.save(CustomSnapshot.create(publishedUserId, label, json))`.
+4. `customSectorTreeService.restore(json, publishedUserId, saved.getId())`.
+5. `saved`를 `SnapshotItem`으로 돌려준다.
 
 운영자 본인 데이터는 읽기만 한다. 발행 사용자 데이터만 바뀐다. `label`은 `SnapshotLabelRequest`가 이미 `@NotBlank`로 검증하므로
 서비스에서 기본 이름을 만들지 않는다(프런트가 항상 보낸다). 현재 시각을 읽는 코드가 없다.
@@ -144,7 +141,6 @@ ON CONFLICT (id) DO NOTHING;
 - 고정본 삭제 API, 버전 이름 바꾸기, 자동 예약 발행.
 - `custom_snapshot`·`custom_*` 테이블 구조 변경.
 - 기존 사용자 데이터 이전. 다른 사용자(현재 운영자 본인 계정 둘)의 분류는 그대로 그 사용자의 "내 히트맵"이 된다 — 옮길 게 없다.
-- 약칭 API(`/api/custom/stock-sectors/*/alias`)와 `custom_stock_alias` 테이블 삭제. 일단 둔다.
 - 프런트 구현(별도 저장소·별도 PR).
 - 서버 코드 외 운영 설정 변경(환경 변수 추가 없음).
 
@@ -163,10 +159,9 @@ ON CONFLICT (id) DO NOTHING;
 
 - `ClassificationSourceTest`: `from`의 세 값(대소문자 포함)과 잘못된 값, `resolve`의 네 경우(`source` 없음 + `isCustom` true/false, `source` 있음 + `isCustom`이 무엇이든).
 - `MarketryPublishServiceTest`:
-  - 올리기가 운영자 ID로 직렬화하고, 약칭을 뺀 JSON을 **발행 사용자 ID**로 `save`하고, 같은 JSON으로 `restore(json, 발행 ID, 저장된 id)`를 부른다.
+  - 올리기가 운영자 ID로 직렬화하고, 그 JSON(약칭 포함)을 **발행 사용자 ID**로 `save`하고, 같은 JSON으로 `restore(json, 발행 ID, 저장된 id)`를 부른다.
   - 되돌리기: 없는 id → `NotFoundException`, 옛 형식 → `BadRequestException`, 정상 → `restore` 호출.
   - 목록이 발행 사용자 소유만, 최신순, 현재 형식만 돌려준다.
-- 기존 `CustomSectorTreeServiceTest`에 추가: `withoutAliases`가 `aliases`만 비우고 나머지(섹터·배정·구간·설정)를 그대로 둔다.
 - `MarketryPropertiesTest`: `userIdOrPublished(null)` → 발행 ID, `userIdOrPublished(7L)` → 7.
 
 **하지 않는 테스트**: 컨트롤러 위임, JPA 매핑, 마이그레이션 SQL(DB 테스트가 없다).
@@ -197,4 +192,4 @@ ON CONFLICT (id) DO NOTHING;
   고정본 버전이 배치로 사라지지 않는다.
 - `docs/decisions.md`에 반영할 것(설계 역할이 한다): 고정본을 발행 사용자 한 명으로 저장한 이유와 접은 선택지(별도 `published_*` 테이블 — 계산 코드를
   새로 써야 해서 접었다), 텔레그램 폴백을 발행 사용자로 바꾼 이유.
-- `docs/backlog.md`에 남길 것: 고정본 되돌리기 화면, 고정본 삭제, 자동 예약 발행, 약칭 API·테이블 정리.
+- `docs/backlog.md`에 남길 것: 고정본 되돌리기 화면, 고정본 삭제, 자동 예약 발행.

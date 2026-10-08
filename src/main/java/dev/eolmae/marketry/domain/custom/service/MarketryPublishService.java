@@ -23,12 +23,11 @@ public class MarketryPublishService {
     private final CustomSectorTreeService customSectorTreeService;
     private final MarketryProperties marketryProperties;
 
-    /** 호출한 운영자의 분류를 새 고정본 버전으로 저장하고 발행 사용자의 분류 데이터를 그 내용으로 바꾼다. 운영자 본인 데이터는 읽기만 한다. */
+    /** 호출한 운영자의 분류(약칭 포함)를 새 고정본 버전으로 저장하고 발행 사용자의 분류 데이터를 그 내용으로 바꾼다. 운영자 본인 데이터는 읽기만 한다. */
     public SnapshotItem publish(String label) {
         Long adminId = CurrentUser.requireId();
         Long publishedUserId = marketryProperties.publishedUserId();
-        String snapshotJson =
-                customSectorTreeService.withoutAliases(customSectorTreeService.serializeCurrentSnapshot(adminId));
+        String snapshotJson = customSectorTreeService.serializeCurrentSnapshot(adminId);
         CustomSnapshot saved =
                 customSnapshotRepository.save(CustomSnapshot.create(publishedUserId, label, snapshotJson));
         customSectorTreeService.restore(snapshotJson, publishedUserId, saved.getId());

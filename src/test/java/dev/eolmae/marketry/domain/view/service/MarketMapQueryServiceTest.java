@@ -251,7 +251,7 @@ class MarketMapQueryServiceTest {
     }
 
     @Test
-    void 내_히트맵_업데이트는_고정본이_아니라_로그인한_본인의_수정시각이다() {
+    void 내_분류_업데이트는_고정본이_아니라_로그인한_본인의_수정시각이다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 10, 7, 10, 0);
         LocalDateTime myUpdatedAt = LocalDateTime.of(2026, 10, 7, 8, 0);
         when(stockInfoCacheService.getCache()).thenReturn(Map.of());

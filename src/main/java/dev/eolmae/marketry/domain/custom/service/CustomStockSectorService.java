@@ -13,11 +13,10 @@ import dev.eolmae.marketry.domain.custom.entity.CustomValueTierThreshold;
 import dev.eolmae.marketry.domain.custom.repository.CustomSectorRepository;
 import dev.eolmae.marketry.domain.custom.repository.CustomStockAliasRepository;
 import dev.eolmae.marketry.domain.custom.repository.CustomStockSectorRepository;
-import dev.eolmae.marketry.domain.stock.entity.IndustryInfo;
 import dev.eolmae.marketry.domain.stock.entity.SectorPriceSnapshot;
 import dev.eolmae.marketry.domain.stock.entity.StockInfo;
-import dev.eolmae.marketry.domain.stock.repository.IndustryInfoRepository;
 import dev.eolmae.marketry.domain.stock.service.SectorPriceSnapshotService;
+import dev.eolmae.marketry.domain.stock.service.StockIndustryNameResolver;
 import dev.eolmae.marketry.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketry.domain.view.dto.SnapshotResponse;
 import java.math.BigDecimal;
@@ -46,7 +45,7 @@ public class CustomStockSectorService {
     private final StockInfoCacheService stockInfoCacheService;
     private final SectorPriceSnapshotService sectorPriceSnapshotService;
     private final CustomValueTierThresholdService customValueTierThresholdService;
-    private final IndustryInfoRepository industryInfoRepository;
+    private final StockIndustryNameResolver stockIndustryNameResolver;
     private final JdbcTemplate jdbcTemplate;
 
     public void assign(String stockCode, Long sectorId) {
@@ -127,14 +126,7 @@ public class CustomStockSectorService {
         List<StockInfo> activeStocks = stockInfoCacheService.getCache().values().stream()
                 .filter(StockInfo::isActiveAndOrdinary)
                 .toList();
-        Set<Long> industryIds = activeStocks.stream()
-                .map(StockInfo::getIndustryId)
-                .filter(java.util.Objects::nonNull)
-                .collect(Collectors.toSet());
-        Map<Long, String> industryNameById = industryIds.isEmpty()
-                ? Map.of()
-                : industryInfoRepository.findAllById(industryIds).stream()
-                        .collect(Collectors.toMap(IndustryInfo::getId, IndustryInfo::getName));
+        Map<String, String> industryNameByStockCode = stockIndustryNameResolver.resolve(activeStocks);
         Map<String, SectorPriceSnapshot> latestPriceByStockCode =
                 sectorPriceSnapshotService.findLatestPriceByStockCode();
         List<CustomValueTierThreshold> sortedTiers = customValueTierThresholdService.findAllSortedAscending();
@@ -145,7 +137,7 @@ public class CustomStockSectorService {
                         assignmentByStockCode.get(stock.getStockCode()),
                         aliasByStockCode.get(stock.getStockCode()),
                         sectorById,
-                        industryNameById,
+                        industryNameByStockCode,
                         latestPriceByStockCode,
                         sortedTiers))
                 .toList();
@@ -162,7 +154,7 @@ public class CustomStockSectorService {
             CustomStockSector assignment,
             String alias,
             Map<Long, CustomSector> sectorById,
-            Map<Long, String> industryNameById,
+            Map<String, String> industryNameByStockCode,
             Map<String, SectorPriceSnapshot> latestPriceByStockCode,
             List<CustomValueTierThreshold> sortedTiers) {
         CustomSector sector = assignment == null ? null : sectorById.get(assignment.getSectorId());
@@ -182,7 +174,7 @@ public class CustomStockSectorService {
                 alias,
                 totalMarketValue,
                 marketValueTier,
-                stock.getIndustryId() == null ? null : industryNameById.get(stock.getIndustryId()),
+                industryNameByStockCode.get(stock.getStockCode()),
                 parent == null ? null : parent.getName(),
                 sector == null ? null : sector.getName(),
                 sector == null ? null : sector.getId());

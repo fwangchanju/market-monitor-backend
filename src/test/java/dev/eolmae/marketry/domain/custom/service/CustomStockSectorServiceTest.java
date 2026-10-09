@@ -16,7 +16,9 @@ import dev.eolmae.marketry.domain.custom.repository.CustomStockSectorRepository;
 import dev.eolmae.marketry.domain.custom.repository.CustomValueTierThresholdRepository;
 import dev.eolmae.marketry.domain.stock.entity.StockInfo;
 import dev.eolmae.marketry.domain.stock.repository.IndustryInfoRepository;
+import dev.eolmae.marketry.domain.stock.repository.StockIndustryOverrideRepository;
 import dev.eolmae.marketry.domain.stock.service.SectorPriceSnapshotService;
+import dev.eolmae.marketry.domain.stock.service.StockIndustryNameResolver;
 import dev.eolmae.marketry.domain.stock.service.StockInfoCacheService;
 import java.math.BigDecimal;
 import java.util.List;
@@ -54,7 +56,7 @@ class CustomStockSectorServiceTest {
             stockInfoCacheService,
             sectorPriceSnapshotService,
             valueTierService,
-            industryInfoRepository,
+            new StockIndustryNameResolver(industryInfoRepository, Mockito.mock(StockIndustryOverrideRepository.class)),
             jdbcTemplate);
 
     private final CustomSector sector = CustomSector.createParent(USER_ID, "산업");

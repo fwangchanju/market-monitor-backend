@@ -48,8 +48,7 @@ public class MarketMapController {
         ChangeRateMode changeRateMode = ChangeRateMode.parse(basis);
         return switch (ClassificationSource.resolve(source, isCustom)) {
             case KRX -> marketMapQueryService.getDefaultMarketMap(market, snapshotTime, nxtOnly, changeRateMode);
-            case MARKETRY ->
-                marketMapQueryService.getPublishedMarketMap(market, snapshotTime, nxtOnly, changeRateMode);
+            case MARKETRY -> marketMapQueryService.getPublishedMarketMap(market, snapshotTime, nxtOnly, changeRateMode);
             case MINE -> marketMapQueryService.getCustomMarketMap(market, snapshotTime, nxtOnly, changeRateMode);
         };
     }

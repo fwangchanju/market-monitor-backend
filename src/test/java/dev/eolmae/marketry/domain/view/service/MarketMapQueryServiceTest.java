@@ -28,7 +28,6 @@ import dev.eolmae.marketry.domain.stock.repository.StockIndustryOverrideReposito
 import dev.eolmae.marketry.domain.stock.service.CalendarDayTimes;
 import dev.eolmae.marketry.domain.stock.service.ClosingPriceReader;
 import dev.eolmae.marketry.domain.stock.service.ClosingPrices;
-import dev.eolmae.marketry.domain.stock.service.MarketCalendarService;
 import dev.eolmae.marketry.domain.stock.service.MarketCalendarTimeService;
 import dev.eolmae.marketry.domain.stock.service.SectorPriceCacheService;
 import dev.eolmae.marketry.domain.stock.service.SectorPriceCacheService.CachedStockPrice;
@@ -97,9 +96,7 @@ class MarketMapQueryServiceTest {
             Mockito.mock(MarketOverviewSnapshotRepository.class);
     private final IndustryInfoRepository industryInfoRepository = Mockito.mock(IndustryInfoRepository.class);
     private final SectorPriceSnapshotService sectorPriceSnapshotService = new SectorPriceSnapshotService(
-            sectorPriceSnapshotRepository,
-            Mockito.mock(MarketCalendarService.class),
-            Mockito.mock(MarketCalendarTimeService.class));
+            sectorPriceSnapshotRepository, Mockito.mock(MarketCalendarTimeService.class));
     private final ClosingPriceReader closingPriceReader = Mockito.mock(ClosingPriceReader.class);
     private final MarketCalendarTimeService calendarTimeService = Mockito.mock(MarketCalendarTimeService.class);
     private final MarketMapQueryService service = new MarketMapQueryService(

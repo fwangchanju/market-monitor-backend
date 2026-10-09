@@ -1,16 +1,12 @@
 package dev.eolmae.marketry.domain.stock.service;
 
-import dev.eolmae.marketry.common.enums.Country;
 import dev.eolmae.marketry.common.enums.Market;
-import dev.eolmae.marketry.domain.stock.entity.MarketCalendar;
 import dev.eolmae.marketry.domain.stock.entity.SectorPriceSnapshot;
 import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepository;
 import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepositoryCustom.MarketSnapshotTime;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -29,7 +25,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class SectorPriceSnapshotService {
 
     private final SectorPriceSnapshotRepository sectorPriceSnapshotRepository;
-    private final MarketCalendarService marketCalendarService;
     private final MarketCalendarTimeService marketCalendarTimeService;
 
     /** markets 전부가 공통으로 가진 최신 스냅샷 시각 — markets가 하나뿐이면 그 마켓의 최신 시각과 같다. */
@@ -64,56 +59,21 @@ public class SectorPriceSnapshotService {
                 .collect(Collectors.toMap(SectorPriceSnapshot::getStockCode, Function.identity()));
     }
 
-    /** 종가가 있는 날짜·마켓만 정리하고, 해당 구간 latest의 모든 종목 행은 보존한다. */
+    /** 지정 날짜 하루만 정리한다. 휴장과 종가 후보 없는 시장은 보존하며, 실패 날짜 재실행에도 같은 로직을 쓴다. */
     @Transactional
-    public void cleanupSnapshotsBefore(LocalDateTime cutoff) {
-        List<MarketSnapshotTime> candidates = sectorPriceSnapshotRepository.findMarketSnapshotTimesBefore(cutoff);
-        if (candidates.isEmpty()) {
+    public void cleanupSnapshotsForDate(LocalDate date) {
+        CalendarDayTimes times = marketCalendarTimeService.resolve(date);
+        if (times.holiday()) {
+            log.info("[섹터가격스냅샷정리] 휴장일 생략 | context : {}", date);
             return;
         }
-        List<LocalDate> dates = candidates.stream()
-                .map(candidate -> candidate.snapshotTime().toLocalDate())
-                .distinct()
-                .toList();
-        Map<LocalDate, MarketCalendar> calendars;
-        try {
-            calendars = marketCalendarService.findByCountryAndDateIn(Country.KR, dates);
-        } catch (Exception exception) {
-            log.warn("[시간표일괄조회실패] 기본 종가 구간 적용 | context : {}", cutoff);
-            calendars = Map.of();
-        }
-        Map<LocalDate, CalendarDayTimes> timesByDate = new HashMap<>();
-        // 일괄 조회한 행으로 해석하여 날짜별 DB 조회를 반복하지 않는다.
-        for (LocalDate date : dates) {
-            timesByDate.put(date, marketCalendarTimeService.resolve(date, calendars.get(date)));
-        }
-        List<MarketSnapshotTime> retained = selectRetainedSnapshotTimes(candidates, timesByDate);
+        List<MarketSnapshotTime> retained = sectorPriceSnapshotRepository.findLatestMarketSnapshotTimesBetween(
+                times.closingWindowStart(), times.closingWindowEnd());
         if (retained.isEmpty()) {
-            log.warn("[섹터가격스냅샷정리] 종가 후보가 없어 삭제 보류 | context : {}", cutoff);
+            log.warn("[섹터가격스냅샷정리] 종가 후보가 없어 삭제 보류 | context : {}", date);
             return;
         }
-        long deletedCount = sectorPriceSnapshotRepository.deleteSnapshotsBefore(cutoff, retained);
-        log.info("[섹터가격스냅샷정리] 삭제완료 | 삭제건수:{}", deletedCount);
-    }
-
-    static List<MarketSnapshotTime> selectRetainedSnapshotTimes(
-            List<MarketSnapshotTime> candidates, Map<LocalDate, CalendarDayTimes> timesByDate) {
-        record GroupKey(Market market, LocalDate date) {}
-        return candidates.stream()
-                .filter(candidate -> {
-                    CalendarDayTimes times =
-                            timesByDate.get(candidate.snapshotTime().toLocalDate());
-                    return times.holiday() == false
-                            && candidate.snapshotTime().isBefore(times.closingWindowStart()) == false
-                            && candidate.snapshotTime().isBefore(times.closingWindowEnd());
-                })
-                .collect(Collectors.groupingBy(candidate -> new GroupKey(
-                        candidate.market(), candidate.snapshotTime().toLocalDate())))
-                .values()
-                .stream()
-                .map(group -> group.stream()
-                        .max(Comparator.comparing(MarketSnapshotTime::snapshotTime))
-                        .orElseThrow())
-                .toList();
+        long deletedCount = sectorPriceSnapshotRepository.deleteSnapshotsForDate(date, retained);
+        log.info("[섹터가격스냅샷정리] 삭제완료 | context : {}|{}", date, deletedCount);
     }
 }

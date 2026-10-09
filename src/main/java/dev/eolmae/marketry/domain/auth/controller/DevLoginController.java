@@ -11,9 +11,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Profile;
+import org.springframework.core.env.Environment;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * 로컬 프론트엔드 개발 전용 로그인. IP 화이트리스트 인증 브릿지(AuthTokenFilter의 999999 매핑, PR #132에서
@@ -36,6 +39,7 @@ public class DevLoginController {
     private final AppJwtService appJwtService;
     private final AuthCookies authCookies;
     private final MarketryProperties marketryProperties;
+    private final Environment environment;
 
     @PostConstruct
     void warnDevLoginActive() {
@@ -44,7 +48,19 @@ public class DevLoginController {
 
     @PostMapping("/dev-login")
     public AuthSessionResponse devLogin(HttpServletResponse response) {
-        IssuedTokens tokens = authService.loginAsForDevelopment(marketryProperties.ownerUserId());
+        return createSession(response, authService.loginAsForDevelopment(marketryProperties.ownerUserId()));
+    }
+
+    /** 매번 새 회원을 만들기 때문에 기본 개발 로그인보다 좁은 local 프로필에서만 허용한다. */
+    @PostMapping("/dev-signup")
+    public AuthSessionResponse devSignup(HttpServletResponse response) {
+        if (environment.matchesProfiles("local")) {
+            return createSession(response, authService.signupForDevelopment());
+        }
+        throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+    }
+
+    private AuthSessionResponse createSession(HttpServletResponse response, IssuedTokens tokens) {
         authCookies.setSessionCookies(response, tokens);
         return authService.session(appJwtService.parse(tokens.accessToken()));
     }

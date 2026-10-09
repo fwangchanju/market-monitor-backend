@@ -17,6 +17,7 @@ import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.List;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -44,6 +45,7 @@ public class AuthService {
     private static final String GOOGLE_ISSUER = "https://accounts.google.com";
     private static final String GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/token";
     private static final String GOOGLE_JWK_SET_URI = "https://www.googleapis.com/oauth2/v3/certs";
+    private static final String LOCAL_TEST_ISSUER = "local-test";
     private static final int REFRESH_TOKEN_DAYS = 14;
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -119,6 +121,15 @@ public class AuthService {
         UserAccount user = userAccountRepository
                 .findById(userId)
                 .orElseThrow(() -> new NotFoundException(ErrorCode.DEV_LOGIN_OWNER_NOT_FOUND, userId));
+        return createTokens(user);
+    }
+
+    @Transactional
+    public IssuedTokens signupForDevelopment() {
+        String subject = UUID.randomUUID().toString();
+        UserAccount user = userAccountRepository.save(
+                UserAccount.create(LOCAL_TEST_ISSUER, subject, "local-test-" + subject + "@example.invalid"));
+        eventPublisher.publishEvent(new UserSignedUpEvent(user.getId()));
         return createTokens(user);
     }
 

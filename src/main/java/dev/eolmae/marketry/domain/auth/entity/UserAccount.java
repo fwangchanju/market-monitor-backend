@@ -43,6 +43,18 @@ public class UserAccount {
 
     protected UserAccount() {}
 
+    public static UserAccount create(String issuer, String sub, String email) {
+        var user = new UserAccount();
+        user.issuer = issuer;
+        user.sub = sub;
+        user.email = email;
+        user.role = Role.USER;
+        LocalDateTime now = LocalDateTime.now(Zone.KST.zoneId());
+        user.createdAt = now;
+        user.updatedAt = now;
+        return user;
+    }
+
     public void updateEmail(String email) {
         this.email = email;
         this.updatedAt = LocalDateTime.now(Zone.KST.zoneId());

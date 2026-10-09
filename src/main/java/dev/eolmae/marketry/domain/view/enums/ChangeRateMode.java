@@ -9,12 +9,12 @@ package dev.eolmae.marketry.domain.view.enums;
  *       움직였는지를 본다
  * </ul>
  */
-public enum ChangeRateBasis {
+public enum ChangeRateMode {
     DAILY,
     AFTER_HOURS;
 
     /** 쿼리 파라미터({@code daily} | {@code afterHours}) 해석 — 모르는 값은 기본(DAILY)으로 본다. */
-    public static ChangeRateBasis parse(String value) {
+    public static ChangeRateMode parse(String value) {
         return "afterHours".equalsIgnoreCase(value) ? AFTER_HOURS : DAILY;
     }
 }

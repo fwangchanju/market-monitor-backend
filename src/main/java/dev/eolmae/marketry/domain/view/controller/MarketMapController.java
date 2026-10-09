@@ -7,7 +7,7 @@ import dev.eolmae.marketry.domain.custom.service.CustomSectorService;
 import dev.eolmae.marketry.domain.custom.service.CustomValueTierThresholdService;
 import dev.eolmae.marketry.domain.view.dto.MarketMapResponse;
 import dev.eolmae.marketry.domain.view.dto.StockCatalogItem;
-import dev.eolmae.marketry.domain.view.enums.ChangeRateBasis;
+import dev.eolmae.marketry.domain.view.enums.ChangeRateMode;
 import dev.eolmae.marketry.domain.view.enums.ClassificationSource;
 import dev.eolmae.marketry.domain.view.enums.MarketQuery;
 import dev.eolmae.marketry.domain.view.service.MarketMapQueryService;
@@ -45,12 +45,11 @@ public class MarketMapController {
         // nxtOnly는 모든 분류에서 NXT 거래 가능 종목만 남긴다.
         // basis=afterHours면 등락률을 그날 정규장 종가 대비로 계산한다(그 스냅샷 날짜의 15:40 이후에만 적용).
         // source가 없으면 옛 프런트 호환으로 isCustom(true=내 분류, false=거래소)을 따른다.
-        ChangeRateBasis changeRateBasis = ChangeRateBasis.parse(basis);
+        ChangeRateMode changeRateMode = ChangeRateMode.parse(basis);
         return switch (ClassificationSource.resolve(source, isCustom)) {
-            case KRX -> marketMapQueryService.getDefaultMarketMap(market, snapshotTime, nxtOnly, changeRateBasis);
-            case MARKETRY ->
-                marketMapQueryService.getPublishedMarketMap(market, snapshotTime, nxtOnly, changeRateBasis);
-            case MINE -> marketMapQueryService.getCustomMarketMap(market, snapshotTime, nxtOnly, changeRateBasis);
+            case KRX -> marketMapQueryService.getDefaultMarketMap(market, snapshotTime, nxtOnly, changeRateMode);
+            case MARKETRY -> marketMapQueryService.getPublishedMarketMap(market, snapshotTime, nxtOnly, changeRateMode);
+            case MINE -> marketMapQueryService.getCustomMarketMap(market, snapshotTime, nxtOnly, changeRateMode);
         };
     }
 

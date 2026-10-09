@@ -1,5 +1,6 @@
 package dev.eolmae.marketry.domain.stock.collector;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -13,6 +14,7 @@ import dev.eolmae.marketry.domain.stock.client.KiwoomApiClient;
 import dev.eolmae.marketry.domain.stock.client.NextradeStockListClient;
 import dev.eolmae.marketry.domain.stock.dto.StockInfoRequest;
 import dev.eolmae.marketry.domain.stock.dto.StockInfoResponse;
+import dev.eolmae.marketry.domain.stock.entity.IndustryInfo;
 import dev.eolmae.marketry.domain.stock.entity.StockInfo;
 import dev.eolmae.marketry.domain.stock.repository.IndustryInfoRepository;
 import dev.eolmae.marketry.domain.stock.repository.StockInfoRepository;
@@ -26,6 +28,7 @@ import org.mockito.Mockito;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionSynchronizationUtils;
 
@@ -72,6 +75,68 @@ class StockInfoCollectorTest {
                 .publishEvent(Mockito.<Object>argThat(event -> event instanceof StockInfoSyncedEvent synced
                         && synced.stockCodes().size() == 2
                         && synced.stockCodes().containsAll(List.of("005930", "051910"))));
+    }
+
+    @Test
+    void sync_키움이_업종명을_비운_종목은_보정표_업종으로_채운다() {
+        IndustryInfo finance = industryInfo(7L, "금융");
+        when(kiwoomApiClient.post(any(StockInfoRequest.class), eq(StockInfoResponse.class)))
+                .thenReturn(new StockInfoResponse(
+                        "0",
+                        "정상",
+                        List.of(
+                                new StockInfoResponse.StockItem("024110", "기업은행", "0", "", "100", "10000", null),
+                                new StockInfoResponse.StockItem(
+                                        "111111", "보정표에 없는 종목", "0", "", "100", "10000", null))));
+        when(stockInfoRepository.findAll()).thenReturn(List.of());
+        when(industryInfoRepository.findByNameIn(Mockito.anyCollection())).thenReturn(List.of(finance));
+        Mockito.doReturn(List.of("금융"))
+                .when(jdbcTemplate)
+                .query(Mockito.anyString(), Mockito.<RowMapper<String>>any(), Mockito.<Object[]>any());
+
+        collector.sync();
+
+        verify(stockInfoRepository).saveAllAndFlush(Mockito.<List<StockInfo>>argThat(saved -> {
+            assertThat(industryIdOf(saved, "024110")).isEqualTo(7L);
+            assertThat(industryIdOf(saved, "111111")).isNull();
+            return true;
+        }));
+    }
+
+    @Test
+    void sync_키움이_업종명을_주면_보정표보다_키움_값을_쓴다() {
+        IndustryInfo bank = industryInfo(9L, "은행");
+        when(kiwoomApiClient.post(any(StockInfoRequest.class), eq(StockInfoResponse.class)))
+                .thenReturn(new StockInfoResponse(
+                        "0",
+                        "정상",
+                        List.of(new StockInfoResponse.StockItem("024110", "기업은행", "0", "은행", "100", "10000", null))));
+        when(stockInfoRepository.findAll()).thenReturn(List.of());
+        when(industryInfoRepository.findByNameIn(Mockito.anyCollection())).thenReturn(List.of(bank));
+        Mockito.doReturn(List.of("은행"))
+                .when(jdbcTemplate)
+                .query(Mockito.anyString(), Mockito.<RowMapper<String>>any(), Mockito.<Object[]>any());
+
+        collector.sync();
+
+        verify(stockInfoRepository).saveAllAndFlush(Mockito.<List<StockInfo>>argThat(saved -> {
+            assertThat(industryIdOf(saved, "024110")).isEqualTo(9L);
+            return true;
+        }));
+    }
+
+    private static IndustryInfo industryInfo(Long id, String name) {
+        IndustryInfo industry = IndustryInfo.create(name);
+        ReflectionTestUtils.setField(industry, "id", id);
+        return industry;
+    }
+
+    private static Long industryIdOf(List<StockInfo> stocks, String stockCode) {
+        return stocks.stream()
+                .filter(stock -> stock.getStockCode().equals(stockCode))
+                .findFirst()
+                .orElseThrow()
+                .getIndustryId();
     }
 
     @Test

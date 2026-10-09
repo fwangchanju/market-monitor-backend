@@ -38,7 +38,7 @@ import dev.eolmae.marketry.domain.view.dto.SnapshotResponse;
 import dev.eolmae.marketry.domain.view.dto.StockCatalogItem;
 import dev.eolmae.marketry.domain.view.dto.TopSectorItem;
 import dev.eolmae.marketry.domain.view.enums.AverageMode;
-import dev.eolmae.marketry.domain.view.enums.ChangeRateBasis;
+import dev.eolmae.marketry.domain.view.enums.ChangeRateMode;
 import dev.eolmae.marketry.domain.view.enums.MarketQuery;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -159,7 +159,7 @@ class MarketMapQueryServiceTest {
 
         MarketMapResponse exchange = service.getDefaultMarketMap(MarketQuery.KOSPI, null);
         MarketMapResponse nxt = service.getDefaultMarketMap(MarketQuery.KOSPI, null, true);
-        MarketMapResponse custom = service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateBasis.DAILY);
+        MarketMapResponse custom = service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateMode.DAILY);
 
         assertThat(exchange.taxonomyUpdatedAt()).isEqualTo(exchangeUpdatedAt);
         assertThat(nxt.taxonomyUpdatedAt()).isEqualTo(exchangeUpdatedAt);
@@ -180,7 +180,7 @@ class MarketMapQueryServiceTest {
         when(marketMapSectorRepository.findFirstByUserIdOrderByUpdatedAtDesc(PUBLISHED_PROPERTY_USER_ID))
                 .thenReturn(Optional.of(ownerSector));
 
-        assertThat(service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateBasis.DAILY)
+        assertThat(service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateMode.DAILY)
                         .taxonomyUpdatedAt())
                 .isEqualTo(sectorUpdatedAt);
 
@@ -188,7 +188,7 @@ class MarketMapQueryServiceTest {
         when(marketMapStockSectorRepository.findLatestUpdatedAtByUserId(PUBLISHED_PROPERTY_USER_ID))
                 .thenReturn(newerAssignmentUpdatedAt);
 
-        assertThat(service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateBasis.DAILY)
+        assertThat(service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateMode.DAILY)
                         .taxonomyUpdatedAt())
                 .isEqualTo(newerAssignmentUpdatedAt);
     }
@@ -212,7 +212,7 @@ class MarketMapQueryServiceTest {
         when(customSnapshotRepository.findByIdAndUserId(7L, PUBLISHED_PROPERTY_USER_ID))
                 .thenReturn(Optional.of(version));
 
-        assertThat(service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateBasis.DAILY)
+        assertThat(service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateMode.DAILY)
                         .taxonomyUpdatedAt())
                 .isEqualTo(versionCreatedAt);
     }
@@ -228,7 +228,7 @@ class MarketMapQueryServiceTest {
         when(marketMapSectorRepository.findFirstByUserIdOrderByUpdatedAtDesc(PUBLISHED_PROPERTY_USER_ID))
                 .thenReturn(Optional.of(ownerSector));
 
-        assertThat(service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateBasis.DAILY)
+        assertThat(service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateMode.DAILY)
                         .taxonomyUpdatedAt())
                 .isEqualTo(sectorUpdatedAt);
     }
@@ -245,7 +245,7 @@ class MarketMapQueryServiceTest {
                 .thenReturn(publishedAt);
 
         MarketMapResponse response =
-                service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateBasis.DAILY);
+                service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateMode.DAILY);
 
         assertThat(response.taxonomyUpdatedAt()).isEqualTo(publishedAt);
     }
@@ -274,7 +274,7 @@ class MarketMapQueryServiceTest {
                 .thenReturn(Optional.of(snapshotTime));
         when(marketMapSectorRepository.findAll()).thenReturn(List.of(sector(1L, null, "내 업종")));
 
-        assertThat(service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateBasis.DAILY)
+        assertThat(service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateMode.DAILY)
                         .taxonomyUpdatedAt())
                 .isNull();
     }

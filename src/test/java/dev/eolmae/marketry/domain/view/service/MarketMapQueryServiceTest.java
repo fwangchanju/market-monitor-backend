@@ -161,9 +161,9 @@ class MarketMapQueryServiceTest {
         MarketMapResponse nxt = service.getDefaultMarketMap(MarketQuery.KOSPI, null, true);
         MarketMapResponse custom = service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateBasis.DAILY);
 
-        assertThat(exchange.classificationUpdatedAt()).isEqualTo(exchangeUpdatedAt);
-        assertThat(nxt.classificationUpdatedAt()).isEqualTo(exchangeUpdatedAt);
-        assertThat(custom.classificationUpdatedAt()).isEqualTo(customUpdatedAt);
+        assertThat(exchange.taxonomyUpdatedAt()).isEqualTo(exchangeUpdatedAt);
+        assertThat(nxt.taxonomyUpdatedAt()).isEqualTo(exchangeUpdatedAt);
+        assertThat(custom.taxonomyUpdatedAt()).isEqualTo(customUpdatedAt);
     }
 
     @Test
@@ -181,7 +181,7 @@ class MarketMapQueryServiceTest {
                 .thenReturn(Optional.of(ownerSector));
 
         assertThat(service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateBasis.DAILY)
-                        .classificationUpdatedAt())
+                        .taxonomyUpdatedAt())
                 .isEqualTo(sectorUpdatedAt);
 
         LocalDateTime newerAssignmentUpdatedAt = sectorUpdatedAt.plusHours(1);
@@ -189,7 +189,7 @@ class MarketMapQueryServiceTest {
                 .thenReturn(newerAssignmentUpdatedAt);
 
         assertThat(service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateBasis.DAILY)
-                        .classificationUpdatedAt())
+                        .taxonomyUpdatedAt())
                 .isEqualTo(newerAssignmentUpdatedAt);
     }
 
@@ -213,7 +213,7 @@ class MarketMapQueryServiceTest {
                 .thenReturn(Optional.of(version));
 
         assertThat(service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateBasis.DAILY)
-                        .classificationUpdatedAt())
+                        .taxonomyUpdatedAt())
                 .isEqualTo(versionCreatedAt);
     }
 
@@ -229,7 +229,7 @@ class MarketMapQueryServiceTest {
                 .thenReturn(Optional.of(ownerSector));
 
         assertThat(service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateBasis.DAILY)
-                        .classificationUpdatedAt())
+                        .taxonomyUpdatedAt())
                 .isEqualTo(sectorUpdatedAt);
     }
 
@@ -247,7 +247,7 @@ class MarketMapQueryServiceTest {
         MarketMapResponse response =
                 service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateBasis.DAILY);
 
-        assertThat(response.classificationUpdatedAt()).isEqualTo(publishedAt);
+        assertThat(response.taxonomyUpdatedAt()).isEqualTo(publishedAt);
     }
 
     @Test
@@ -262,7 +262,7 @@ class MarketMapQueryServiceTest {
         when(marketMapStockSectorRepository.findLatestUpdatedAtByUserId(PUBLISHED_PROPERTY_USER_ID))
                 .thenReturn(LocalDateTime.of(2026, 10, 7, 9, 0));
 
-        assertThat(service.getCustomMarketMap(MarketQuery.KOSPI, null).classificationUpdatedAt())
+        assertThat(service.getCustomMarketMap(MarketQuery.KOSPI, null).taxonomyUpdatedAt())
                 .isEqualTo(myUpdatedAt);
     }
 
@@ -275,7 +275,7 @@ class MarketMapQueryServiceTest {
         when(marketMapSectorRepository.findAll()).thenReturn(List.of(sector(1L, null, "내 업종")));
 
         assertThat(service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateBasis.DAILY)
-                        .classificationUpdatedAt())
+                        .taxonomyUpdatedAt())
                 .isNull();
     }
 
@@ -290,7 +290,7 @@ class MarketMapQueryServiceTest {
 
         MarketMapResponse response = service.getDefaultMarketMap(MarketQuery.KOSPI, null);
 
-        assertThat(response.classificationUpdatedAt()).isNull();
+        assertThat(response.taxonomyUpdatedAt()).isNull();
     }
 
     @Test

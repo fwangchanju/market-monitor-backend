@@ -16,10 +16,8 @@ import dev.eolmae.marketry.domain.custom.repository.CustomStockSectorRepository;
 import dev.eolmae.marketry.domain.custom.service.CustomValueTierThresholdService;
 import dev.eolmae.marketry.domain.custom.service.SectorTierAggregationService;
 import dev.eolmae.marketry.domain.notification.properties.MarketryProperties;
-import dev.eolmae.marketry.domain.stock.entity.IndustryInfo;
 import dev.eolmae.marketry.domain.stock.entity.MarketOverviewSnapshot;
 import dev.eolmae.marketry.domain.stock.entity.StockInfo;
-import dev.eolmae.marketry.domain.stock.repository.IndustryInfoRepository;
 import dev.eolmae.marketry.domain.stock.repository.MarketOverviewSnapshotRepository;
 import dev.eolmae.marketry.domain.stock.service.CalendarDayTimes;
 import dev.eolmae.marketry.domain.stock.service.ClosingPriceReader;
@@ -28,6 +26,7 @@ import dev.eolmae.marketry.domain.stock.service.MarketCalendarTimeService;
 import dev.eolmae.marketry.domain.stock.service.SectorPriceCacheService;
 import dev.eolmae.marketry.domain.stock.service.SectorPriceCacheService.CachedStockPrice;
 import dev.eolmae.marketry.domain.stock.service.SectorPriceSnapshotService;
+import dev.eolmae.marketry.domain.stock.service.StockIndustryNameResolver;
 import dev.eolmae.marketry.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketry.domain.view.dto.MarketIndexChangeRate;
 import dev.eolmae.marketry.domain.view.dto.MarketMapItem;
@@ -85,7 +84,7 @@ public class MarketMapQueryService {
     private final SectorTierAggregationService sectorTierAggregationService;
     private final CustomValueTierThresholdService customValueTierThresholdService;
     private final MarketOverviewSnapshotRepository marketOverviewSnapshotRepository;
-    private final IndustryInfoRepository industryInfoRepository;
+    private final StockIndustryNameResolver stockIndustryNameResolver;
     private final MarketryProperties marketryProperties;
     private final ClosingPriceReader closingPriceReader;
     private final MarketCalendarTimeService marketCalendarTimeService;
@@ -95,20 +94,13 @@ public class MarketMapQueryService {
         List<StockInfo> activeStocks = stockInfoCacheService.getCache().values().stream()
                 .filter(StockInfo::isActiveAndOrdinary)
                 .toList();
-        Set<Long> industryIds = activeStocks.stream()
-                .map(StockInfo::getIndustryId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        Map<Long, String> industryNameById = industryIds.isEmpty()
-                ? Map.of()
-                : industryInfoRepository.findAllById(industryIds).stream()
-                        .collect(Collectors.toMap(IndustryInfo::getId, IndustryInfo::getName));
+        Map<String, String> industryNameByStockCode = stockIndustryNameResolver.resolve(activeStocks);
         return activeStocks.stream()
                 .map(stock -> new StockCatalogItem(
                         stock.getStockCode(),
                         stock.getMarketType(),
                         stock.isNxtEnabled(),
-                        stock.getIndustryId() == null ? null : industryNameById.get(stock.getIndustryId())))
+                        industryNameByStockCode.get(stock.getStockCode())))
                 .toList();
     }
 
@@ -140,19 +132,12 @@ public class MarketMapQueryService {
         Map<String, CachedStockPrice> priceMap =
                 applyBasis(findPriceByStockCode(markets, latestSnapshotTime), latestSnapshotTime, basis);
         List<CustomValueTierThreshold> sortedTiers = customValueTierThresholdService.findDefaultSortedAscending();
-        Set<Long> industryIds = candidates.stream()
-                .map(StockInfo::getIndustryId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        Map<Long, String> industryNameById = industryIds.isEmpty()
-                ? Map.of()
-                : industryInfoRepository.findAllById(industryIds).stream()
-                        .collect(Collectors.toMap(IndustryInfo::getId, IndustryInfo::getName));
+        Map<String, String> industryNameByStockCode = stockIndustryNameResolver.resolve(candidates);
 
         Map<String, List<MarketMapItem>> grouped = candidates.stream()
                 .filter(stockInfo -> priceMap.containsKey(stockInfo.getStockCode()))
                 .collect(Collectors.groupingBy(
-                        stockInfo -> normalizeSectorName(industryName(stockInfo, industryNameById)),
+                        stockInfo -> normalizeSectorName(industryNameByStockCode.get(stockInfo.getStockCode())),
                         Collectors.mapping(
                                 stockInfo ->
                                         toMarketMapItem(stockInfo, priceMap.get(stockInfo.getStockCode()), sortedTiers),
@@ -736,13 +721,6 @@ public class MarketMapQueryService {
             return UNSECTORED;
         }
         return sectorName;
-    }
-
-    private String industryName(StockInfo stockInfo, Map<Long, String> industryNameById) {
-        if (stockInfo.getIndustryId() == null) {
-            return null;
-        }
-        return industryNameById.get(stockInfo.getIndustryId());
     }
 
     private Map<String, CustomStockSector> findStockSectorMap(Long userId) {

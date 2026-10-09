@@ -38,19 +38,6 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 @Component
 @RequiredArgsConstructor
 public class StockInfoCollector {
-    /**
-     * 키움이 업종명(upName)을 비워 보내는 종목의 보정표(종목코드 → 업종명). 업종명은 이미 쓰는 거래소 분류 이름이어야 한다.
-     * 키움 값이 있으면 그 값을 쓰고, 비어 있을 때만 이 표로 채운다. 키움이 값을 채워 주기 시작하면 표에서 지운다.
-     * 시가총액이 큰 순서로 제주은행까지만 채웠다. 나머지 미분류(외국 기업, 소형주)는 의도적으로 그대로 둔다.
-     */
-    private static final Map<String, String> INDUSTRY_NAME_FALLBACKS = Map.of(
-            "024110", "금융", // 기업은행
-            "323410", "금융", // 카카오뱅크
-            "279570", "금융", // 케이뱅크
-            "006220", "금융", // 제주은행
-            "950260", "제약", // 인제니아테라퓨틱스
-            "950160", "제약", // 코오롱티슈진
-            "950210", "제약"); // 프레스티지바이오파마
 
     private final KiwoomApiClient kiwoomApiClient;
     private final NextradeStockListClient nextradeStockListClient;
@@ -155,8 +142,9 @@ public class StockInfoCollector {
         Set<String> industryNames = new HashSet<>();
         for (FetchStockInfo fetched : fetchedStocks) {
             if (StockMarketCode.isOrdinaryShare(fetched.marketCode())
-                    && !fetched.effectiveCategoryName().isBlank()) {
-                industryNames.add(fetched.effectiveCategoryName());
+                    && fetched.categoryName() != null
+                    && !fetched.categoryName().isBlank()) {
+                industryNames.add(fetched.categoryName());
             }
         }
         if (industryNames.isEmpty()) {
@@ -185,10 +173,11 @@ public class StockInfoCollector {
 
     private Long industryId(FetchStockInfo fetched, Map<String, IndustryInfo> industryByName) {
         if (!StockMarketCode.isOrdinaryShare(fetched.marketCode())
-                || fetched.effectiveCategoryName().isBlank()) {
+                || fetched.categoryName() == null
+                || fetched.categoryName().isBlank()) {
             return null;
         }
-        IndustryInfo industry = industryByName.get(fetched.effectiveCategoryName());
+        IndustryInfo industry = industryByName.get(fetched.categoryName());
         return industry == null ? null : industry.getId();
     }
 
@@ -249,15 +238,7 @@ public class StockInfoCollector {
             String categoryName,
             Long listCount,
             BigDecimal lastPrice,
-            boolean nxtEnabled) {
-        /** 키움 업종명이 비어 있으면 보정표로 채운다. 둘 다 없으면 빈 문자열. */
-        String effectiveCategoryName() {
-            if (categoryName != null && !categoryName.isBlank()) {
-                return categoryName;
-            }
-            return INDUSTRY_NAME_FALLBACKS.getOrDefault(stockCode, "");
-        }
-    }
+            boolean nxtEnabled) {}
 
     private enum MrktTp {
         KOSPI("0"),

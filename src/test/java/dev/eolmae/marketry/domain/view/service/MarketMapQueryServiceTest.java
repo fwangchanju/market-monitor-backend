@@ -24,6 +24,7 @@ import dev.eolmae.marketry.domain.stock.entity.StockInfo;
 import dev.eolmae.marketry.domain.stock.repository.IndustryInfoRepository;
 import dev.eolmae.marketry.domain.stock.repository.MarketOverviewSnapshotRepository;
 import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepository;
+import dev.eolmae.marketry.domain.stock.repository.StockIndustryOverrideRepository;
 import dev.eolmae.marketry.domain.stock.service.CalendarDayTimes;
 import dev.eolmae.marketry.domain.stock.service.ClosingPriceReader;
 import dev.eolmae.marketry.domain.stock.service.ClosingPrices;
@@ -32,6 +33,7 @@ import dev.eolmae.marketry.domain.stock.service.MarketCalendarTimeService;
 import dev.eolmae.marketry.domain.stock.service.SectorPriceCacheService;
 import dev.eolmae.marketry.domain.stock.service.SectorPriceCacheService.CachedStockPrice;
 import dev.eolmae.marketry.domain.stock.service.SectorPriceSnapshotService;
+import dev.eolmae.marketry.domain.stock.service.StockIndustryNameResolver;
 import dev.eolmae.marketry.domain.stock.service.StockInfoCacheService;
 import dev.eolmae.marketry.domain.view.dto.MarketMapResponse;
 import dev.eolmae.marketry.domain.view.dto.MarketMapSectorNode;
@@ -111,7 +113,7 @@ class MarketMapQueryServiceTest {
             sectorTierAggregationService,
             marketValueTierThresholdService,
             marketOverviewSnapshotRepository,
-            industryInfoRepository,
+            new StockIndustryNameResolver(industryInfoRepository, Mockito.mock(StockIndustryOverrideRepository.class)),
             marketryProperties,
             closingPriceReader,
             calendarTimeService);

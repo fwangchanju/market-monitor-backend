@@ -71,7 +71,7 @@ public class CollectionScheduler {
     }
 
     void collectMarketData(LocalDateTime snapshotTime) {
-        CalendarDayTimes dayTimes = marketCalendarTimeService.resolve(snapshotTime.toLocalDate());
+        CalendarDayTimes dayTimes = marketCalendarTimeService.resolveForCollection(snapshotTime.toLocalDate());
         if (dayTimes.holiday()) {
             log.info("[휴장일 수집 생략] | context : KR|{}", snapshotTime.toLocalDate());
             return;

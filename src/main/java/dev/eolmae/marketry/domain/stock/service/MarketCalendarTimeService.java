@@ -6,6 +6,7 @@ import dev.eolmae.marketry.domain.stock.entity.MarketCalendar;
 import dev.eolmae.marketry.domain.stock.entity.TradingPeriod;
 import dev.eolmae.marketry.domain.stock.enums.MarketCalendarStatus;
 import dev.eolmae.marketry.domain.stock.properties.MarketHoursProperties;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -31,6 +32,14 @@ public class MarketCalendarTimeService {
     private int endHour;
 
     public CalendarDayTimes resolve(LocalDate date) {
+        return resolveStoredCalendar(date, false);
+    }
+
+    public CalendarDayTimes resolveForCollection(LocalDate date) {
+        return resolveStoredCalendar(date, true);
+    }
+
+    private CalendarDayTimes resolveStoredCalendar(LocalDate date, boolean checkMissingWeekend) {
         MarketCalendar calendar;
         try {
             calendar =
@@ -41,6 +50,11 @@ public class MarketCalendarTimeService {
                     date,
                     exception.getClass().getSimpleName());
             return resolve(date, null);
+        }
+        if (checkMissingWeekend
+                && calendar == null
+                && (date.getDayOfWeek() == DayOfWeek.SATURDAY || date.getDayOfWeek() == DayOfWeek.SUNDAY)) {
+            return new CalendarDayTimes(true, null, null, null, null, null);
         }
         return resolve(date, calendar);
     }

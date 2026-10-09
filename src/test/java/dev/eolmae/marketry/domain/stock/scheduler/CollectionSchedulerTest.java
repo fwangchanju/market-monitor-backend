@@ -64,7 +64,7 @@ class CollectionSchedulerTest {
 
     @BeforeEach
     void 정상_시간표() {
-        when(timeService.resolve(any(LocalDate.class))).thenAnswer(invocation -> {
+        when(timeService.resolveForCollection(any(LocalDate.class))).thenAnswer(invocation -> {
             LocalDate date = invocation.getArgument(0);
             return new CalendarDayTimes(
                     false,
@@ -91,7 +91,7 @@ class CollectionSchedulerTest {
 
     @Test
     void 지연개장일은_10시전_수집과_앞두_지도발송을_생략한다() {
-        when(timeService.resolve(DATE))
+        when(timeService.resolveForCollection(DATE))
                 .thenReturn(new CalendarDayTimes(
                         false,
                         DATE.atTime(10, 0),
@@ -110,7 +110,8 @@ class CollectionSchedulerTest {
 
     @Test
     void 휴장일에는_수집과_모든_리포트를_생략한다() {
-        when(timeService.resolve(DATE)).thenReturn(new CalendarDayTimes(true, null, null, null, null, null));
+        when(timeService.resolveForCollection(DATE))
+                .thenReturn(new CalendarDayTimes(true, null, null, null, null, null));
 
         scheduler.collectMarketData(DATE.atTime(8, 15));
         scheduler.collectMarketData(DATE.atTime(20, 10));
@@ -180,7 +181,7 @@ class CollectionSchedulerTest {
     @Test
     void 지도는_정규종료_tick의_수집이_끝난_뒤_발송한다() {
         LocalDateTime tick = DATE.atTime(16, 35);
-        when(timeService.resolve(DATE))
+        when(timeService.resolveForCollection(DATE))
                 .thenReturn(new CalendarDayTimes(
                         false,
                         DATE.atTime(10, 0),
@@ -199,7 +200,7 @@ class CollectionSchedulerTest {
 
     @Test
     void 정규종료_이후_첫tick이_수집불가여도_오늘_마지막_지도를_보낸다() {
-        when(timeService.resolve(DATE))
+        when(timeService.resolveForCollection(DATE))
                 .thenReturn(new CalendarDayTimes(
                         false,
                         DATE.atTime(10, 0),
@@ -214,6 +215,28 @@ class CollectionSchedulerTest {
         scheduler.collectMarketData(DATE.atTime(16, 35));
 
         verify(dispatcher).sendMap(DATE.atTime(16, 30));
+    }
+
+    @Test
+    void 수집중_휴장_시간표가_적재되면_다음_tick부터_수집을_생략한다() {
+        when(timeService.resolveForCollection(DATE))
+                .thenReturn(
+                        new CalendarDayTimes(
+                                false,
+                                DATE.atTime(8, 0),
+                                DATE.atTime(20, 0),
+                                DATE.atTime(15, 30),
+                                DATE.atTime(15, 30),
+                                DATE.atTime(15, 40)),
+                        new CalendarDayTimes(true, null, null, null, null, null));
+
+        scheduler.collectMarketData(DATE.atTime(8, 0));
+        scheduler.collectMarketData(DATE.atTime(8, 5));
+
+        verify(indexCollector).collect(DATE.atTime(8, 0));
+        verify(indexCollector, never()).collect(DATE.atTime(8, 5));
+        verify(programCollector, never()).collect(DATE.atTime(8, 5));
+        verify(sectorCollector, never()).collect(DATE.atTime(8, 5));
     }
 
     @Test

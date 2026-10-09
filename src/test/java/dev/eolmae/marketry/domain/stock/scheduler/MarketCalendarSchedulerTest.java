@@ -6,19 +6,13 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import dev.eolmae.marketry.common.enums.Country;
 import dev.eolmae.marketry.domain.stock.collector.MarketCalendarCollector;
-import dev.eolmae.marketry.domain.stock.entity.MarketCalendar;
-import dev.eolmae.marketry.domain.stock.enums.MarketCalendarStatus;
-import dev.eolmae.marketry.domain.stock.service.MarketCalendarService;
 import java.time.LocalDate;
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class MarketCalendarSchedulerTest {
     private final MarketCalendarCollector collector = mock(MarketCalendarCollector.class);
-    private final MarketCalendarService service = mock(MarketCalendarService.class);
-    private final MarketCalendarScheduler scheduler = new MarketCalendarScheduler(collector, service);
+    private final MarketCalendarScheduler scheduler = new MarketCalendarScheduler(collector);
     private final LocalDate date = LocalDate.of(2026, 10, 9);
 
     @Test
@@ -38,18 +32,14 @@ class MarketCalendarSchedulerTest {
     }
 
     @Test
-    void 시작시정상행이있으면그대로사용한다() {
-        when(service.findByCountryAndDate(Country.KR, date))
-                .thenReturn(Optional.of(MarketCalendar.create(Country.KR, date, MarketCalendarStatus.HOLIDAY, null)));
-        scheduler.initialize(date);
+    void 생성후_정기조회전에는_재시도해도_API를_호출하지_않는다() {
+        scheduler.retry(date);
         verify(collector, never()).collect(date);
     }
 
     @Test
-    void 시작시실패행이면조회하고최종실패까지정해진시각만재시도한다() {
-        when(service.findByCountryAndDate(Country.KR, date))
-                .thenReturn(Optional.of(MarketCalendar.create(Country.KR, date, MarketCalendarStatus.FAILED, null)));
-        scheduler.initialize(date);
+    void 정기조회가_실패하면_정해진_두차례_재시도한다() {
+        scheduler.refresh(date);
         scheduler.retry(date);
         scheduler.retry(date);
         verify(collector, times(3)).collect(date);

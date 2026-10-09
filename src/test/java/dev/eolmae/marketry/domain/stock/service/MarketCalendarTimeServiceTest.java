@@ -16,6 +16,8 @@ import java.time.ZoneOffset;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mockito;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -153,6 +155,78 @@ class MarketCalendarTimeServiceTest {
         when(calendarService.findByCountryAndDate(Country.KR, DATE)).thenThrow(new RuntimeException("DB unavailable"));
 
         assertFallback(service.resolve(DATE));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {3, 4})
+    void 시간표없는_주말은_수집만_생략하고_종가_기본시간은_유지한다(int day) {
+        LocalDate weekend = LocalDate.of(2026, 1, day);
+        when(calendarService.findByCountryAndDate(Country.KR, weekend)).thenReturn(Optional.empty());
+
+        assertThat(service.resolveForCollection(weekend).holiday()).isTrue();
+        CalendarDayTimes closing = service.resolve(weekend);
+        assertThat(closing.holiday()).isFalse();
+        assertThat(closing.closingWindowStart()).isEqualTo(weekend.atTime(15, 30));
+        assertThat(closing.closingWindowEnd()).isEqualTo(weekend.atTime(15, 40));
+    }
+
+    @Test
+    void 시간표없는_평일은_기본시간으로_수집한다() {
+        when(calendarService.findByCountryAndDate(Country.KR, DATE)).thenReturn(Optional.empty());
+
+        assertFallback(service.resolveForCollection(DATE));
+    }
+
+    @Test
+    void 주말도_FAILED_레코드가_있으면_기존_실패_정책을_따른다() {
+        LocalDate weekend = LocalDate.of(2026, 1, 3);
+        when(calendarService.findByCountryAndDate(Country.KR, weekend))
+                .thenReturn(Optional.of(MarketCalendar.create(Country.KR, weekend, MarketCalendarStatus.FAILED, null)));
+
+        CalendarDayTimes times = service.resolveForCollection(weekend);
+        assertThat(times.holiday()).isFalse();
+        assertThat(times.collectionStart()).isEqualTo(weekend.atTime(8, 0));
+        assertThat(times.collectionEnd()).isEqualTo(weekend.atTime(20, 0));
+    }
+
+    @Test
+    void 주말의_거래일_시간표가_있으면_요일보다_시간표를_우선한다() {
+        LocalDate weekend = LocalDate.of(2026, 1, 3);
+        TradingPeriod regular = new TradingPeriod(
+                weekend.atTime(10, 0).atOffset(ZoneOffset.ofHours(9)),
+                null,
+                null,
+                weekend.atTime(15, 30).atOffset(ZoneOffset.ofHours(9)));
+        when(calendarService.findByCountryAndDate(Country.KR, weekend))
+                .thenReturn(Optional.of(MarketCalendar.create(
+                        Country.KR,
+                        weekend,
+                        MarketCalendarStatus.TRADING_DAY,
+                        new IntegratedPeriod(null, regular, null))));
+
+        CalendarDayTimes times = service.resolveForCollection(weekend);
+        assertThat(times.holiday()).isFalse();
+        assertThat(times.collectionStart()).isEqualTo(weekend.atTime(10, 0));
+        assertThat(times.collectionEnd()).isEqualTo(weekend.atTime(15, 30));
+    }
+
+    @Test
+    void DB오류를_날짜_레코드_없음으로_단정해_주말_수집을_막지_않는다() {
+        LocalDate weekend = LocalDate.of(2026, 1, 3);
+        when(calendarService.findByCountryAndDate(Country.KR, weekend))
+                .thenThrow(new RuntimeException("DB unavailable"));
+
+        assertThat(service.resolveForCollection(weekend).holiday()).isFalse();
+    }
+
+    @Test
+    void 수동적재한_휴장_시간표를_다음_수집_판정에_반영한다() {
+        when(calendarService.findByCountryAndDate(Country.KR, DATE))
+                .thenReturn(Optional.empty())
+                .thenReturn(Optional.of(MarketCalendar.create(Country.KR, DATE, MarketCalendarStatus.HOLIDAY, null)));
+
+        assertThat(service.resolveForCollection(DATE).holiday()).isFalse();
+        assertThat(service.resolveForCollection(DATE).holiday()).isTrue();
     }
 
     private void assertFallback(CalendarDayTimes times) {

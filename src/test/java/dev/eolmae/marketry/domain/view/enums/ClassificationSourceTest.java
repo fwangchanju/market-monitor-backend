@@ -12,19 +12,24 @@ class ClassificationSourceTest {
     void from_세_값을_대소문자_구분없이_해석한다() {
         assertThat(ClassificationSource.from("krx")).isEqualTo(ClassificationSource.KRX);
         assertThat(ClassificationSource.from("marketry")).isEqualTo(ClassificationSource.MARKETRY);
-        assertThat(ClassificationSource.from("MYMAP")).isEqualTo(ClassificationSource.MYMAP);
-        assertThat(ClassificationSource.from("MyMap")).isEqualTo(ClassificationSource.MYMAP);
+        assertThat(ClassificationSource.from("MINE")).isEqualTo(ClassificationSource.MINE);
+        assertThat(ClassificationSource.from("Mine")).isEqualTo(ClassificationSource.MINE);
+    }
+
+    @Test
+    void from_이름을_바꾸기_전_값_mymap도_mine으로_받는다() {
+        assertThat(ClassificationSource.from("mymap")).isEqualTo(ClassificationSource.MINE);
     }
 
     @Test
     void from_모르는_값은_거부한다() {
-        assertThatThrownBy(() -> ClassificationSource.from("mine")).isInstanceOf(BadRequestException.class);
+        assertThatThrownBy(() -> ClassificationSource.from("other")).isInstanceOf(BadRequestException.class);
         assertThatThrownBy(() -> ClassificationSource.from("")).isInstanceOf(BadRequestException.class);
     }
 
     @Test
     void resolve_source가_없으면_옛_isCustom을_따른다() {
-        assertThat(ClassificationSource.resolve(null, true)).isEqualTo(ClassificationSource.MYMAP);
+        assertThat(ClassificationSource.resolve(null, true)).isEqualTo(ClassificationSource.MINE);
         assertThat(ClassificationSource.resolve(null, false)).isEqualTo(ClassificationSource.KRX);
     }
 

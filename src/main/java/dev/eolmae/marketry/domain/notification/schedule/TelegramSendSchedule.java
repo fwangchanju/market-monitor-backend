@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Component;
  * 위한 제약일 뿐이라 CollectionScheduler와는 별개로 각자 주입받는다. 스프링 없이 단위 테스트할 수 있게
  * 실제 판정 로직은 인자를 그대로 받는 static 메서드로 뺐다.
  */
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class TelegramSendSchedule {
@@ -79,19 +81,57 @@ public class TelegramSendSchedule {
     }
 
     /**
-     * 지금 맵 발송(코스피+코스닥 앨범) 시각인가. telegram.map-send-times에 정확히 일치하는 분에서만
-     * 보낸다 — 격자·경과분 계산이 필요 없는 지정 시각 목록이라 due()와 판정 방식이 다르다.
-     * shouldCollect가 꺼진 뒤에는 판정하지 않는다 — 장 마감 이후엔 맵 이미지도 더 이상 안 바뀐다.
+     * 앞의 지정 시각은 수집 가능한 경우에만 발송하고, 마지막 시각은 날짜별 정규장 종료로 대체한다.
+     * 종료가 수집 격자 사이에 있으면 고정 cron 범위 안의 다음 tick에 발송한다.
      */
-    public boolean dueForMap(LocalDateTime now, boolean shouldCollect) {
-        return dueForMap(now, shouldCollect, telegramProperties.mapSendTimes());
+    public boolean dueForMap(LocalDateTime now, boolean shouldCollect, LocalDateTime regularMarketEnd) {
+        LocalDateTime lastTick = resolveLastMapTick(regularMarketEnd, collectIntervalMinutes);
+        if (lastTick.isBefore(now.toLocalDate().atTime(startHour, 0))
+                || lastTick.isAfter(now.toLocalDate().atTime(endHour, 59))) {
+            log.warn("[맵발송시각] 정규장 종료가 고정 수집 cron 범위 밖 | context : {}", regularMarketEnd);
+            return shouldCollect
+                    && telegramProperties
+                            .mapSendTimes()
+                            .subList(0, telegramProperties.mapSendTimes().size() - 1)
+                            .contains(now.toLocalTime());
+        }
+        boolean due = dueForMap(
+                now,
+                shouldCollect,
+                telegramProperties.mapSendTimes(),
+                regularMarketEnd,
+                collectIntervalMinutes,
+                startHour,
+                endHour);
+        if (due && now.equals(lastTick) && regularMarketEnd.equals(lastTick) == false) {
+            log.info("[맵발송시각] 정규장 종료 이후 첫 cron tick 발송 | context : {}|{}", regularMarketEnd, lastTick);
+        }
+        return due;
     }
 
-    static boolean dueForMap(LocalDateTime now, boolean shouldCollect, List<LocalTime> mapSendTimes) {
-        if (!shouldCollect) {
-            return false;
+    static boolean dueForMap(
+            LocalDateTime now,
+            boolean shouldCollect,
+            List<LocalTime> mapSendTimes,
+            LocalDateTime regularMarketEnd,
+            int collectIntervalMinutes,
+            int startHour,
+            int endHour) {
+        if (shouldCollect && mapSendTimes.subList(0, mapSendTimes.size() - 1).contains(now.toLocalTime())) {
+            return true;
         }
-        return mapSendTimes.contains(now.toLocalTime());
+        LocalDateTime lastTick = resolveLastMapTick(regularMarketEnd, collectIntervalMinutes);
+        return lastTick.isBefore(now.toLocalDate().atTime(startHour, 0)) == false
+                && lastTick.isAfter(now.toLocalDate().atTime(endHour, 59)) == false
+                && now.equals(lastTick);
+    }
+
+    private static LocalDateTime resolveLastMapTick(LocalDateTime regularMarketEnd, int intervalMinutes) {
+        LocalDateTime tick = regularMarketEnd.truncatedTo(java.time.temporal.ChronoUnit.HOURS);
+        while (tick.isBefore(regularMarketEnd)) {
+            tick = tick.plusMinutes(intervalMinutes);
+        }
+        return tick;
     }
 
     // 기동 실패 자체가 신호라 EscalateException을 쓰지 않는다 — @PostConstruct에서 던지면

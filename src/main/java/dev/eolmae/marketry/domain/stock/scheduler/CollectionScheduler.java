@@ -18,15 +18,14 @@ import dev.eolmae.marketry.domain.stock.collector.ProgramTradeIntradayCollector;
 import dev.eolmae.marketry.domain.stock.collector.SectorInvestorNetBuyCollector;
 import dev.eolmae.marketry.domain.stock.collector.ShortSellingTrendCollector;
 import dev.eolmae.marketry.domain.stock.collector.StockInfoCollector;
+import dev.eolmae.marketry.domain.stock.service.CalendarDayTimes;
+import dev.eolmae.marketry.domain.stock.service.MarketCalendarTimeService;
 import dev.eolmae.marketry.domain.view.enums.MarketQuery;
 import java.time.Duration;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -50,19 +49,15 @@ public class CollectionScheduler {
     private final TelegramSendSchedule telegramSendSchedule;
     private final EscalationPublisher escalationPublisher;
 
-    @Value("${collect.end-hour}")
-    private int endHour;
+    private final MarketCalendarTimeService marketCalendarTimeService;
 
     private static final String KST_ZONE_ID = "Asia/Seoul";
 
-    // shouldCollect가 false라 이번 호출에서 수집을 안 한 경우에도, 마지막으로 실제 수집이 일어났을 때의
-    // 결과를 발송 판정(장 마감 이후 발송 시각)까지 들고 가기 위한 상태 — 로컬 변수로는 호출이 끝나면
-    // 사라져서 그 다음 호출(발송 시각)이 진짜 마지막 수집 결과를 알 수 없다.
-    private volatile boolean lastIndexContributionSuccess = true;
+    private volatile CollectionResult lastCollection;
 
     /**
      * 장중 시장 데이터 수집: 평일 collect.start-hour~end-hour, interval-minutes 간격.
-     * collect.end-hour 정각(장 마감 시점) 이후엔 수집해봐야 데이터가 안 바뀌므로 수집기 호출은 스킵한다.
+     * 날짜별 시간표의 전체 세션 시작부터 종료 정각까지 수집한다.
      * 수집 직후 텔레그램 발송을 매번 호출하되, 실제 발송 여부와 주기({@link TelegramSendSchedule#due},
      * {@link TelegramSendSchedule#dueForMap})는 여기서 한 곳에서만 게이팅한다(별도 스케줄로 분리하면 두
      * 트리거의 실행 순서를 보장할 수 없어, 같은 호출 안에서 순차 실행되도록 묶었다). 섹터(15분 간격)와
@@ -72,31 +67,37 @@ public class CollectionScheduler {
             cron = "0 0/${collect.interval-minutes} ${collect.start-hour}-${collect.end-hour} * * MON-FRI",
             zone = KST_ZONE_ID)
     public void collectMarketData() {
-        LocalDateTime snapshotTime = KstClock.getNowTruncateMinute();
+        collectMarketData(KstClock.getNowTruncateMinute());
+    }
 
-        if (isHoliday(snapshotTime.toLocalDate())) {
+    void collectMarketData(LocalDateTime snapshotTime) {
+        CalendarDayTimes dayTimes = marketCalendarTimeService.resolve(snapshotTime.toLocalDate());
+        if (dayTimes.holiday()) {
+            log.info("[휴장일 수집 생략] | context : KR|{}", snapshotTime.toLocalDate());
             return;
         }
 
-        boolean shouldCollect = shouldCollect(snapshotTime);
+        boolean shouldCollect =
+                !snapshotTime.isBefore(dayTimes.collectionStart()) && !snapshotTime.isAfter(dayTimes.collectionEnd());
         if (shouldCollect) {
             log.info("장중 시장 데이터 수집 시작: snapshotTime={}", snapshotTime);
 
             run("투자자별매매종합", () -> sectorInvestorNetBuyCollector.collect(snapshotTime));
             run("프로그램매매랭킹", () -> programNetBuyRankingCollector.collect(snapshotTime));
-            lastIndexContributionSuccess =
-                    run("지수기여도랭킹", () -> indexContributionRankingCollector.collect(snapshotTime));
+            boolean success = run("지수기여도랭킹", () -> indexContributionRankingCollector.collect(snapshotTime));
+            lastCollection = new CollectionResult(snapshotTime, success);
 
             log.info("장중 시장 데이터 수집 완료: snapshotTime={}", snapshotTime);
         }
 
-        // 마감 이후엔 수집을 스킵해서 실제 데이터는 마감 정각 기준이므로, 텔레그램 캡션엔 발송 시각이
-        // 아니라 이 데이터 기준 시각을 찍는다.
-        LocalDateTime dataTime =
-                shouldCollect ? snapshotTime : LocalDateTime.of(snapshotTime.toLocalDate(), LocalTime.of(endHour, 0));
+        CollectionResult collection = lastCollection;
+        if (collection == null || collection.snapshotTime().toLocalDate().equals(snapshotTime.toLocalDate()) == false) {
+            return;
+        }
+        LocalDateTime dataTime = collection.snapshotTime();
 
         if (telegramSendSchedule.due(snapshotTime, shouldCollect)) {
-            if (!lastIndexContributionSuccess) {
+            if (collection.success() == false) {
                 run("데이터수집실패알림", () -> telegramCollectionFailureNotifier.notify(dataTime));
             } else {
                 // 마켓별로 섹터 이미지 1장 + 캡션 1개씩 각각 발송.
@@ -107,9 +108,9 @@ public class CollectionScheduler {
         // 맵 발송은 섹터와 별개 시각(telegram.map-send-times)에, 별개 판정으로 돈다. 맵 이미지는
         // sector_price_snapshot(IndexContributionRankingCollector.collectSectorPrice가 씀)으로
         // 그려지므로, 수집이 실패해도 맵 페이지는 최신 공통 시각으로 그대로 그려진다 — 그래서
-        // lastIndexContributionSuccess로 가두지 않는다. 캡션은 그 시각 랭킹이 비면 자연히
+        // 마지막 수집 성공 여부로 가두지 않는다. 캡션은 그 시각 랭킹이 비면 자연히
         // 빠진다(MarketMapAlbumReportSender.buildCaption).
-        if (telegramSendSchedule.dueForMap(snapshotTime, shouldCollect)) {
+        if (telegramSendSchedule.dueForMap(snapshotTime, shouldCollect, dayTimes.regularMarketEnd())) {
             run("맵텔레그램발송", () -> telegramReportDispatcher.sendMap(dataTime));
         }
     }
@@ -172,17 +173,7 @@ public class CollectionScheduler {
         log.info("종목 정보 동기화 완료");
     }
 
-    // TODO(#38): 실제 공휴일 판정 로직 추가 예정 — 지금은 항상 false. 미구현 상태라 date를 아직 쓰지 않는다.
-    @SuppressWarnings("UnusedVariable")
-    private boolean isHoliday(LocalDate date) {
-        return false;
-    }
-
-    // 마감(collect.end-hour) 정각까지는 수집, 그 이후(수집해봐야 데이터가 안 바뀌는 구간)는 수집 스킵.
-    private boolean shouldCollect(LocalDateTime snapshotTime) {
-        LocalTime marketCloseTime = LocalTime.of(endHour, 0);
-        return !snapshotTime.toLocalTime().isAfter(marketCloseTime);
-    }
+    private record CollectionResult(LocalDateTime snapshotTime, boolean success) {}
 
     // 예외 없이 끝나면 true, 잡히면 escalate 후 false — 호출부가 "이 단계가 성공했는지"를 별도 재조회
     // 없이 실행 결과 자체로 바로 알 수 있다. 반환값이 필요 없는 호출부는 그냥 무시하면 된다.

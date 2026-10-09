@@ -16,7 +16,8 @@ class TelegramSendScheduleTest {
     private static final int SEND_MINUTE = 10;
     private static final int SEND_INTERVAL_MINUTES = 15;
     private static final int COLLECT_INTERVAL_MINUTES = 5;
-    private static final List<LocalTime> MAP_SEND_TIMES = List.of(LocalTime.of(8, 15), LocalTime.of(15, 30));
+    private static final List<LocalTime> MAP_SEND_TIMES =
+            List.of(LocalTime.of(8, 15), LocalTime.of(9, 15), LocalTime.of(15, 30));
     private static final LocalDateTime DATE = LocalDateTime.of(2025, 6, 2, 0, 0);
 
     @Test
@@ -111,6 +112,66 @@ class TelegramSendScheduleTest {
     }
 
     @Test
+    void dueForMap_앞두_고정시각은_유지하고_마지막만_정규종료로_이동한다() {
+        LocalDateTime regularEnd = DATE.withHour(16).withMinute(30);
+
+        assertThat(dueForMap(DATE.withHour(8).withMinute(15), true, regularEnd)).isTrue();
+        assertThat(dueForMap(DATE.withHour(9).withMinute(15), true, regularEnd)).isTrue();
+        assertThat(dueForMap(DATE.withHour(15).withMinute(30), true, regularEnd))
+                .isFalse();
+        assertThat(dueForMap(regularEnd, true, regularEnd)).isTrue();
+    }
+
+    @Test
+    void dueForMap_16시32분_종료는_16시35분_첫tick에_발송한다() {
+        LocalDateTime regularEnd = DATE.withHour(16).withMinute(32);
+
+        assertThat(dueForMap(DATE.withHour(16).withMinute(30), true, regularEnd))
+                .isFalse();
+        assertThat(dueForMap(DATE.withHour(16).withMinute(35), true, regularEnd))
+                .isTrue();
+        assertThat(dueForMap(DATE.withHour(16).withMinute(40), true, regularEnd))
+                .isFalse();
+    }
+
+    @Test
+    void dueForMap_초가_있는_종료도_다음tick으로_올림한다() {
+        LocalDateTime regularEnd = DATE.withHour(16).withMinute(30).withSecond(1);
+
+        assertThat(dueForMap(DATE.withHour(16).withMinute(30), true, regularEnd))
+                .isFalse();
+        assertThat(dueForMap(DATE.withHour(16).withMinute(35), true, regularEnd))
+                .isTrue();
+    }
+
+    @Test
+    void dueForMap_첫_두시각은_수집가능_조건을_유지한다() {
+        LocalDateTime regularEnd = DATE.withHour(16).withMinute(30);
+
+        assertThat(dueForMap(DATE.withHour(8).withMinute(15), false, regularEnd))
+                .isFalse();
+        assertThat(dueForMap(DATE.withHour(9).withMinute(15), false, regularEnd))
+                .isFalse();
+        assertThat(dueForMap(regularEnd, false, regularEnd)).isTrue();
+    }
+
+    @Test
+    void dueForMap_고정cron_밖으로_마지막_발송을_확장하지_않는다() {
+        LocalDateTime regularEnd = DATE.withHour(21).withMinute(0);
+
+        assertThat(dueForMap(regularEnd, true, regularEnd)).isFalse();
+        assertThat(dueForMap(DATE.withHour(8).withMinute(15), true, regularEnd)).isTrue();
+    }
+
+    @Test
+    void dueForMap_20시55분은_기존cron의_실행범위에_포함된다() {
+        LocalDateTime regularEnd = DATE.withHour(20).withMinute(52);
+
+        assertThat(dueForMap(DATE.withHour(20).withMinute(55), false, regularEnd))
+                .isTrue();
+    }
+
+    @Test
     void validate_sendMinute이_0이하이면_기동을_막는다() {
         assertThatThrownBy(() -> validate(0, SEND_INTERVAL_MINUTES, 15, MAP_SEND_TIMES))
                 .isInstanceOf(IllegalStateException.class);
@@ -181,7 +242,19 @@ class TelegramSendScheduleTest {
     }
 
     private boolean dueForMap(LocalDateTime now, boolean shouldCollect) {
-        return TelegramSendSchedule.dueForMap(now, shouldCollect, MAP_SEND_TIMES);
+        return TelegramSendSchedule.dueForMap(
+                now,
+                shouldCollect,
+                MAP_SEND_TIMES,
+                DATE.withHour(15).withMinute(30),
+                COLLECT_INTERVAL_MINUTES,
+                START_HOUR,
+                END_HOUR);
+    }
+
+    private boolean dueForMap(LocalDateTime now, boolean shouldCollect, LocalDateTime regularEnd) {
+        return TelegramSendSchedule.dueForMap(
+                now, shouldCollect, MAP_SEND_TIMES, regularEnd, COLLECT_INTERVAL_MINUTES, START_HOUR, END_HOUR);
     }
 
     private void validate(int sendMinute, int sendIntervalMinutes, int beforeMinutes, List<LocalTime> mapSendTimes) {

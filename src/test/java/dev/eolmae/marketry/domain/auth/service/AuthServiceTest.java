@@ -11,6 +11,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import dev.eolmae.marketry.common.event.UserSignedUpEvent;
 import dev.eolmae.marketry.common.exception.NotFoundException;
 import dev.eolmae.marketry.domain.auth.dto.AuthSessionResponse;
 import dev.eolmae.marketry.domain.auth.dto.ProfileResponse;
@@ -22,12 +23,15 @@ import dev.eolmae.marketry.domain.auth.repository.UserAccountRepository;
 import dev.eolmae.marketry.domain.auth.repository.UserRefreshTokenRepository;
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mockito;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -119,6 +123,55 @@ class AuthServiceTest {
         verify(userRefreshTokenRepository).deleteExpiredOrStaleTokens(nowCaptor.capture(), cutoffCaptor.capture());
 
         assertThat(cutoffCaptor.getValue()).isEqualTo(nowCaptor.getValue().minusDays(1));
+    }
+
+    @Test
+    void signupForDevelopment은_매번_새_USER를_만들고_가입초기화_후_세션을_발급한다() {
+        AtomicLong nextUserId = new AtomicLong(41L);
+        when(userAccountRepository.save(any(UserAccount.class))).thenAnswer(invocation -> {
+            UserAccount user = invocation.getArgument(0);
+            ReflectionTestUtils.setField(user, "id", nextUserId.incrementAndGet());
+            return user;
+        });
+        when(appJwtService.issueAccessToken(any())).thenReturn("access-token");
+
+        AuthService.IssuedTokens first = authService.signupForDevelopment();
+        AuthService.IssuedTokens second = authService.signupForDevelopment();
+
+        ArgumentCaptor<UserAccount> users = ArgumentCaptor.forClass(UserAccount.class);
+        verify(userAccountRepository, times(2)).save(users.capture());
+        assertThat(users.getAllValues()).extracting(UserAccount::getRole).containsOnly(Role.USER);
+        assertThat(users.getAllValues()).extracting(UserAccount::getIssuer).containsOnly("local-test");
+        assertThat(users.getAllValues().get(0).getSub())
+                .isNotEqualTo(users.getAllValues().get(1).getSub());
+        ArgumentCaptor<UserSignedUpEvent> events = ArgumentCaptor.forClass(UserSignedUpEvent.class);
+        verify(eventPublisher, times(2)).publishEvent(events.capture());
+        assertThat(events.getAllValues())
+                .extracting(UserSignedUpEvent::userId)
+                .containsExactly(
+                        users.getAllValues().get(0).getId(),
+                        users.getAllValues().get(1).getId());
+        InOrder order = Mockito.inOrder(userAccountRepository, eventPublisher, userRefreshTokenRepository);
+        order.verify(userAccountRepository).save(users.getAllValues().get(0));
+        order.verify(eventPublisher)
+                .publishEvent(new UserSignedUpEvent(users.getAllValues().get(0).getId()));
+        order.verify(userRefreshTokenRepository).save(any(UserRefreshToken.class));
+        assertThat(first.accessToken()).isEqualTo("access-token");
+        assertThat(second.refreshToken()).isNotEqualTo(first.refreshToken());
+        Mockito.verifyNoInteractions(restClient, jdbcTemplate);
+    }
+
+    @Test
+    void signupForDevelopment은_가입초기화에_실패하면_세션을_발급하지_않는다() {
+        UserAccount user = userAccount(42L);
+        when(userAccountRepository.save(any(UserAccount.class))).thenReturn(user);
+        Mockito.doThrow(new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR))
+                .when(eventPublisher)
+                .publishEvent(any(UserSignedUpEvent.class));
+
+        assertThatThrownBy(authService::signupForDevelopment).isInstanceOf(ResponseStatusException.class);
+
+        Mockito.verifyNoInteractions(appJwtService, userRefreshTokenRepository);
     }
 
     @Test

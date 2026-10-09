@@ -3,7 +3,7 @@ package dev.eolmae.marketry.domain.stock.service;
 import dev.eolmae.marketry.common.enums.Country;
 import dev.eolmae.marketry.common.enums.Zone;
 import dev.eolmae.marketry.domain.stock.entity.MarketCalendar;
-import dev.eolmae.marketry.domain.stock.entity.TradingPeriod;
+import dev.eolmae.marketry.domain.stock.entity.TradingSession;
 import dev.eolmae.marketry.domain.stock.enums.MarketCalendarStatus;
 import dev.eolmae.marketry.domain.stock.properties.MarketHoursProperties;
 import java.time.DayOfWeek;
@@ -83,12 +83,12 @@ public class MarketCalendarTimeService {
                 .filter(Objects::nonNull)
                 .toList();
         LocalDateTime collectionStart = sessions.stream()
-                .map(TradingPeriod::startTime)
+                .map(TradingSession::startTime)
                 .map(this::toDomesticTime)
                 .min(LocalDateTime::compareTo)
                 .orElseThrow();
         LocalDateTime collectionEnd = sessions.stream()
-                .map(TradingPeriod::endTime)
+                .map(TradingSession::endTime)
                 .map(this::toDomesticTime)
                 .max(LocalDateTime::compareTo)
                 .orElseThrow();

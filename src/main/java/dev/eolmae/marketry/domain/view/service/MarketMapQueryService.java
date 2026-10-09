@@ -160,8 +160,8 @@ public class MarketMapQueryService {
                 findExchangeClassificationUpdatedAt());
     }
 
-    /** 커스텀 마켓맵: 어드민이 구성한 섹터 트리 기준. 트리에 배정 안 된 종목은 stock_info 섹터로
-     * 묶은 노드를 같은 레벨에 섞어서 반환. snapshotTime이 없으면 최신, 있으면 그 시각 그대로(결정 4). */
+    /** 커스텀 마켓맵: 사용자가 구성한 섹터 트리에 배정된 종목만 반환한다.
+     * snapshotTime이 없으면 최신, 있으면 그 시각 그대로(결정 4). */
     public MarketMapResponse getCustomMarketMap(MarketQuery marketQuery, LocalDateTime snapshotTime) {
         return getCustomMarketMap(marketQuery, snapshotTime, false);
     }

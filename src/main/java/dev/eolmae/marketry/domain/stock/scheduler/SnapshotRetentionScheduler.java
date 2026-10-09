@@ -6,16 +6,14 @@ import dev.eolmae.marketry.common.util.KstClock;
 import dev.eolmae.marketry.domain.notification.listener.EscalationPublisher;
 import dev.eolmae.marketry.domain.stock.service.SectorPriceSnapshotService;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * 스냅샷 정리 배치: sector_price_snapshot 테이블에서 cutoff(오늘 KST 기준 RETENTION_DAYS일 전 00:00)보다
- * 오래된 데이터 중, 그 날짜·마켓의 보존 윈도우([15:30, 15:40))에서 가장 늦은 시각(latest)이 아닌 것을
- * 지운다. 삭제 로직은 도메인 서비스에 두고, 이 스케줄러는 언제 돌지만 담당한다.
+ * 스냅샷 정리 배치: 11일 전 하루에서 시장별 종가 구간 latest의 종목 행만 남긴다.
+ * 실패한 날짜는 서비스에 그 날짜를 지정해 다시 처리한다. 더 오래된 날짜를 자동으로 재처리하지 않는다.
  */
 @Slf4j
 @Component
@@ -30,17 +28,17 @@ public class SnapshotRetentionScheduler {
 
     @Scheduled(cron = "0 0 4 * * *", zone = KST_ZONE_ID)
     public void cleanupSnapshots() {
-        LocalDateTime cutoff = calculateCutoff(KstClock.now().toLocalDate());
-        log.info("스냅샷 정리 배치 시작: cutoff={}", cutoff);
+        LocalDate targetDate = calculateTargetDate(KstClock.now().toLocalDate());
+        log.info("스냅샷 정리 배치 시작: date={}", targetDate);
 
-        run("섹터가격스냅샷정리", () -> sectorPriceSnapshotService.cleanupSnapshotsBefore(cutoff));
+        run("섹터가격스냅샷정리", () -> sectorPriceSnapshotService.cleanupSnapshotsForDate(targetDate));
 
         log.info("스냅샷 정리 배치 종료");
     }
 
-    /** cutoff 경계 — today 기준 RETENTION_DAYS일 전 자정. 그 경계일(10일째) 데이터는 남기고 그 이전만 삭제 대상. */
-    static LocalDateTime calculateCutoff(LocalDate today) {
-        return today.minusDays(RETENTION_DAYS).atStartOfDay();
+    /** 10일 전 날짜까지는 모두 보존하고, 그 바로 이전 날짜 하루만 정리한다. */
+    static LocalDate calculateTargetDate(LocalDate today) {
+        return today.minusDays(RETENTION_DAYS + 1);
     }
 
     // CollectionScheduler.run()과 동일한 격리 패턴 — 한 테이블 정리가 실패해도 다른 테이블 정리는 계속한다.

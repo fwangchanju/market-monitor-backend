@@ -107,6 +107,11 @@ tasks.register('marketCalendarTest', Test) {
 	if (requestedCalendarDate.isPresent()) {
 		systemProperty 'calendar.date', requestedCalendarDate.get()
 	}
+	def requestedCalendarEndDate = providers.systemProperty('calendar.end-date')
+			.orElse(providers.gradleProperty('calendarEndDate'))
+	if (requestedCalendarEndDate.isPresent()) {
+		systemProperty 'calendar.end-date', requestedCalendarEndDate.get()
+	}
 	outputs.upToDateWhen { false }
 	outputs.cacheIf { false }
 	testLogging {

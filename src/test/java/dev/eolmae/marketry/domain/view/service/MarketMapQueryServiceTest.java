@@ -28,7 +28,6 @@ import dev.eolmae.marketry.domain.stock.repository.StockIndustryOverrideReposito
 import dev.eolmae.marketry.domain.stock.service.CalendarDayTimes;
 import dev.eolmae.marketry.domain.stock.service.ClosingPriceReader;
 import dev.eolmae.marketry.domain.stock.service.ClosingPrices;
-import dev.eolmae.marketry.domain.stock.service.MarketCalendarService;
 import dev.eolmae.marketry.domain.stock.service.MarketCalendarTimeService;
 import dev.eolmae.marketry.domain.stock.service.SectorPriceCacheService;
 import dev.eolmae.marketry.domain.stock.service.SectorPriceCacheService.CachedStockPrice;
@@ -97,9 +96,7 @@ class MarketMapQueryServiceTest {
             Mockito.mock(MarketOverviewSnapshotRepository.class);
     private final IndustryInfoRepository industryInfoRepository = Mockito.mock(IndustryInfoRepository.class);
     private final SectorPriceSnapshotService sectorPriceSnapshotService = new SectorPriceSnapshotService(
-            sectorPriceSnapshotRepository,
-            Mockito.mock(MarketCalendarService.class),
-            Mockito.mock(MarketCalendarTimeService.class));
+            sectorPriceSnapshotRepository, Mockito.mock(MarketCalendarTimeService.class));
     private final ClosingPriceReader closingPriceReader = Mockito.mock(ClosingPriceReader.class);
     private final MarketCalendarTimeService calendarTimeService = Mockito.mock(MarketCalendarTimeService.class);
     private final MarketMapQueryService service = new MarketMapQueryService(
@@ -240,6 +237,39 @@ class MarketMapQueryServiceTest {
         assertThat(service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateMode.DAILY)
                         .taxonomyUpdatedAt())
                 .isEqualTo(sectorUpdatedAt);
+    }
+
+    @Test
+    void 신규회원의_배정이_없어도_MARKETRY와_KRX_종목은_유지된다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 10, 9, 10, 0);
+        when(stockInfoCacheService.getCache())
+                .thenReturn(Map.of("005930", stockInfo("005930", "삼성전자", 100L, BigDecimal.TEN)));
+        when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
+                .thenReturn(Optional.of(snapshotTime));
+        when(sectorPriceCacheService.getCache(Market.KOSPI, snapshotTime))
+                .thenReturn(Map.ofEntries(priceSnapshot("005930", snapshotTime, BigDecimal.TEN)));
+        Mockito.doReturn(List.of()).when(marketMapSectorRepository).findAllByUserId(LEGACY_OWNER_ID);
+        Mockito.doReturn(List.of()).when(marketMapStockSectorRepository).findAllByIdUserId(LEGACY_OWNER_ID);
+        CustomSector publishedSector = CustomSector.createParent(PUBLISHED_PROPERTY_USER_ID, "공개 반도체");
+        ReflectionTestUtils.setField(publishedSector, "id", 1L);
+        Mockito.doReturn(List.of(publishedSector))
+                .when(marketMapSectorRepository)
+                .findAllByUserId(PUBLISHED_PROPERTY_USER_ID);
+        Mockito.doReturn(List.of(CustomStockSector.create(PUBLISHED_PROPERTY_USER_ID, "005930", 1L)))
+                .when(marketMapStockSectorRepository)
+                .findAllByIdUserId(PUBLISHED_PROPERTY_USER_ID);
+
+        MarketMapResponse mine = service.getCustomMarketMap(MarketQuery.KOSPI, null);
+        MarketMapResponse published =
+                service.getPublishedMarketMap(MarketQuery.KOSPI, null, false, ChangeRateMode.DAILY);
+        MarketMapResponse krx = service.getDefaultMarketMap(MarketQuery.KOSPI, null);
+
+        assertThat(mine.items()).isEmpty();
+        assertThat(published.items()).hasSize(1);
+        assertThat(published.items().get(0).sectorName()).isEqualTo("공개 반도체");
+        assertThat(published.items().get(0).items()).extracting("stockCode").containsExactly("005930");
+        assertThat(krx.items()).hasSize(1);
+        assertThat(krx.items().get(0).items()).extracting("stockCode").containsExactly("005930");
     }
 
     @Test
@@ -604,15 +634,41 @@ class MarketMapQueryServiceTest {
     }
 
     @Test
+    void getCustomMarketMap_가격이_있어도_미배정_종목은_표시하지_않는다() {
+        LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
+        when(marketMapSectorRepository.findAll()).thenReturn(List.of(sector(1L, null, "반도체")));
+        when(marketMapStockSectorRepository.findAll())
+                .thenReturn(List.of(CustomStockSector.create(LEGACY_OWNER_ID, "005930", 1L)));
+        when(stockInfoCacheService.getCache())
+                .thenReturn(Map.of(
+                        "005930", stockInfo("005930", "삼성전자", 100L, BigDecimal.TEN),
+                        "000660", stockInfo("000660", "SK하이닉스", 50L, BigDecimal.valueOf(20))));
+        when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
+                .thenReturn(Optional.of(snapshotTime));
+        when(sectorPriceCacheService.getCache(Market.KOSPI, snapshotTime))
+                .thenReturn(Map.ofEntries(
+                        priceSnapshot("005930", snapshotTime, BigDecimal.TEN),
+                        priceSnapshot("000660", snapshotTime, BigDecimal.valueOf(20))));
+
+        MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI, null);
+
+        assertThat(response.items()).hasSize(1);
+        assertThat(response.items().get(0).items()).extracting("stockCode").containsExactly("005930");
+        assertThat(response.items().get(0).totalMarketValue()).isEqualByComparingTo(BigDecimal.valueOf(1000));
+    }
+
+    @Test
     void getCustomMarketMap_섹터가_하나도_없으면_빈_리스트를_반환한다() {
         LocalDateTime snapshotTime = LocalDateTime.of(2026, 7, 31, 10, 0);
 
         when(marketMapSectorRepository.findAll()).thenReturn(List.of());
         when(marketMapStockSectorRepository.findAll()).thenReturn(List.of());
-        when(stockInfoCacheService.getCache()).thenReturn(Map.of());
+        when(stockInfoCacheService.getCache())
+                .thenReturn(Map.of("005930", stockInfo("005930", "삼성전자", 100L, BigDecimal.TEN)));
         when(sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(List.of(Market.KOSPI)))
                 .thenReturn(Optional.of(snapshotTime));
-        // 가격 캐시는 스텁하지 않는다 — 스텁 없는 mock의 getCache는 기본값(빈 맵)을 그대로 돌려준다.
+        when(sectorPriceCacheService.getCache(Market.KOSPI, snapshotTime))
+                .thenReturn(Map.ofEntries(priceSnapshot("005930", snapshotTime, BigDecimal.TEN)));
         when(marketOverviewSnapshotRepository.findBySnapshotTime(snapshotTime)).thenReturn(List.of());
 
         MarketMapResponse response = service.getCustomMarketMap(MarketQuery.KOSPI, null);

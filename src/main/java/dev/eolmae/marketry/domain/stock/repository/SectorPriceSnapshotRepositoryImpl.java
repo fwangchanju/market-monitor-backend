@@ -5,6 +5,7 @@ import static dev.eolmae.marketry.domain.stock.entity.QSectorPriceSnapshot.secto
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import dev.eolmae.marketry.common.enums.Market;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -30,39 +31,40 @@ public class SectorPriceSnapshotRepositoryImpl implements SectorPriceSnapshotRep
     }
 
     @Override
-    public List<MarketSnapshotTime> findMarketSnapshotTimesBefore(LocalDateTime cutoff) {
+    public List<MarketSnapshotTime> findLatestMarketSnapshotTimesBetween(
+            LocalDateTime from, LocalDateTime toExclusive) {
+        var latestTime = sectorPriceSnapshot.snapshotTime.max();
         return queryFactory
-                .select(sectorPriceSnapshot.marketType, sectorPriceSnapshot.snapshotTime)
-                .distinct()
+                .select(sectorPriceSnapshot.marketType, latestTime)
                 .from(sectorPriceSnapshot)
-                .where(sectorPriceSnapshot.snapshotTime.before(cutoff))
+                .where(sectorPriceSnapshot.snapshotTime.goe(from).and(sectorPriceSnapshot.snapshotTime.lt(toExclusive)))
+                .groupBy(sectorPriceSnapshot.marketType)
                 .fetch()
                 .stream()
-                .map(tuple -> new MarketSnapshotTime(
-                        tuple.get(sectorPriceSnapshot.marketType), tuple.get(sectorPriceSnapshot.snapshotTime)))
+                .map(tuple -> new MarketSnapshotTime(tuple.get(sectorPriceSnapshot.marketType), tuple.get(latestTime)))
                 .toList();
     }
 
     @Override
-    public long deleteSnapshotsBefore(LocalDateTime cutoff, List<MarketSnapshotTime> retainedSnapshotTimes) {
+    public long deleteSnapshotsForDate(LocalDate date, List<MarketSnapshotTime> retainedSnapshotTimes) {
         if (retainedSnapshotTimes.isEmpty()) {
             return 0;
         }
         BooleanExpression targets = null;
-        // 종가가 있는 날짜·마켓만 삭제한다. 후보가 없는 다른 그룹은 전체 보존한다.
+        // 시장별 보존 시각이 다를 수 있어 동적 조건을 QueryDSL로 묶는다. 후보 없는 시장은 전체 보존한다.
         for (MarketSnapshotTime retained : retainedSnapshotTimes) {
-            LocalDateTime dayStart = retained.snapshotTime().toLocalDate().atStartOfDay();
             BooleanExpression group = sectorPriceSnapshot
                     .marketType
                     .eq(retained.market())
-                    .and(sectorPriceSnapshot.snapshotTime.goe(dayStart))
-                    .and(sectorPriceSnapshot.snapshotTime.lt(dayStart.plusDays(1)))
                     .and(sectorPriceSnapshot.snapshotTime.ne(retained.snapshotTime()));
             targets = targets == null ? group : targets.or(group);
         }
         return queryFactory
                 .delete(sectorPriceSnapshot)
-                .where(sectorPriceSnapshot.snapshotTime.before(cutoff).and(targets))
+                .where(
+                        sectorPriceSnapshot.snapshotTime.goe(date.atStartOfDay()),
+                        sectorPriceSnapshot.snapshotTime.lt(date.plusDays(1).atStartOfDay()),
+                        targets)
                 .execute();
     }
 }

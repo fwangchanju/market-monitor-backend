@@ -8,9 +8,9 @@ import dev.eolmae.marketry.common.exception.ErrorCode;
 import dev.eolmae.marketry.domain.stock.client.TossMarketCalendarClient;
 import dev.eolmae.marketry.domain.stock.dto.TossMarketCalendarResponse;
 import dev.eolmae.marketry.domain.stock.dto.TossMarketCalendarResponse.Day;
-import dev.eolmae.marketry.domain.stock.entity.IntegratedPeriod;
+import dev.eolmae.marketry.domain.stock.entity.IntegratedSessions;
 import dev.eolmae.marketry.domain.stock.entity.MarketCalendar;
-import dev.eolmae.marketry.domain.stock.entity.TradingPeriod;
+import dev.eolmae.marketry.domain.stock.entity.TradingSession;
 import dev.eolmae.marketry.domain.stock.enums.MarketCalendarStatus;
 import dev.eolmae.marketry.domain.stock.service.MarketCalendarService;
 import java.time.LocalDate;
@@ -94,16 +94,16 @@ public class MarketCalendarCollector {
         if (day.date() == null || dates.add(day.date()) == false) {
             throw invalidResponse();
         }
-        IntegratedPeriod integrated = day.integrated();
+        IntegratedSessions integrated = day.integrated();
         if (integrated != null) {
             if (integrated.preMarket() == null
                     && integrated.regularMarket() == null
                     && integrated.afterMarket() == null) {
                 throw invalidResponse();
             }
-            validatePeriod(day.date(), integrated.preMarket());
-            validatePeriod(day.date(), integrated.regularMarket());
-            validatePeriod(day.date(), integrated.afterMarket());
+            validateSession(day.date(), integrated.preMarket());
+            validateSession(day.date(), integrated.regularMarket());
+            validateSession(day.date(), integrated.afterMarket());
         }
         calendars.add(MarketCalendar.create(
                 Country.KR,
@@ -112,33 +112,33 @@ public class MarketCalendarCollector {
                 integrated));
     }
 
-    private void validatePeriod(LocalDate date, TradingPeriod period) {
-        if (period == null) {
+    private void validateSession(LocalDate date, TradingSession session) {
+        if (session == null) {
             return;
         }
-        if (period.startTime() == null
-                || period.endTime() == null
-                || period.startTime().isBefore(period.endTime()) == false) {
+        if (session.startTime() == null
+                || session.endTime() == null
+                || session.startTime().isBefore(session.endTime()) == false) {
             throw invalidResponse();
         }
-        validateTime(date, period.startTime(), period);
-        validateTime(date, period.endTime(), period);
-        validateTime(date, period.singlePriceAuctionStartTime(), period);
-        validateTime(date, period.singlePriceAuctionEndTime(), period);
-        if (period.singlePriceAuctionStartTime() != null
-                && period.singlePriceAuctionEndTime() != null
-                && period.singlePriceAuctionStartTime().isAfter(period.singlePriceAuctionEndTime())) {
+        validateTime(date, session.startTime(), session);
+        validateTime(date, session.endTime(), session);
+        validateTime(date, session.singlePriceAuctionStartTime(), session);
+        validateTime(date, session.singlePriceAuctionEndTime(), session);
+        if (session.singlePriceAuctionStartTime() != null
+                && session.singlePriceAuctionEndTime() != null
+                && session.singlePriceAuctionStartTime().isAfter(session.singlePriceAuctionEndTime())) {
             throw invalidResponse();
         }
     }
 
-    private void validateTime(LocalDate date, OffsetDateTime time, TradingPeriod period) {
+    private void validateTime(LocalDate date, OffsetDateTime time, TradingSession session) {
         if (time == null) {
             return;
         }
         if (time.atZoneSameInstant(Zone.KST.zoneId()).toLocalDate().equals(date) == false
-                || time.isBefore(period.startTime())
-                || time.isAfter(period.endTime())) {
+                || time.isBefore(session.startTime())
+                || time.isAfter(session.endTime())) {
             throw invalidResponse();
         }
     }

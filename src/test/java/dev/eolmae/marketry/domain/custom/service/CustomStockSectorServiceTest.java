@@ -10,6 +10,7 @@ import dev.eolmae.marketry.common.enums.Market;
 import dev.eolmae.marketry.domain.auth.enums.Role;
 import dev.eolmae.marketry.domain.auth.service.AuthenticatedUserPrincipal;
 import dev.eolmae.marketry.domain.custom.entity.CustomSector;
+import dev.eolmae.marketry.domain.custom.entity.CustomStockSector;
 import dev.eolmae.marketry.domain.custom.repository.CustomSectorRepository;
 import dev.eolmae.marketry.domain.custom.repository.CustomStockAliasRepository;
 import dev.eolmae.marketry.domain.custom.repository.CustomStockSectorRepository;
@@ -77,6 +78,54 @@ class CustomStockSectorServiceTest {
     @AfterEach
     void clearAuthentication() {
         SecurityContextHolder.clearContext();
+    }
+
+    @Test
+    void getStockSectors_신규회원에게도_미배정_종목을_반환한다() {
+        var response = service.getStockSectors();
+
+        assertThat(response.items()).hasSize(1);
+        var item = response.items().get(0);
+        assertThat(item.stockCode()).isEqualTo("005930");
+        assertThat(item.stockName()).isEqualTo("삼성전자");
+        assertThat(item.sectorId()).isNull();
+        assertThat(item.sectorName()).isNull();
+        assertThat(item.parentSectorName()).isNull();
+        Mockito.verifyNoInteractions(jdbcTemplate);
+    }
+
+    @Test
+    void getStockSectors_배정여부와_무관하게_활성_주권만_반환한다() {
+        StockInfo unassigned =
+                StockInfo.create("000660", "SK하이닉스", Market.KOSPI, "0", null, 100L, BigDecimal.TEN, false);
+        StockInfo inactive = StockInfo.create("999999", "비활성종목", Market.KOSPI, "0", null, 100L, BigDecimal.TEN, false);
+        inactive.markInactive();
+        StockInfo etf = StockInfo.create("069500", "KODEX 200", Market.KOSPI, "8", null, 100L, BigDecimal.TEN, false);
+        when(stockInfoCacheService.getCache())
+                .thenReturn(Map.of(
+                        stock.getStockCode(), stock,
+                        unassigned.getStockCode(), unassigned,
+                        inactive.getStockCode(), inactive,
+                        etf.getStockCode(), etf));
+        when(sectorRepository.findAllByUserId(USER_ID)).thenReturn(List.of(sector));
+        when(stockSectorRepository.findAllByIdUserId(USER_ID))
+                .thenReturn(List.of(CustomStockSector.create(USER_ID, stock.getStockCode(), SECTOR_ID)));
+
+        var response = service.getStockSectors();
+
+        assertThat(response.items()).extracting("stockCode").containsExactlyInAnyOrder("005930", "000660");
+        var assignedItem = response.items().stream()
+                .filter(item -> item.stockCode().equals("005930"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(assignedItem.sectorId()).isEqualTo(SECTOR_ID);
+        assertThat(assignedItem.sectorName()).isEqualTo("산업");
+        var unassignedItem = response.items().stream()
+                .filter(item -> item.stockCode().equals("000660"))
+                .findFirst()
+                .orElseThrow();
+        assertThat(unassignedItem.sectorId()).isNull();
+        assertThat(unassignedItem.sectorName()).isNull();
     }
 
     @Test

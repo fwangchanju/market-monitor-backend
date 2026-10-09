@@ -18,8 +18,8 @@ import dev.eolmae.marketry.domain.stock.client.TossMarketCalendarClient;
 import dev.eolmae.marketry.domain.stock.dto.TossMarketCalendarResponse;
 import dev.eolmae.marketry.domain.stock.dto.TossMarketCalendarResponse.Day;
 import dev.eolmae.marketry.domain.stock.dto.TossMarketCalendarResponse.Result;
-import dev.eolmae.marketry.domain.stock.entity.IntegratedPeriod;
-import dev.eolmae.marketry.domain.stock.entity.TradingPeriod;
+import dev.eolmae.marketry.domain.stock.entity.IntegratedSessions;
+import dev.eolmae.marketry.domain.stock.entity.TradingSession;
 import dev.eolmae.marketry.domain.stock.enums.MarketCalendarStatus;
 import dev.eolmae.marketry.domain.stock.service.MarketCalendarService;
 import java.time.LocalDate;
@@ -38,10 +38,10 @@ class MarketCalendarCollectorTest {
     @ParameterizedTest
     @CsvSource({"2026-01-02,15:30,15:40", "2025-11-13,16:30,16:40"})
     void 프리마켓없는특수일의전체세션을보존한다(LocalDate tradingDate, String close, String auctionEnd) {
-        var integrated = new IntegratedPeriod(
+        var integrated = new IntegratedSessions(
                 null,
-                period(tradingDate, "10:00", null, null, close),
-                period(tradingDate, close, close, auctionEnd, "20:00"));
+                session(tradingDate, "10:00", null, null, close),
+                session(tradingDate, close, close, auctionEnd, "20:00"));
         var calendars = collector.validateResponse(
                 tradingDate, new TossMarketCalendarResponse(new Result(new Day(tradingDate, integrated), null, null)));
         assertThat(calendars).hasSize(1);
@@ -78,13 +78,13 @@ class MarketCalendarCollectorTest {
 
     @Test
     void 세션필수시각누락과범위밖단일가시각은실패이다() {
-        var missingEnd = new TradingPeriod(time(date, "09:00"), null, null, null);
-        var outside = period(date, "09:00", null, "16:00", "15:30");
-        for (TradingPeriod period : new TradingPeriod[] {missingEnd, outside}) {
+        var missingEnd = new TradingSession(time(date, "09:00"), null, null, null);
+        var outside = session(date, "09:00", null, "16:00", "15:30");
+        for (TradingSession session : new TradingSession[] {missingEnd, outside}) {
             assertThatThrownBy(() -> collector.validateResponse(
                             date,
-                            new TossMarketCalendarResponse(
-                                    new Result(new Day(date, new IntegratedPeriod(null, period, null)), null, null))))
+                            new TossMarketCalendarResponse(new Result(
+                                    new Day(date, new IntegratedSessions(null, session, null)), null, null))))
                     .isInstanceOf(BadRequestException.class);
         }
     }
@@ -144,8 +144,8 @@ class MarketCalendarCollectorTest {
         }
     }
 
-    private TradingPeriod period(LocalDate day, String start, String auctionStart, String auctionEnd, String end) {
-        return new TradingPeriod(time(day, start), time(day, auctionStart), time(day, auctionEnd), time(day, end));
+    private TradingSession session(LocalDate day, String start, String auctionStart, String auctionEnd, String end) {
+        return new TradingSession(time(day, start), time(day, auctionStart), time(day, auctionEnd), time(day, end));
     }
 
     private OffsetDateTime time(LocalDate day, String hour) {

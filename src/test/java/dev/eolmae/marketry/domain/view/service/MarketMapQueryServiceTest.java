@@ -21,11 +21,14 @@ import dev.eolmae.marketry.domain.notification.properties.MarketryProperties;
 import dev.eolmae.marketry.domain.stock.entity.IndustryInfo;
 import dev.eolmae.marketry.domain.stock.entity.MarketOverviewSnapshot;
 import dev.eolmae.marketry.domain.stock.entity.StockInfo;
-import dev.eolmae.marketry.domain.stock.properties.MarketHoursProperties;
 import dev.eolmae.marketry.domain.stock.repository.IndustryInfoRepository;
 import dev.eolmae.marketry.domain.stock.repository.MarketOverviewSnapshotRepository;
 import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepository;
+import dev.eolmae.marketry.domain.stock.service.CalendarDayTimes;
 import dev.eolmae.marketry.domain.stock.service.ClosingPriceReader;
+import dev.eolmae.marketry.domain.stock.service.ClosingPrices;
+import dev.eolmae.marketry.domain.stock.service.MarketCalendarService;
+import dev.eolmae.marketry.domain.stock.service.MarketCalendarTimeService;
 import dev.eolmae.marketry.domain.stock.service.SectorPriceCacheService;
 import dev.eolmae.marketry.domain.stock.service.SectorPriceCacheService.CachedStockPrice;
 import dev.eolmae.marketry.domain.stock.service.SectorPriceSnapshotService;
@@ -41,8 +44,8 @@ import dev.eolmae.marketry.domain.view.enums.AverageMode;
 import dev.eolmae.marketry.domain.view.enums.ChangeRateMode;
 import dev.eolmae.marketry.domain.view.enums.MarketQuery;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -91,8 +94,12 @@ class MarketMapQueryServiceTest {
     private final MarketOverviewSnapshotRepository marketOverviewSnapshotRepository =
             Mockito.mock(MarketOverviewSnapshotRepository.class);
     private final IndustryInfoRepository industryInfoRepository = Mockito.mock(IndustryInfoRepository.class);
-    private final SectorPriceSnapshotService sectorPriceSnapshotService =
-            new SectorPriceSnapshotService(sectorPriceSnapshotRepository);
+    private final SectorPriceSnapshotService sectorPriceSnapshotService = new SectorPriceSnapshotService(
+            sectorPriceSnapshotRepository,
+            Mockito.mock(MarketCalendarService.class),
+            Mockito.mock(MarketCalendarTimeService.class));
+    private final ClosingPriceReader closingPriceReader = Mockito.mock(ClosingPriceReader.class);
+    private final MarketCalendarTimeService calendarTimeService = Mockito.mock(MarketCalendarTimeService.class);
     private final MarketMapQueryService service = new MarketMapQueryService(
             stockInfoCacheService,
             sectorPriceSnapshotService,
@@ -106,8 +113,8 @@ class MarketMapQueryServiceTest {
             marketOverviewSnapshotRepository,
             industryInfoRepository,
             marketryProperties,
-            Mockito.mock(ClosingPriceReader.class),
-            new MarketHoursProperties(LocalTime.of(15, 30), LocalTime.of(15, 40)));
+            closingPriceReader,
+            calendarTimeService);
 
     // 구간 스텁 공통 셋업 — 진짜 구간 서비스로 바뀌면서 트리를 빌드하는 모든 테스트에 구간이 필요해졌다
     // (5-1). 구간이 여럿 필요한 테스트는 이 기본값을 자기 stubTierThresholds 호출로 덮어쓴다.
@@ -1349,5 +1356,54 @@ class MarketMapQueryServiceTest {
     private Map.Entry<String, CachedStockPrice> priceSnapshot(
             String stockCode, LocalDateTime snapshotTime, BigDecimal currentPrice) {
         return Map.entry(stockCode, new CachedStockPrice(currentPrice, BigDecimal.ZERO, snapshotTime));
+    }
+
+    @Test
+    void 시간외_기준은_스냅샷_날짜의_종가_끝_경계부터_적용한다() {
+        LocalDate date = LocalDate.of(2025, 11, 13);
+        when(calendarTimeService.resolve(date))
+                .thenReturn(new CalendarDayTimes(
+                        false,
+                        date.atTime(10, 0),
+                        date.atTime(20, 0),
+                        date.atTime(16, 30),
+                        date.atTime(16, 30),
+                        date.atTime(16, 40)));
+        StockInfo stock = stockInfo("005930", "삼성전자", 100L, BigDecimal.TEN);
+        when(stockInfoCacheService.getCache()).thenReturn(Map.of(stock.getStockCode(), stock));
+        when(closingPriceReader.closingPricesFor(Mockito.eq(date), Mockito.any()))
+                .thenReturn(new ClosingPrices(date, Map.of("005930", BigDecimal.valueOf(100))));
+        for (LocalDateTime time : List.of(date.atTime(16, 35), date.atTime(16, 40))) {
+            when(sectorPriceSnapshotRepository.existsByMarketTypeAndSnapshotTime(Market.KOSPI, time))
+                    .thenReturn(true);
+            when(sectorPriceCacheService.getCache(Market.KOSPI, time))
+                    .thenReturn(Map.of("005930", new CachedStockPrice(BigDecimal.valueOf(110), BigDecimal.ONE, time)));
+        }
+        MarketMapResponse before =
+                service.getDefaultMarketMap(MarketQuery.KOSPI, date.atTime(16, 35), false, ChangeRateMode.AFTER_HOURS);
+        MarketMapResponse boundary =
+                service.getDefaultMarketMap(MarketQuery.KOSPI, date.atTime(16, 40), false, ChangeRateMode.AFTER_HOURS);
+        assertThat(before.items().get(0).items().get(0).changeRate()).isEqualByComparingTo(BigDecimal.ONE);
+        assertThat(boundary.items().get(0).items().get(0).changeRate()).isEqualByComparingTo(BigDecimal.TEN);
+    }
+
+    @Test
+    void 휴장_스냅샷의_시간외_요청은_일간_등락률을_유지한다() {
+        LocalDateTime time = LocalDate.of(2026, 10, 9).atTime(18, 0);
+        when(calendarTimeService.resolve(time.toLocalDate()))
+                .thenReturn(new CalendarDayTimes(true, null, null, null, null, null));
+        StockInfo stock = stockInfo("005930", "삼성전자", 100L, BigDecimal.TEN);
+        when(stockInfoCacheService.getCache()).thenReturn(Map.of(stock.getStockCode(), stock));
+        when(sectorPriceSnapshotRepository.existsByMarketTypeAndSnapshotTime(Market.KOSPI, time))
+                .thenReturn(true);
+        when(sectorPriceCacheService.getCache(Market.KOSPI, time))
+                .thenReturn(Map.of("005930", new CachedStockPrice(BigDecimal.TEN, BigDecimal.ONE, time)));
+        assertThat(service.getDefaultMarketMap(MarketQuery.KOSPI, time, false, ChangeRateMode.AFTER_HOURS)
+                        .items()
+                        .get(0)
+                        .items()
+                        .get(0)
+                        .changeRate())
+                .isEqualByComparingTo(BigDecimal.ONE);
     }
 }

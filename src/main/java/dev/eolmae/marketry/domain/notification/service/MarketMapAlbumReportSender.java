@@ -7,6 +7,7 @@ import dev.eolmae.marketry.domain.notification.client.TelegramClient;
 import dev.eolmae.marketry.domain.notification.enums.RenderTarget;
 import dev.eolmae.marketry.domain.notification.properties.TelegramProperties;
 import dev.eolmae.marketry.domain.renderer.client.ScreenshotClient;
+import dev.eolmae.marketry.domain.stock.service.SectorPriceSnapshotService;
 import dev.eolmae.marketry.domain.view.dto.TopSectorItem;
 import dev.eolmae.marketry.domain.view.enums.AverageMode;
 import dev.eolmae.marketry.domain.view.enums.MarketQuery;
@@ -34,8 +35,16 @@ public class MarketMapAlbumReportSender {
     private final TelegramProperties telegramProperties;
     private final SectorRankingTextBuilder sectorRankingTextBuilder;
     private final MarketMapQueryService marketMapQueryService;
+    private final SectorPriceSnapshotService sectorPriceSnapshotService;
 
     public void send(LocalDateTime dataTime) {
+        if (sectorPriceSnapshotService
+                .findLatestCommonSnapshotTime(MAP_MARKETS.toMarkets())
+                .filter(time -> time.toLocalDate().equals(dataTime.toLocalDate()))
+                .isEmpty()) {
+            log.warn("[맵리포트] 오늘의 공통 스냅샷이 없어 발송 생략 | context : {}", dataTime);
+            return;
+        }
         // 캡처 대상은 항상 두 마켓 고정이다. SectorTelegramReportSender처럼 랭킹 조회 결과로 마켓을
         // 고르면 안 된다 — 맵과 캡션이 같은 가격 행(sector_price_snapshot)을 쓰더라도, 한 마켓만 그
         // 시각 가격 행이 없으면 병합 랭킹(getMergedTopSectorRanking)은 "하나라도 비면 빈 목록"

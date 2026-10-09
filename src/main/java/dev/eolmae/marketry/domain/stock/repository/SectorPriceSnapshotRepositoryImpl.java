@@ -3,11 +3,9 @@ package dev.eolmae.marketry.domain.stock.repository;
 import static dev.eolmae.marketry.domain.stock.entity.QSectorPriceSnapshot.sectorPriceSnapshot;
 
 import com.querydsl.core.types.dsl.BooleanExpression;
-import com.querydsl.core.types.dsl.NumberExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import dev.eolmae.marketry.common.enums.Market;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -32,13 +30,12 @@ public class SectorPriceSnapshotRepositoryImpl implements SectorPriceSnapshotRep
     }
 
     @Override
-    public List<MarketSnapshotTime> findMarketSnapshotTimesInWindow(
-            LocalDateTime cutoff, LocalTime windowStart, LocalTime windowEnd) {
+    public List<MarketSnapshotTime> findMarketSnapshotTimesBefore(LocalDateTime cutoff) {
         return queryFactory
                 .select(sectorPriceSnapshot.marketType, sectorPriceSnapshot.snapshotTime)
                 .distinct()
                 .from(sectorPriceSnapshot)
-                .where(sectorPriceSnapshot.snapshotTime.before(cutoff).and(inWindow(windowStart, windowEnd)))
+                .where(sectorPriceSnapshot.snapshotTime.before(cutoff))
                 .fetch()
                 .stream()
                 .map(tuple -> new MarketSnapshotTime(
@@ -48,52 +45,24 @@ public class SectorPriceSnapshotRepositoryImpl implements SectorPriceSnapshotRep
 
     @Override
     public long deleteSnapshotsBefore(LocalDateTime cutoff, List<MarketSnapshotTime> retainedSnapshotTimes) {
-        return queryFactory
-                .delete(sectorPriceSnapshot)
-                .where(targetPredicate(cutoff, retainedSnapshotTimes))
-                .execute();
-    }
-
-    @Override
-    public boolean existsBefore(LocalDateTime cutoff) {
-        Integer exists = queryFactory
-                .selectOne()
-                .from(sectorPriceSnapshot)
-                .where(sectorPriceSnapshot.snapshotTime.before(cutoff))
-                .fetchFirst();
-        return exists != null;
-    }
-
-    // cutoff 이전이면서 retainedSnapshotTimes(순수 자바 함수가 보존 윈도우에서 고른 (마켓,시각))에 없는 행 —
-    // 삭제/조회 양쪽에서 동일하게 쓰는 술어. retainedSnapshotTimes가 비면(그 구간에 데이터가 아예 없던
-    // 날) cutoff 조건만 남아 그 구간 전체가 삭제 대상이 된다 — 의도된 동작이다.
-    private BooleanExpression targetPredicate(LocalDateTime cutoff, List<MarketSnapshotTime> retainedSnapshotTimes) {
-        BooleanExpression cutoffCondition = sectorPriceSnapshot.snapshotTime.before(cutoff);
-        BooleanExpression retainedCondition = retainedPredicate(retainedSnapshotTimes);
-        if (retainedCondition == null) {
-            return cutoffCondition;
+        if (retainedSnapshotTimes.isEmpty()) {
+            return 0;
         }
-        return cutoffCondition.and(retainedCondition.not());
-    }
-
-    private BooleanExpression retainedPredicate(List<MarketSnapshotTime> retainedSnapshotTimes) {
-        BooleanExpression matched = null;
+        BooleanExpression targets = null;
+        // 종가가 있는 날짜·마켓만 삭제한다. 후보가 없는 다른 그룹은 전체 보존한다.
         for (MarketSnapshotTime retained : retainedSnapshotTimes) {
-            BooleanExpression term = sectorPriceSnapshot
+            LocalDateTime dayStart = retained.snapshotTime().toLocalDate().atStartOfDay();
+            BooleanExpression group = sectorPriceSnapshot
                     .marketType
                     .eq(retained.market())
-                    .and(sectorPriceSnapshot.snapshotTime.eq(retained.snapshotTime()));
-            matched = matched == null ? term : matched.or(term);
+                    .and(sectorPriceSnapshot.snapshotTime.goe(dayStart))
+                    .and(sectorPriceSnapshot.snapshotTime.lt(dayStart.plusDays(1)))
+                    .and(sectorPriceSnapshot.snapshotTime.ne(retained.snapshotTime()));
+            targets = targets == null ? group : targets.or(group);
         }
-        return matched;
-    }
-
-    // 윈도우 [windowStart, windowEnd) — 두 값이 같은 시(hour)라는 가정 없이 하루 중 분(分) 단위로 비교한다.
-    private BooleanExpression inWindow(LocalTime windowStart, LocalTime windowEnd) {
-        NumberExpression<Integer> minuteOfDay =
-                sectorPriceSnapshot.snapshotTime.hour().multiply(60).add(sectorPriceSnapshot.snapshotTime.minute());
-        int startMinuteOfDay = windowStart.getHour() * 60 + windowStart.getMinute();
-        int endMinuteOfDay = windowEnd.getHour() * 60 + windowEnd.getMinute();
-        return minuteOfDay.goe(startMinuteOfDay).and(minuteOfDay.lt(endMinuteOfDay));
+        return queryFactory
+                .delete(sectorPriceSnapshot)
+                .where(sectorPriceSnapshot.snapshotTime.before(cutoff).and(targets))
+                .execute();
     }
 }

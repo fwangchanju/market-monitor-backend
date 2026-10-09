@@ -91,6 +91,30 @@ tasks.register('manualTest', Test) {
 	}
 }
 
+tasks.register('marketCalendarTest', Test) {
+	group = 'verification'
+	description = '지정 날짜의 토스 국내 시간표만 조회해 DB에 적재한다. 예: ./gradlew marketCalendarTest -PcalendarDate=2026-10-09'
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+	useJUnitPlatform {
+		includeTags 'manual'
+	}
+	filter {
+		includeTestsMatching '*MarketCalendarManualTest'
+	}
+	def requestedCalendarDate = providers.systemProperty('calendar.date')
+			.orElse(providers.gradleProperty('calendarDate'))
+	if (requestedCalendarDate.isPresent()) {
+		systemProperty 'calendar.date', requestedCalendarDate.get()
+	}
+	outputs.upToDateWhen { false }
+	outputs.cacheIf { false }
+	testLogging {
+		events 'passed', 'failed'
+		showStandardStreams = true
+	}
+}
+
 tasks.register('kiwoomProxyTest', Test) {
 	group = 'verification'
 	description = '이관 전 키움 프록시 인증과 읽기 전용 조회만 확인한다. 프로세스에 인증·프록시 설정을 주입해야 한다.'

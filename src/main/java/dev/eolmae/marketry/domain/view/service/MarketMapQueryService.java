@@ -19,11 +19,12 @@ import dev.eolmae.marketry.domain.notification.properties.MarketryProperties;
 import dev.eolmae.marketry.domain.stock.entity.IndustryInfo;
 import dev.eolmae.marketry.domain.stock.entity.MarketOverviewSnapshot;
 import dev.eolmae.marketry.domain.stock.entity.StockInfo;
-import dev.eolmae.marketry.domain.stock.properties.MarketHoursProperties;
 import dev.eolmae.marketry.domain.stock.repository.IndustryInfoRepository;
 import dev.eolmae.marketry.domain.stock.repository.MarketOverviewSnapshotRepository;
+import dev.eolmae.marketry.domain.stock.service.CalendarDayTimes;
 import dev.eolmae.marketry.domain.stock.service.ClosingPriceReader;
 import dev.eolmae.marketry.domain.stock.service.ClosingPrices;
+import dev.eolmae.marketry.domain.stock.service.MarketCalendarTimeService;
 import dev.eolmae.marketry.domain.stock.service.SectorPriceCacheService;
 import dev.eolmae.marketry.domain.stock.service.SectorPriceCacheService.CachedStockPrice;
 import dev.eolmae.marketry.domain.stock.service.SectorPriceSnapshotService;
@@ -87,7 +88,7 @@ public class MarketMapQueryService {
     private final IndustryInfoRepository industryInfoRepository;
     private final MarketryProperties marketryProperties;
     private final ClosingPriceReader closingPriceReader;
-    private final MarketHoursProperties marketHoursProperties;
+    private final MarketCalendarTimeService marketCalendarTimeService;
 
     /** 회원과 무관한 종목 공통 정보(시장·NXT 거래 가능 여부·거래소 업종명). 읽기 전용 시트가 로그인 없이도 쓴다. */
     public List<StockCatalogItem> getStockCatalog() {
@@ -701,7 +702,7 @@ public class MarketMapQueryService {
      *
      * <ul>
      *   <li>기준이 DAILY
-     *   <li>스냅샷이 그날 15:40 이전(장중에는 시간외 등락률이 없다)
+     *   <li>스냅샷이 해당 날짜의 종가 구간 종료 이전(장중에는 시간외 등락률이 없다)
      *   <li>그날 종가 윈도우가 통째로 비어 기준가가 없다(WARN) — 그날은 시간외 값을 포기한다
      * </ul>
      */
@@ -710,7 +711,8 @@ public class MarketMapQueryService {
         if (basis != ChangeRateMode.AFTER_HOURS) {
             return priceMap;
         }
-        if (!AfterHoursChangeRates.isApplicable(snapshotTime, marketHoursProperties.afterHoursStart())) {
+        CalendarDayTimes times = marketCalendarTimeService.resolve(snapshotTime.toLocalDate());
+        if (times.holiday() || snapshotTime.isBefore(times.closingWindowEnd())) {
             return priceMap;
         }
         ClosingPrices closing = closingPriceReader.closingPricesFor(

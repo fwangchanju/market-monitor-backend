@@ -11,6 +11,7 @@ import dev.eolmae.marketry.domain.notification.client.TelegramClient;
 import dev.eolmae.marketry.domain.notification.enums.RenderTarget;
 import dev.eolmae.marketry.domain.notification.properties.TelegramProperties;
 import dev.eolmae.marketry.domain.renderer.client.ScreenshotClient;
+import dev.eolmae.marketry.domain.stock.service.SectorPriceSnapshotService;
 import dev.eolmae.marketry.domain.view.dto.TopSectorItem;
 import dev.eolmae.marketry.domain.view.enums.AverageMode;
 import dev.eolmae.marketry.domain.view.enums.MarketQuery;
@@ -19,6 +20,8 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -35,13 +38,59 @@ class MarketMapAlbumReportSenderTest {
             "token", "chat-id", "dev-chat", 10, 15, 15, AverageMode.SIMPLE, true, MAP_SEND_TIMES);
     private final SectorRankingTextBuilder sectorRankingTextBuilder = Mockito.mock(SectorRankingTextBuilder.class);
     private final MarketMapQueryService marketMapQueryService = Mockito.mock(MarketMapQueryService.class);
+    private final SectorPriceSnapshotService sectorPriceSnapshotService =
+            Mockito.mock(SectorPriceSnapshotService.class);
     private final MarketMapAlbumReportSender sender = new MarketMapAlbumReportSender(
-            screenshotClient, telegramClient, telegramProperties, sectorRankingTextBuilder, marketMapQueryService);
+            screenshotClient,
+            telegramClient,
+            telegramProperties,
+            sectorRankingTextBuilder,
+            marketMapQueryService,
+            sectorPriceSnapshotService);
 
     private final LocalDateTime dataTime = LocalDateTime.of(2025, 6, 2, 8, 15);
     private final byte[] kospiImage = {1};
     private final byte[] kosdaqImage = {2};
     private final List<TopSectorItem> topSectors = List.of(new TopSectorItem("반도체", BigDecimal.valueOf(1.35)));
+
+    @BeforeEach
+    void 오늘_공통_스냅샷() {
+        when(sectorPriceSnapshotService.findLatestCommonSnapshotTime(MarketQuery.ALL_STOCK.toMarkets()))
+                .thenReturn(Optional.of(dataTime));
+    }
+
+    @Test
+    void send_전날_공통_스냅샷만_있으면_캡처와_발송을_생략한다() {
+        when(sectorPriceSnapshotService.findLatestCommonSnapshotTime(MarketQuery.ALL_STOCK.toMarkets()))
+                .thenReturn(Optional.of(dataTime.minusDays(1)));
+
+        sender.send(dataTime);
+
+        verifyNoInteractions(screenshotClient, telegramClient, marketMapQueryService);
+    }
+
+    @Test
+    void send_공통_스냅샷이_없으면_발송을_생략한다() {
+        when(sectorPriceSnapshotService.findLatestCommonSnapshotTime(MarketQuery.ALL_STOCK.toMarkets()))
+                .thenReturn(Optional.empty());
+
+        sender.send(dataTime);
+
+        verifyNoInteractions(screenshotClient, telegramClient);
+    }
+
+    @Test
+    void send_이번_수집시각에_데이터가_없어도_오늘_이전_스냅샷이_있으면_지도를_보낸다() {
+        when(sectorPriceSnapshotService.findLatestCommonSnapshotTime(MarketQuery.ALL_STOCK.toMarkets()))
+                .thenReturn(Optional.of(dataTime.minusMinutes(5)));
+        captureReturns(KOSPI_MAP_PATH, kospiImage);
+        captureReturns(KOSDAQ_MAP_PATH, kosdaqImage);
+        rankingReturns(List.of());
+
+        sender.send(dataTime);
+
+        verify(telegramClient).sendMediaGroup("chat-id", List.of(kospiImage, kosdaqImage), null);
+    }
 
     @Test
     void send_두_마켓을_앨범으로_묶어_보낸다() {
@@ -103,7 +152,12 @@ class MarketMapAlbumReportSenderTest {
         TelegramProperties weightedProperties = new TelegramProperties(
                 "token", "chat-id", "dev-chat", 10, 15, 15, AverageMode.WEIGHTED, false, MAP_SEND_TIMES);
         MarketMapAlbumReportSender weightedSender = new MarketMapAlbumReportSender(
-                screenshotClient, telegramClient, weightedProperties, sectorRankingTextBuilder, marketMapQueryService);
+                screenshotClient,
+                telegramClient,
+                weightedProperties,
+                sectorRankingTextBuilder,
+                marketMapQueryService,
+                sectorPriceSnapshotService);
         String kospiWeightedPath = "/map/kospi?avgMode=weighted&sectorFilter=false";
         String kosdaqWeightedPath = "/map/kosdaq?avgMode=weighted&sectorFilter=false";
         when(screenshotClient.capture(kospiWeightedPath, MAP_SELECTOR)).thenReturn(List.of(kospiImage));

@@ -12,6 +12,12 @@ public enum ErrorCode {
     INVALID_INPUT("입력값이 올바르지 않습니다."),
     INTERNAL_ERROR("서버 내부 오류가 발생했습니다."),
 
+    // Toss market calendar
+    MARKET_CALENDAR_RESPONSE_INVALID("시장 시간표 응답이 올바르지 않습니다."),
+    TOSS_AUTH_NOT_CONFIGURED("토스 API 인증 설정이 없습니다."),
+    TOSS_TOKEN_ISSUE_FAILED("토스 토큰 발급에 실패했습니다."),
+    TOSS_CALENDAR_FETCH_FAILED("토스 시장 시간표 조회에 실패했습니다."),
+
     // Kiwoom API
     KIWOOM_HTTP_ERROR("키움 API HTTP 오류가 발생했습니다."),
     KIWOOM_RATE_LIMIT("키움 API 호출 한도를 초과했습니다."),

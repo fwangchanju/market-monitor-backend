@@ -13,6 +13,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -249,6 +250,28 @@ class MarketCalendarTimeServiceTest {
     private TradingSession session(
             int startHour, int startMinute, int endHour, int endMinute, OffsetDateTime auctionEnd) {
         return new TradingSession(time(startHour, startMinute), null, auctionEnd, time(endHour, endMinute));
+    }
+
+    @Test
+    void 거래일_수는_주말과_휴장일을_빼고_시작일은_세지_않는다() {
+        // 2026-09-21(월)부터 09-28(월): 22~25일 4일은 평일, 26·27일은 주말, 28일은 평일. 24일을 휴장으로 적는다.
+        LocalDate holiday = LocalDate.of(2026, 9, 24);
+        when(calendarService.findByCountryAndDateIn(Mockito.eq(Country.KR), Mockito.any()))
+                .thenReturn(Map.of(
+                        holiday, MarketCalendar.create(Country.KR, holiday, MarketCalendarStatus.HOLIDAY, null)));
+
+        long tradingDays = service.countTradingDays(LocalDate.of(2026, 9, 21), LocalDate.of(2026, 9, 28));
+
+        // 22, 23, 25, 28일
+        assertThat(tradingDays).isEqualTo(4);
+    }
+
+    @Test
+    void 끝날짜가_시작날짜_이후가_아니면_거래일_수는_0이다() {
+        assertThat(service.countTradingDays(LocalDate.of(2026, 10, 2), LocalDate.of(2026, 10, 2)))
+                .isZero();
+        assertThat(service.countTradingDays(LocalDate.of(2026, 10, 2), LocalDate.of(2026, 10, 1)))
+                .isZero();
     }
 
     private OffsetDateTime time(int hour, int minute) {

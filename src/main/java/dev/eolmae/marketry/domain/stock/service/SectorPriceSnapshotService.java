@@ -4,12 +4,16 @@ import dev.eolmae.marketry.common.enums.Market;
 import dev.eolmae.marketry.domain.stock.entity.SectorPriceSnapshot;
 import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepository;
 import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepositoryCustom.MarketSnapshotTime;
+import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepositoryCustom.TimeWindow;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -57,6 +61,38 @@ public class SectorPriceSnapshotService {
                         .values()
                         .stream())
                 .collect(Collectors.toMap(SectorPriceSnapshot::getStockCode, Function.identity()));
+    }
+
+    /**
+     * 한 달 안에서 markets 전부가 같은 시각의 종가 스냅샷을 가진 날짜와 그 시각. 종가 스냅샷은 정리 배치와 같은
+     * 기준(종가 구간의 마지막 스냅샷)이라, 10일이 지난 날도 같은 시각이 남아 있다. 휴장일·종가 후보가 없는 날,
+     * 시장끼리 시각이 엇갈린 날은 뺀다(그 시각으로는 모든 시장의 지도를 그릴 수 없다).
+     */
+    public Map<LocalDate, LocalDateTime> findClosingSnapshotTimes(List<Market> markets, YearMonth month) {
+        List<LocalDate> dates =
+                month.atDay(1).datesUntil(month.plusMonths(1).atDay(1)).toList();
+        List<TimeWindow> closingWindows = marketCalendarTimeService.resolveAll(dates).values().stream()
+                .filter(times -> times.holiday() == false)
+                .map(times -> new TimeWindow(times.closingWindowStart(), times.closingWindowEnd()))
+                .toList();
+        if (closingWindows.isEmpty()) {
+            return Map.of();
+        }
+        Map<LocalDate, List<MarketSnapshotTime>> closingByDate =
+                sectorPriceSnapshotRepository.findLatestMarketSnapshotTimesPerDay(closingWindows).stream()
+                        .collect(Collectors.groupingBy(
+                                closing -> closing.snapshotTime().toLocalDate()));
+        Map<LocalDate, LocalDateTime> closingTimes = new TreeMap<>();
+        for (Map.Entry<LocalDate, List<MarketSnapshotTime>> entry : closingByDate.entrySet()) {
+            Map<Market, LocalDateTime> timeByMarket = entry.getValue().stream()
+                    .collect(Collectors.toMap(MarketSnapshotTime::market, MarketSnapshotTime::snapshotTime));
+            Set<LocalDateTime> marketTimes =
+                    markets.stream().map(timeByMarket::get).collect(Collectors.toSet());
+            if (marketTimes.size() == 1 && marketTimes.contains(null) == false) {
+                closingTimes.put(entry.getKey(), marketTimes.iterator().next());
+            }
+        }
+        return closingTimes;
     }
 
     /** 지정 날짜 하루만 정리한다. 휴장과 종가 후보 없는 시장은 보존하며, 실패 날짜 재실행에도 같은 로직을 쓴다. */

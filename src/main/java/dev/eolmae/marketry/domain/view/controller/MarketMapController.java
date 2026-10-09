@@ -6,12 +6,16 @@ import dev.eolmae.marketry.domain.custom.service.CustomScaleService;
 import dev.eolmae.marketry.domain.custom.service.CustomSectorService;
 import dev.eolmae.marketry.domain.custom.service.CustomValueTierThresholdService;
 import dev.eolmae.marketry.domain.view.dto.MarketMapResponse;
+import dev.eolmae.marketry.domain.view.dto.MarketMapSnapshotDay;
 import dev.eolmae.marketry.domain.view.dto.StockCatalogItem;
+import dev.eolmae.marketry.domain.view.dto.TradingDayGapResponse;
 import dev.eolmae.marketry.domain.view.enums.ChangeRateMode;
 import dev.eolmae.marketry.domain.view.enums.ClassificationSource;
 import dev.eolmae.marketry.domain.view.enums.MarketQuery;
 import dev.eolmae.marketry.domain.view.service.MarketMapQueryService;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -51,6 +55,21 @@ public class MarketMapController {
             case MARKETRY -> marketMapQueryService.getPublishedMarketMap(market, snapshotTime, nxtOnly, changeRateMode);
             case MINE -> marketMapQueryService.getCustomMarketMap(market, snapshotTime, nxtOnly, changeRateMode);
         };
+    }
+
+    /** 달력에 쓰는 날짜 목록 — month는 yyyy-MM. */
+    @GetMapping("/snapshot-days")
+    public List<MarketMapSnapshotDay> getSnapshotDays(
+            @RequestParam MarketQuery market, @RequestParam @DateTimeFormat(pattern = "yyyy-MM") YearMonth month) {
+        return marketMapQueryService.getClosingSnapshotDays(market, month);
+    }
+
+    /** from(포함하지 않음)~to(포함) 사이의 거래일 수 — 날짜는 yyyy-MM-dd. */
+    @GetMapping("/trading-day-gap")
+    public TradingDayGapResponse getTradingDayGap(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return marketMapQueryService.getTradingDayGap(from, to);
     }
 
     @GetMapping("/stock-catalog")

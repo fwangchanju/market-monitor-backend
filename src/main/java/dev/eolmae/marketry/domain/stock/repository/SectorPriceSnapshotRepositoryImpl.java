@@ -2,6 +2,7 @@ package dev.eolmae.marketry.domain.stock.repository;
 
 import static dev.eolmae.marketry.domain.stock.entity.QSectorPriceSnapshot.sectorPriceSnapshot;
 
+import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.types.dsl.BooleanExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import dev.eolmae.marketry.common.enums.Market;
@@ -39,6 +40,31 @@ public class SectorPriceSnapshotRepositoryImpl implements SectorPriceSnapshotRep
                 .from(sectorPriceSnapshot)
                 .where(sectorPriceSnapshot.snapshotTime.goe(from).and(sectorPriceSnapshot.snapshotTime.lt(toExclusive)))
                 .groupBy(sectorPriceSnapshot.marketType)
+                .fetch()
+                .stream()
+                .map(tuple -> new MarketSnapshotTime(tuple.get(sectorPriceSnapshot.marketType), tuple.get(latestTime)))
+                .toList();
+    }
+
+    @Override
+    public List<MarketSnapshotTime> findLatestMarketSnapshotTimesPerDay(List<TimeWindow> windows) {
+        BooleanBuilder inWindows = new BooleanBuilder();
+        for (TimeWindow window : windows) {
+            inWindows.or(sectorPriceSnapshot
+                    .snapshotTime
+                    .goe(window.from())
+                    .and(sectorPriceSnapshot.snapshotTime.lt(window.toExclusive())));
+        }
+        var latestTime = sectorPriceSnapshot.snapshotTime.max();
+        return queryFactory
+                .select(sectorPriceSnapshot.marketType, latestTime)
+                .from(sectorPriceSnapshot)
+                .where(inWindows)
+                .groupBy(
+                        sectorPriceSnapshot.marketType,
+                        sectorPriceSnapshot.snapshotTime.year(),
+                        sectorPriceSnapshot.snapshotTime.month(),
+                        sectorPriceSnapshot.snapshotTime.dayOfMonth())
                 .fetch()
                 .stream()
                 .map(tuple -> new MarketSnapshotTime(tuple.get(sectorPriceSnapshot.marketType), tuple.get(latestTime)))

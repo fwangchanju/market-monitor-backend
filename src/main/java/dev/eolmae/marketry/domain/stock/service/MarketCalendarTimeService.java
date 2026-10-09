@@ -10,6 +10,10 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +37,34 @@ public class MarketCalendarTimeService {
 
     public CalendarDayTimes resolve(LocalDate date) {
         return resolveStoredCalendar(date, false);
+    }
+
+    /** 여러 날을 한 번의 조회로 풀어 날짜별 시간표를 돌려준다. 시간표가 없는 주말은 휴장으로 본다. */
+    public Map<LocalDate, CalendarDayTimes> resolveAll(Collection<LocalDate> dates) {
+        Map<LocalDate, MarketCalendar> calendars = marketCalendarService.findByCountryAndDateIn(Country.KR, dates);
+        Map<LocalDate, CalendarDayTimes> timesByDate = new HashMap<>();
+        for (LocalDate date : dates) {
+            MarketCalendar calendar = calendars.get(date);
+            if (calendar == null
+                    && (date.getDayOfWeek() == DayOfWeek.SATURDAY || date.getDayOfWeek() == DayOfWeek.SUNDAY)) {
+                timesByDate.put(date, new CalendarDayTimes(true, null, null, null, null, null));
+                continue;
+            }
+            timesByDate.put(date, resolve(date, calendar));
+        }
+        return timesByDate;
+    }
+
+    /** fromExclusive 다음 날부터 toInclusive까지의 거래일 수 — 주말과 휴장일은 세지 않는다. toInclusive가 더 늦지 않으면 0. */
+    public long countTradingDays(LocalDate fromExclusive, LocalDate toInclusive) {
+        if (toInclusive.isAfter(fromExclusive) == false) {
+            return 0;
+        }
+        List<LocalDate> dates =
+                fromExclusive.plusDays(1).datesUntil(toInclusive.plusDays(1)).toList();
+        return resolveAll(dates).values().stream()
+                .filter(times -> times.holiday() == false)
+                .count();
     }
 
     public CalendarDayTimes resolveForCollection(LocalDate date) {

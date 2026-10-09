@@ -1380,9 +1380,9 @@ class MarketMapQueryServiceTest {
                     .thenReturn(Map.of("005930", new CachedStockPrice(BigDecimal.valueOf(110), BigDecimal.ONE, time)));
         }
         MarketMapResponse before =
-                service.getDefaultMarketMap(MarketQuery.KOSPI, date.atTime(16, 35), false, ChangeRateBasis.AFTER_HOURS);
+                service.getDefaultMarketMap(MarketQuery.KOSPI, date.atTime(16, 35), false, ChangeRateMode.AFTER_HOURS);
         MarketMapResponse boundary =
-                service.getDefaultMarketMap(MarketQuery.KOSPI, date.atTime(16, 40), false, ChangeRateBasis.AFTER_HOURS);
+                service.getDefaultMarketMap(MarketQuery.KOSPI, date.atTime(16, 40), false, ChangeRateMode.AFTER_HOURS);
         assertThat(before.items().get(0).items().get(0).changeRate()).isEqualByComparingTo(BigDecimal.ONE);
         assertThat(boundary.items().get(0).items().get(0).changeRate()).isEqualByComparingTo(BigDecimal.TEN);
     }
@@ -1398,7 +1398,7 @@ class MarketMapQueryServiceTest {
                 .thenReturn(true);
         when(sectorPriceCacheService.getCache(Market.KOSPI, time))
                 .thenReturn(Map.of("005930", new CachedStockPrice(BigDecimal.TEN, BigDecimal.ONE, time)));
-        assertThat(service.getDefaultMarketMap(MarketQuery.KOSPI, time, false, ChangeRateBasis.AFTER_HOURS)
+        assertThat(service.getDefaultMarketMap(MarketQuery.KOSPI, time, false, ChangeRateMode.AFTER_HOURS)
                         .items()
                         .get(0)
                         .items()

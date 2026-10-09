@@ -3,6 +3,7 @@ package dev.eolmae.marketry.domain.stock.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -20,14 +21,20 @@ import dev.eolmae.marketry.domain.stock.enums.MarketCalendarStatus;
 import dev.eolmae.marketry.domain.stock.properties.MarketHoursProperties;
 import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepository;
 import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepositoryCustom.MarketSnapshotTime;
+import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepositoryCustom.TimeWindow;
 import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepositoryImpl;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.Query;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -191,5 +198,69 @@ class SectorPriceSnapshotServiceTest {
 
         assertThat(retentionRepository.deleteSnapshotsForDate(DATE, List.of())).isZero();
         verifyNoInteractions(entityManager);
+    }
+
+    private void 십일월_종가후보를_준비한다() {
+        when(calendarService.findByCountryAndDateIn(eq(Country.KR), any())).thenReturn(Map.of());
+        when(repository.findLatestMarketSnapshotTimesPerDay(any()))
+                .thenReturn(List.of(
+                        new MarketSnapshotTime(Market.KOSPI, LocalDateTime.of(2025, 11, 13, 15, 35)),
+                        new MarketSnapshotTime(Market.KOSDAQ, LocalDateTime.of(2025, 11, 13, 15, 35)),
+                        new MarketSnapshotTime(Market.KOSPI, LocalDateTime.of(2025, 11, 14, 15, 35)),
+                        new MarketSnapshotTime(Market.KOSDAQ, LocalDateTime.of(2025, 11, 14, 15, 30)),
+                        new MarketSnapshotTime(Market.KOSPI, LocalDateTime.of(2025, 11, 17, 15, 30))));
+    }
+
+    @Test
+    void 두_시장의_종가시각이_같은_날만_달력_날짜로_돌려준다() {
+        십일월_종가후보를_준비한다();
+
+        Map<LocalDate, LocalDateTime> closingTimes =
+                service.findClosingSnapshotTimes(List.of(Market.KOSPI, Market.KOSDAQ), YearMonth.of(2025, 11));
+
+        assertThat(closingTimes).containsOnlyKeys(LocalDate.of(2025, 11, 13));
+        assertThat(closingTimes.get(LocalDate.of(2025, 11, 13))).isEqualTo(LocalDateTime.of(2025, 11, 13, 15, 35));
+    }
+
+    @Test
+    void 시장_하나만_조회하면_그_시장의_종가가_있는_날을_모두_돌려준다() {
+        십일월_종가후보를_준비한다();
+
+        Map<LocalDate, LocalDateTime> closingTimes =
+                service.findClosingSnapshotTimes(List.of(Market.KOSPI), YearMonth.of(2025, 11));
+
+        assertThat(closingTimes)
+                .containsOnlyKeys(LocalDate.of(2025, 11, 13), LocalDate.of(2025, 11, 14), LocalDate.of(2025, 11, 17));
+    }
+
+    @Test
+    void 시간표가_없는_주말은_종가구간_조회에서_뺀다() {
+        십일월_종가후보를_준비한다();
+
+        service.findClosingSnapshotTimes(List.of(Market.KOSPI), YearMonth.of(2025, 11));
+
+        ArgumentCaptor<List<TimeWindow>> windowCaptor = ArgumentCaptor.captor();
+        verify(repository).findLatestMarketSnapshotTimesPerDay(windowCaptor.capture());
+        // 2025년 11월은 30일 중 주말이 10일이다.
+        assertThat(windowCaptor.getValue()).hasSize(20);
+        assertThat(windowCaptor.getValue())
+                .contains(
+                        new TimeWindow(LocalDateTime.of(2025, 11, 13, 15, 30), LocalDateTime.of(2025, 11, 13, 15, 40)));
+    }
+
+    @Test
+    void 모든_날이_휴장이면_조회하지_않고_빈_결과를_돌려준다() {
+        // 주말뿐인 달은 없으므로 모든 날을 휴장으로 적은 시간표를 직접 만든다.
+        Map<LocalDate, MarketCalendar> holidays = YearMonth.of(2025, 11)
+                .atDay(1)
+                .datesUntil(LocalDate.of(2025, 12, 1))
+                .collect(Collectors.toMap(
+                        Function.identity(),
+                        date -> MarketCalendar.create(Country.KR, date, MarketCalendarStatus.HOLIDAY, null)));
+        when(calendarService.findByCountryAndDateIn(eq(Country.KR), any())).thenReturn(holidays);
+
+        assertThat(service.findClosingSnapshotTimes(List.of(Market.KOSPI), YearMonth.of(2025, 11)))
+                .isEmpty();
+        verify(repository, never()).findLatestMarketSnapshotTimesPerDay(any());
     }
 }

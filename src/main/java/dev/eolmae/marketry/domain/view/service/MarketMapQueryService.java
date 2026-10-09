@@ -32,6 +32,7 @@ import dev.eolmae.marketry.domain.view.dto.MarketIndexChangeRate;
 import dev.eolmae.marketry.domain.view.dto.MarketMapItem;
 import dev.eolmae.marketry.domain.view.dto.MarketMapResponse;
 import dev.eolmae.marketry.domain.view.dto.MarketMapSectorNode;
+import dev.eolmae.marketry.domain.view.dto.MarketMapSnapshotDay;
 import dev.eolmae.marketry.domain.view.dto.MarketOverviewItem;
 import dev.eolmae.marketry.domain.view.dto.SectorChangeRateItem;
 import dev.eolmae.marketry.domain.view.dto.SectorChangeRateMarketRanking;
@@ -41,11 +42,14 @@ import dev.eolmae.marketry.domain.view.dto.SnapshotAverages;
 import dev.eolmae.marketry.domain.view.dto.SnapshotResponse;
 import dev.eolmae.marketry.domain.view.dto.StockCatalogItem;
 import dev.eolmae.marketry.domain.view.dto.TopSectorItem;
+import dev.eolmae.marketry.domain.view.dto.TradingDayGapResponse;
 import dev.eolmae.marketry.domain.view.enums.AverageMode;
 import dev.eolmae.marketry.domain.view.enums.ChangeRateMode;
 import dev.eolmae.marketry.domain.view.enums.MarketQuery;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -194,6 +198,18 @@ public class MarketMapQueryService {
                 .map(resolvedSnapshotTime ->
                         buildCustomMarketMap(markets, resolvedSnapshotTime, dataUserId, nxtOnly, basis))
                 .orElseGet(MarketMapResponse::empty);
+    }
+
+    /** from(포함하지 않음)부터 to(포함)까지의 거래일 수. 거래일은 시장 시간표(휴장일·주말 제외)로 센다. */
+    public TradingDayGapResponse getTradingDayGap(LocalDate from, LocalDate to) {
+        return new TradingDayGapResponse(marketCalendarTimeService.countTradingDays(from, to));
+    }
+
+    /** 달력에서 고를 수 있는 날짜 — 그 달에 종가 스냅샷이 있는 날과 그 시각. 시각을 snapshotTime으로 넘기면 그날 종가 지도를 받는다. */
+    public List<MarketMapSnapshotDay> getClosingSnapshotDays(MarketQuery marketQuery, YearMonth month) {
+        return sectorPriceSnapshotService.findClosingSnapshotTimes(marketQuery.toMarkets(), month).entrySet().stream()
+                .map(entry -> new MarketMapSnapshotDay(entry.getKey(), entry.getValue()))
+                .toList();
     }
 
     /** snapshotTime이 없으면 지금처럼 markets 전부가 공통으로 가진 최신 시각을 쓴다(그 정의상 이미

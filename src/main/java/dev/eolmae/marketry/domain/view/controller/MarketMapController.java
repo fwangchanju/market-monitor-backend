@@ -50,7 +50,7 @@ public class MarketMapController {
             case KRX -> marketMapQueryService.getDefaultMarketMap(market, snapshotTime, nxtOnly, changeRateBasis);
             case MARKETRY ->
                 marketMapQueryService.getPublishedMarketMap(market, snapshotTime, nxtOnly, changeRateBasis);
-            case MYMAP -> marketMapQueryService.getCustomMarketMap(market, snapshotTime, nxtOnly, changeRateBasis);
+            case MINE -> marketMapQueryService.getCustomMarketMap(market, snapshotTime, nxtOnly, changeRateBasis);
         };
     }
 

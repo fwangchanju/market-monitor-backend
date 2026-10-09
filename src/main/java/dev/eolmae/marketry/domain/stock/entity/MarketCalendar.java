@@ -37,12 +37,12 @@ public class MarketCalendar {
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
-    private IntegratedPeriod integrated;
+    private IntegratedSessions integrated;
 
     protected MarketCalendar() {}
 
     public static MarketCalendar create(
-            Country country, LocalDate date, MarketCalendarStatus status, IntegratedPeriod integrated) {
+            Country country, LocalDate date, MarketCalendarStatus status, IntegratedSessions integrated) {
         MarketCalendar calendar = new MarketCalendar();
         calendar.country = country;
         calendar.date = date;
@@ -50,7 +50,7 @@ public class MarketCalendar {
         return calendar;
     }
 
-    public void update(MarketCalendarStatus status, IntegratedPeriod integrated) {
+    public void update(MarketCalendarStatus status, IntegratedSessions integrated) {
         this.status = status;
         this.integrated = integrated;
     }

@@ -13,9 +13,9 @@ import com.querydsl.jpa.JPQLTemplates;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import dev.eolmae.marketry.common.enums.Country;
 import dev.eolmae.marketry.common.enums.Market;
-import dev.eolmae.marketry.domain.stock.entity.IntegratedPeriod;
+import dev.eolmae.marketry.domain.stock.entity.IntegratedSessions;
 import dev.eolmae.marketry.domain.stock.entity.MarketCalendar;
-import dev.eolmae.marketry.domain.stock.entity.TradingPeriod;
+import dev.eolmae.marketry.domain.stock.entity.TradingSession;
 import dev.eolmae.marketry.domain.stock.enums.MarketCalendarStatus;
 import dev.eolmae.marketry.domain.stock.properties.MarketHoursProperties;
 import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepository;
@@ -56,14 +56,14 @@ class SectorPriceSnapshotServiceTest {
 
     private void trading(int closingHour) {
         ZoneOffset offset = ZoneOffset.ofHours(9);
-        IntegratedPeriod integrated = new IntegratedPeriod(
+        IntegratedSessions integrated = new IntegratedSessions(
                 null,
-                new TradingPeriod(
+                new TradingSession(
                         DATE.atTime(10, 0).atOffset(offset),
                         null,
                         null,
                         DATE.atTime(closingHour, 30).atOffset(offset)),
-                new TradingPeriod(
+                new TradingSession(
                         DATE.atTime(closingHour, 30).atOffset(offset),
                         null,
                         DATE.atTime(closingHour, 40).atOffset(offset),

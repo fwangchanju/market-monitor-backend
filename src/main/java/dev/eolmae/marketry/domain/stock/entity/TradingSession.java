@@ -3,7 +3,7 @@ package dev.eolmae.marketry.domain.stock.entity;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import java.time.OffsetDateTime;
 
-public record TradingPeriod(
+public record TradingSession(
         @JsonFormat(without = JsonFormat.Feature.ADJUST_DATES_TO_CONTEXT_TIME_ZONE)
         OffsetDateTime startTime,
 

@@ -4,9 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 import dev.eolmae.marketry.common.enums.Country;
-import dev.eolmae.marketry.domain.stock.entity.IntegratedPeriod;
+import dev.eolmae.marketry.domain.stock.entity.IntegratedSessions;
 import dev.eolmae.marketry.domain.stock.entity.MarketCalendar;
-import dev.eolmae.marketry.domain.stock.entity.TradingPeriod;
+import dev.eolmae.marketry.domain.stock.entity.TradingSession;
 import dev.eolmae.marketry.domain.stock.enums.MarketCalendarStatus;
 import dev.eolmae.marketry.domain.stock.properties.MarketHoursProperties;
 import java.time.LocalDate;
@@ -37,8 +37,10 @@ class MarketCalendarTimeServiceTest {
     void 정상날은_전체_세션_최소시작과_최대종료를_쓴다() {
         CalendarDayTimes times = service.resolve(
                 DATE,
-                trading(new IntegratedPeriod(
-                        period(8, 0, 8, 50, null), period(9, 0, 15, 30, null), period(15, 30, 20, 0, time(15, 40)))));
+                trading(new IntegratedSessions(
+                        session(8, 0, 8, 50, null),
+                        session(9, 0, 15, 30, null),
+                        session(15, 30, 20, 0, time(15, 40)))));
 
         assertThat(times.collectionStart()).isEqualTo(DATE.atTime(8, 0));
         assertThat(times.collectionEnd()).isEqualTo(DATE.atTime(20, 0));
@@ -50,7 +52,8 @@ class MarketCalendarTimeServiceTest {
     void 프리마켓이_없으면_10시_개장과_16시30분_종가구간을_적용한다() {
         CalendarDayTimes times = service.resolve(
                 DATE,
-                trading(new IntegratedPeriod(null, period(10, 0, 16, 30, null), period(16, 30, 20, 0, time(16, 40)))));
+                trading(new IntegratedSessions(
+                        null, session(10, 0, 16, 30, null), session(16, 30, 20, 0, time(16, 40)))));
 
         assertThat(times.collectionStart()).isEqualTo(DATE.atTime(10, 0));
         assertThat(times.collectionEnd()).isEqualTo(DATE.atTime(20, 0));
@@ -62,14 +65,14 @@ class MarketCalendarTimeServiceTest {
     @Test
     void 수능날에도_프리마켓없이_10시부터_수집한다() {
         LocalDate examDate = LocalDate.of(2025, 11, 13);
-        IntegratedPeriod integrated = new IntegratedPeriod(
+        IntegratedSessions integrated = new IntegratedSessions(
                 null,
-                new TradingPeriod(
+                new TradingSession(
                         examDate.atTime(10, 0).atOffset(ZoneOffset.ofHours(9)),
                         null,
                         null,
                         examDate.atTime(16, 30).atOffset(ZoneOffset.ofHours(9))),
-                new TradingPeriod(
+                new TradingSession(
                         examDate.atTime(16, 30).atOffset(ZoneOffset.ofHours(9)),
                         null,
                         examDate.atTime(16, 40).atOffset(ZoneOffset.ofHours(9)),
@@ -94,7 +97,7 @@ class MarketCalendarTimeServiceTest {
     @Test
     void 세션과_단일가경계가_없으면_종가만_기본시간으로_돌린다() {
         CalendarDayTimes times =
-                service.resolve(DATE, trading(new IntegratedPeriod(null, period(10, 0, 16, 30, null), null)));
+                service.resolve(DATE, trading(new IntegratedSessions(null, session(10, 0, 16, 30, null), null)));
 
         assertThat(times.collectionStart()).isEqualTo(DATE.atTime(10, 0));
         assertThat(times.collectionEnd()).isEqualTo(DATE.atTime(16, 30));
@@ -106,7 +109,8 @@ class MarketCalendarTimeServiceTest {
     @Test
     void 애프터마켓_단일가끝이_없어도_수집시간은_세션을_쓴다() {
         CalendarDayTimes times = service.resolve(
-                DATE, trading(new IntegratedPeriod(null, period(10, 0, 16, 30, null), period(16, 30, 20, 0, null))));
+                DATE,
+                trading(new IntegratedSessions(null, session(10, 0, 16, 30, null), session(16, 30, 20, 0, null))));
 
         assertThat(times.collectionEnd()).isEqualTo(DATE.atTime(20, 0));
         assertThat(times.closingWindowStart()).isEqualTo(DATE.atTime(15, 30));
@@ -116,7 +120,8 @@ class MarketCalendarTimeServiceTest {
     void 정규장이_없으면_정규종료와_종가만_기본값이다() {
         CalendarDayTimes times = service.resolve(
                 DATE,
-                trading(new IntegratedPeriod(period(8, 0, 8, 50, null), null, period(16, 30, 20, 0, time(16, 40)))));
+                trading(new IntegratedSessions(
+                        session(8, 0, 8, 50, null), null, session(16, 30, 20, 0, time(16, 40)))));
 
         assertThat(times.collectionStart()).isEqualTo(DATE.atTime(8, 0));
         assertThat(times.regularMarketEnd()).isEqualTo(DATE.atTime(15, 30));
@@ -125,13 +130,13 @@ class MarketCalendarTimeServiceTest {
 
     @Test
     void 시간대가_UTC여도_국내시각으로_변환한다() {
-        TradingPeriod session = new TradingPeriod(
+        TradingSession session = new TradingSession(
                 time(10, 0).withOffsetSameInstant(ZoneOffset.UTC),
                 null,
                 null,
                 time(16, 30).withOffsetSameInstant(ZoneOffset.UTC));
 
-        CalendarDayTimes times = service.resolve(DATE, trading(new IntegratedPeriod(null, session, null)));
+        CalendarDayTimes times = service.resolve(DATE, trading(new IntegratedSessions(null, session, null)));
 
         assertThat(times.collectionStart()).isEqualTo(DATE.atTime(10, 0));
         assertThat(times.regularMarketEnd()).isEqualTo(DATE.atTime(16, 30));
@@ -192,7 +197,7 @@ class MarketCalendarTimeServiceTest {
     @Test
     void 주말의_거래일_시간표가_있으면_요일보다_시간표를_우선한다() {
         LocalDate weekend = LocalDate.of(2026, 1, 3);
-        TradingPeriod regular = new TradingPeriod(
+        TradingSession regular = new TradingSession(
                 weekend.atTime(10, 0).atOffset(ZoneOffset.ofHours(9)),
                 null,
                 null,
@@ -202,7 +207,7 @@ class MarketCalendarTimeServiceTest {
                         Country.KR,
                         weekend,
                         MarketCalendarStatus.TRADING_DAY,
-                        new IntegratedPeriod(null, regular, null))));
+                        new IntegratedSessions(null, regular, null))));
 
         CalendarDayTimes times = service.resolveForCollection(weekend);
         assertThat(times.holiday()).isFalse();
@@ -237,13 +242,13 @@ class MarketCalendarTimeServiceTest {
         assertThat(times.closingWindowEnd()).isEqualTo(DATE.atTime(15, 40));
     }
 
-    private MarketCalendar trading(IntegratedPeriod integrated) {
+    private MarketCalendar trading(IntegratedSessions integrated) {
         return MarketCalendar.create(Country.KR, DATE, MarketCalendarStatus.TRADING_DAY, integrated);
     }
 
-    private TradingPeriod period(
+    private TradingSession session(
             int startHour, int startMinute, int endHour, int endMinute, OffsetDateTime auctionEnd) {
-        return new TradingPeriod(time(startHour, startMinute), null, auctionEnd, time(endHour, endMinute));
+        return new TradingSession(time(startHour, startMinute), null, auctionEnd, time(endHour, endMinute));
     }
 
     private OffsetDateTime time(int hour, int minute) {

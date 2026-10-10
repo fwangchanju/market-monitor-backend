@@ -6,30 +6,62 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import dev.eolmae.marketry.domain.custom.service.CustomScaleService;
 import dev.eolmae.marketry.domain.custom.service.CustomSectorService;
 import dev.eolmae.marketry.domain.custom.service.CustomValueTierThresholdService;
+import dev.eolmae.marketry.domain.stock.enums.MarketCalendarStatus;
 import dev.eolmae.marketry.domain.view.dto.MarketMapResponse;
+import dev.eolmae.marketry.domain.view.dto.MarketTradingScheduleResponse;
+import dev.eolmae.marketry.domain.view.dto.MarketTradingScheduleResponse.TimeWindow;
 import dev.eolmae.marketry.domain.view.enums.ChangeRateMode;
 import dev.eolmae.marketry.domain.view.enums.MarketQuery;
 import dev.eolmae.marketry.domain.view.service.MarketMapQueryService;
+import dev.eolmae.marketry.domain.view.service.MarketTradingScheduleService;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 // 이 레포엔 컨트롤러 테스트도 @WebMvcTest 의존성도 없다(테스트 기준 문서 참고) — 여기서만 standaloneSetup으로
-// snapshotTime 바인딩만 좁게 확인한다. @WebMvcTest 등 새 의존성은 더하지 않는다.
+// 날짜 바인딩과 시간표 응답 형식을 좁게 확인한다. @WebMvcTest 등 새 의존성은 더하지 않는다.
 class MarketMapControllerTest {
 
     private final MarketMapQueryService marketMapQueryService = mock(MarketMapQueryService.class);
+    private final MarketTradingScheduleService tradingScheduleService = mock(MarketTradingScheduleService.class);
     private final MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new MarketMapController(
                     marketMapQueryService,
                     mock(CustomSectorService.class),
                     mock(CustomScaleService.class),
-                    mock(CustomValueTierThresholdService.class)))
+                    mock(CustomValueTierThresholdService.class),
+                    tradingScheduleService))
             .build();
+
+    @Test
+    void 시간표_조회는_날짜와_한국시각_문자열을_프론트에_전달한다() throws Exception {
+        LocalDate date = LocalDate.of(2025, 11, 13);
+        TimeWindow window = new TimeWindow(date.atTime(16, 40), date.atTime(17, 0));
+        when(tradingScheduleService.getTradingSchedule(date))
+                .thenReturn(new MarketTradingScheduleResponse(
+                        date,
+                        MarketCalendarStatus.TRADING_DAY,
+                        null,
+                        new TimeWindow(date.atTime(10, 0), date.atTime(16, 30)),
+                        new TimeWindow(date.atTime(16, 40), date.atTime(20, 0)),
+                        List.of(window)));
+
+        mockMvc.perform(get("/api/map/trading-schedule?date=2025-11-13"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.date").value("2025-11-13"))
+                .andExpect(jsonPath("$.status").value("TRADING_DAY"))
+                .andExpect(jsonPath("$.regularMarket.endTime").value("2025-11-13T16:30:00"))
+                .andExpect(jsonPath("$.nxtOnlyWindows[0].startTime").value("2025-11-13T16:40:00"))
+                .andExpect(jsonPath("$.nxtOnlyWindows[0].endTime").value("2025-11-13T17:00:00"));
+    }
 
     @Test
     void getMarketMap_snapshotTime이_LocalDateTime으로_바인딩된다() throws Exception {

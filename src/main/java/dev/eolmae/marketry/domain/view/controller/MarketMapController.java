@@ -7,12 +7,14 @@ import dev.eolmae.marketry.domain.custom.service.CustomSectorService;
 import dev.eolmae.marketry.domain.custom.service.CustomValueTierThresholdService;
 import dev.eolmae.marketry.domain.view.dto.MarketMapResponse;
 import dev.eolmae.marketry.domain.view.dto.MarketMapSnapshotDay;
+import dev.eolmae.marketry.domain.view.dto.MarketTradingScheduleResponse;
 import dev.eolmae.marketry.domain.view.dto.StockCatalogItem;
 import dev.eolmae.marketry.domain.view.dto.TradingDayGapResponse;
 import dev.eolmae.marketry.domain.view.enums.ChangeRateMode;
 import dev.eolmae.marketry.domain.view.enums.ClassificationSource;
 import dev.eolmae.marketry.domain.view.enums.MarketQuery;
 import dev.eolmae.marketry.domain.view.service.MarketMapQueryService;
+import dev.eolmae.marketry.domain.view.service.MarketTradingScheduleService;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
@@ -36,6 +38,7 @@ public class MarketMapController {
     private final CustomSectorService customSectorService;
     private final CustomScaleService customScaleService;
     private final CustomValueTierThresholdService customValueTierThresholdService;
+    private final MarketTradingScheduleService marketTradingScheduleService;
 
     @GetMapping
     public MarketMapResponse getMarketMap(
@@ -75,6 +78,12 @@ public class MarketMapController {
     @GetMapping("/stock-catalog")
     public List<StockCatalogItem> getStockCatalog() {
         return marketMapQueryService.getStockCatalog();
+    }
+
+    @GetMapping("/trading-schedule")
+    public MarketTradingScheduleResponse getTradingSchedule(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return marketTradingScheduleService.getTradingSchedule(date);
     }
 
     @GetMapping("/value-tiers")

@@ -122,6 +122,16 @@ class SectorPriceSnapshotRepositoryManualTest {
                     .hasSize(2);
             assertThat(repository.deleteSnapshotsForDate(noCandidate, List.of()))
                     .isZero();
+            price(session, Market.KOSPI, today.atStartOfDay(), "today");
+            price(session, Market.KOSDAQ, today.atStartOfDay(), "today");
+            price(session, Market.KOSPI, today.atTime(20, 0), "today");
+            price(session, Market.KOSDAQ, today.atTime(20, 0), "today");
+            price(session, Market.KOSPI, today.atTime(20, 5), "today");
+            session.flush();
+            assertThat(repository.findLatestCommonSnapshotTime(List.of(Market.KOSPI), today))
+                    .contains(today.atTime(20, 5));
+            assertThat(repository.findLatestCommonSnapshotTime(List.of(Market.KOSPI, Market.KOSDAQ), today))
+                    .contains(today.atTime(20, 0));
             session.getTransaction().rollback();
         } finally {
             StandardServiceRegistryBuilder.destroy(registry);

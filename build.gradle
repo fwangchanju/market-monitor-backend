@@ -95,7 +95,7 @@ tasks.register('manualTest', Test) {
 
 tasks.register('marketCalendarTest', Test) {
 	group = 'verification'
-	description = '지정 날짜의 토스 국내 시간표만 조회해 DB에 적재한다. 예: ./gradlew marketCalendarTest -PcalendarDate=2026-10-09'
+	description = '월 또는 날짜 범위의 실제 토스 시간표를 로컬 DB에 적재한다. 예: ./gradlew.bat marketCalendarTest -PcalendarMonth=202601'
 	testClassesDirs = sourceSets.test.output.classesDirs
 	classpath = sourceSets.test.runtimeClasspath
 	useJUnitPlatform {
@@ -103,6 +103,11 @@ tasks.register('marketCalendarTest', Test) {
 	}
 	filter {
 		includeTestsMatching '*MarketCalendarManualTest'
+	}
+	def requestedCalendarMonth = providers.systemProperty('calendar.month')
+			.orElse(providers.gradleProperty('calendarMonth'))
+	if (requestedCalendarMonth.isPresent()) {
+		systemProperty 'calendar.month', requestedCalendarMonth.get()
 	}
 	def requestedCalendarDate = providers.systemProperty('calendar.date')
 			.orElse(providers.gradleProperty('calendarDate'))
@@ -120,6 +125,17 @@ tasks.register('marketCalendarTest', Test) {
 		events 'passed', 'failed'
 		showStandardStreams = true
 	}
+}
+
+tasks.register('snapshotQueryTest', Test) {
+	group = 'verification'
+	description = 'API 호출 없이 localhost:15439의 전용 PostgreSQL에서 스냅샷 QueryDSL을 검증한다.'
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+	useJUnitPlatform { includeTags 'manual' }
+	filter { includeTestsMatching '*SectorPriceSnapshotRepositoryManualTest' }
+	outputs.upToDateWhen { false }
+	outputs.cacheIf { false }
 }
 
 tasks.register('kiwoomProxyTest', Test) {

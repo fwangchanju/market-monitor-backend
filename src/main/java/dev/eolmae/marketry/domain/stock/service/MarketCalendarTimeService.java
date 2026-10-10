@@ -55,6 +55,17 @@ public class MarketCalendarTimeService {
         return timesByDate;
     }
 
+    /** 조회·정리는 수집 시의 기본 시간 처리와 달리, 확인된 거래일만 사용한다. */
+    public Map<LocalDate, CalendarDayTimes> resolveTradingDays(Collection<LocalDate> dates) {
+        Map<LocalDate, CalendarDayTimes> result = new HashMap<>();
+        marketCalendarService.findByCountryAndDateIn(Country.KR, dates).forEach((date, calendar) -> {
+            if (calendar.getStatus() == MarketCalendarStatus.TRADING_DAY) {
+                result.put(date, resolve(date, calendar));
+            }
+        });
+        return result;
+    }
+
     /** fromExclusive 다음 날부터 toInclusive까지의 거래일 수 — 주말과 휴장일은 세지 않는다. toInclusive가 더 늦지 않으면 0. */
     public long countTradingDays(LocalDate fromExclusive, LocalDate toInclusive) {
         if (toInclusive.isAfter(fromExclusive) == false) {
@@ -62,8 +73,8 @@ public class MarketCalendarTimeService {
         }
         List<LocalDate> dates =
                 fromExclusive.plusDays(1).datesUntil(toInclusive.plusDays(1)).toList();
-        return resolveAll(dates).values().stream()
-                .filter(times -> times.holiday() == false)
+        return marketCalendarService.findByCountryAndDateIn(Country.KR, dates).values().stream()
+                .filter(calendar -> calendar.getStatus() == MarketCalendarStatus.TRADING_DAY)
                 .count();
     }
 
@@ -98,7 +109,7 @@ public class MarketCalendarTimeService {
         LocalDateTime defaultClosingStart = date.atTime(marketHoursProperties.closeWindowStart());
         LocalDateTime defaultClosingEnd = date.atTime(marketHoursProperties.afterHoursStart());
         if (calendar == null || calendar.getStatus() == MarketCalendarStatus.FAILED) {
-            log.warn(
+            log.debug(
                     "[거래일시간표] 시간표 없음 또는 실패로 기본 시간 사용 | context : {}|{}",
                     date,
                     calendar == null ? "없음" : calendar.getStatus());
@@ -129,14 +140,10 @@ public class MarketCalendarTimeService {
                 : toDomesticTime(integrated.regularMarket().endTime());
         LocalDateTime closingStart = defaultClosingStart;
         LocalDateTime closingEnd = defaultClosingEnd;
-        if (integrated.regularMarket() != null
-                && integrated.afterMarket() != null
-                && integrated.afterMarket().singlePriceAuctionEndTime() != null) {
+        if (integrated.afterMarket() != null && integrated.afterMarket().singlePriceAuctionEndTime() != null) {
             LocalDateTime auctionEnd = toDomesticTime(integrated.afterMarket().singlePriceAuctionEndTime());
-            if (regularEnd.isBefore(auctionEnd)) {
-                closingStart = regularEnd;
-                closingEnd = auctionEnd;
-            }
+            closingStart = regularEnd;
+            closingEnd = auctionEnd;
         }
         return new CalendarDayTimes(false, collectionStart, collectionEnd, regularEnd, closingStart, closingEnd);
     }

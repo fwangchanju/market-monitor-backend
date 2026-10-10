@@ -2,10 +2,9 @@ package dev.eolmae.marketry.domain.stock.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import dev.eolmae.marketry.common.enums.Country;
@@ -14,174 +13,123 @@ import dev.eolmae.marketry.common.event.MarketCalendarChangedEvent;
 import dev.eolmae.marketry.domain.stock.entity.SectorPriceSnapshot;
 import dev.eolmae.marketry.domain.stock.enums.ExchangeType;
 import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepository;
+import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepositoryCustom.MarketSnapshotTime;
+import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepositoryCustom.SnapshotDaySummary;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 class ClosingPriceCacheServiceTest {
-
     private static final LocalDate DATE = LocalDate.of(2026, 10, 2);
-    private static final LocalDateTime WINDOW_START = DATE.atTime(15, 30);
-    private static final LocalDateTime WINDOW_END = DATE.atTime(15, 40);
-
     private final SectorPriceSnapshotRepository repository = mock(SectorPriceSnapshotRepository.class);
     private final MarketCalendarTimeService timeService = mock(MarketCalendarTimeService.class);
-    private final ClosingPriceCacheService service = new ClosingPriceCacheService(repository, timeService);
+    private final ClosingPriceCacheService service = new ClosingPriceCacheService(
+            repository, timeService, new SectorPriceSnapshotService(repository, timeService));
 
     @BeforeEach
-    void 기본_종가_구간을_설정한다() {
-        when(timeService.resolve(DATE)).thenReturn(dayTimes(DATE, 15));
+    void 기본_경계() {
+        when(timeService.resolve(DATE)).thenReturn(times(15));
     }
 
-    private static CalendarDayTimes dayTimes(LocalDate date, int closingHour) {
+    private CalendarDayTimes times(int hour) {
         return new CalendarDayTimes(
                 false,
-                date.atTime(8, 0),
-                date.atTime(20, 0),
-                date.atTime(closingHour, 30),
-                date.atTime(closingHour, 30),
-                date.atTime(closingHour, 40));
+                DATE.atTime(8, 0),
+                DATE.atTime(20, 0),
+                DATE.atTime(hour, 30),
+                DATE.atTime(hour, 30),
+                DATE.atTime(hour, 40));
     }
 
-    private void stubLatest(LocalDate date, int hour, String price) {
-        LocalDateTime latest = date.atTime(hour, 35);
-        SectorPriceSnapshot snapshot = snapshot("005930", latest, price);
-        when(repository.findFirstBySnapshotTimeGreaterThanEqualAndSnapshotTimeLessThanOrderBySnapshotTimeDesc(
-                        date.atTime(hour, 30), date.atTime(hour, 40)))
-                .thenReturn(Optional.of(snapshot));
-        when(repository.findByMarketTypeInAndSnapshotTime(any(), eq(latest))).thenReturn(List.of(snapshot));
-    }
-
-    private static SectorPriceSnapshot snapshot(String stockCode, LocalDateTime time, String price) {
+    private SectorPriceSnapshot snapshot(String code, Market market, LocalDateTime time, String price) {
         return SectorPriceSnapshot.create(
-                Market.KOSPI,
-                time,
-                stockCode,
-                ExchangeType.SOR,
-                stockCode,
-                new BigDecimal(price),
-                BigDecimal.ZERO,
-                BigDecimal.ZERO);
+                market, time, code, ExchangeType.SOR, code, new BigDecimal(price), BigDecimal.ZERO, BigDecimal.ZERO);
+    }
+
+    private void stub(int hour, String price) {
+        LocalDateTime selected = DATE.atTime(hour, 35);
+        when(repository.findSnapshotDaySummaries(any()))
+                .thenReturn(List.of(new SnapshotDaySummary(Market.KOSPI, selected, 1, null)));
+        when(repository.findByMarketSnapshotTimes(any()))
+                .thenReturn(List.of(snapshot("005930", Market.KOSPI, selected, price)));
     }
 
     @Test
-    void 종가_윈도우의_가장_늦은_스냅샷_시각의_가격을_종목별로_담는다() {
-        LocalDateTime latest = DATE.atTime(15, 35);
-        when(repository.findFirstBySnapshotTimeGreaterThanEqualAndSnapshotTimeLessThanOrderBySnapshotTimeDesc(
-                        WINDOW_START, WINDOW_END))
-                .thenReturn(Optional.of(snapshot("005930", latest, "286500")));
-        when(repository.findByMarketTypeInAndSnapshotTime(any(), eq(latest)))
-                .thenReturn(List.of(snapshot("005930", latest, "286500"), snapshot("000660", latest, "980000")));
-
-        ClosingPrices result = service.loadFor(DATE);
-
-        assertThat(result.baseDate()).isEqualTo(DATE);
-        assertThat(result.priceByStockCode())
-                .containsEntry("005930", new BigDecimal("286500"))
-                .containsEntry("000660", new BigDecimal("980000"))
-                .hasSize(2);
+    void 이미_정리된_예전_종가는_시간표가_늦어졌어도_읽는다() {
+        when(timeService.resolve(DATE)).thenReturn(times(16));
+        stub(15, "100");
+        assertThat(service.loadFor(DATE).priceByStockCode()).containsEntry("005930", new BigDecimal("100"));
     }
 
     @Test
-    void 윈도우_경계를_baseDate의_설정_시각으로_조회한다() {
-        when(repository.findFirstBySnapshotTimeGreaterThanEqualAndSnapshotTimeLessThanOrderBySnapshotTimeDesc(
-                        any(), any()))
-                .thenReturn(Optional.empty());
-
-        service.loadFor(DATE);
-
-        // 하한은 포함(15:30), 상한은 미포함(15:40) — 16:00 같은 시간외 체결가가 종가로 잡히지 않는다.
+    void 시장별_종가_시각이_달라도_각각의_종목_가격을_읽는다() {
+        LocalDateTime kospi = DATE.atTime(15, 35);
+        LocalDateTime kosdaq = DATE.atTime(15, 30);
+        when(repository.findSnapshotDaySummaries(any()))
+                .thenReturn(List.of(
+                        new SnapshotDaySummary(Market.KOSPI, DATE.atTime(20, 0), 3, kospi),
+                        new SnapshotDaySummary(Market.KOSDAQ, kosdaq, 1, null)));
+        when(repository.findByMarketSnapshotTimes(any()))
+                .thenReturn(List.of(
+                        snapshot("005930", Market.KOSPI, kospi, "100"),
+                        snapshot("035900", Market.KOSDAQ, kosdaq, "200")));
+        assertThat(service.loadFor(DATE).priceByStockCode())
+                .containsEntry("005930", new BigDecimal("100"))
+                .containsEntry("035900", new BigDecimal("200"));
         verify(repository)
-                .findFirstBySnapshotTimeGreaterThanEqualAndSnapshotTimeLessThanOrderBySnapshotTimeDesc(
-                        WINDOW_START, WINDOW_END);
+                .findByMarketSnapshotTimes(List.of(
+                        new MarketSnapshotTime(Market.KOSPI, kospi), new MarketSnapshotTime(Market.KOSDAQ, kosdaq)));
     }
 
     @Test
-    void 윈도우에_스냅샷이_없는_날은_기준가가_빈_채로_그날로_표시된다() {
-        when(repository.findFirstBySnapshotTimeGreaterThanEqualAndSnapshotTimeLessThanOrderBySnapshotTimeDesc(
-                        any(), any()))
-                .thenReturn(Optional.empty());
-
-        ClosingPrices result = service.loadFor(DATE);
-
-        assertThat(result.baseDate()).isEqualTo(DATE);
-        assertThat(result.priceByStockCode()).isEmpty();
-        verify(repository, never()).findByMarketTypeInAndSnapshotTime(any(), any());
-    }
-
-    @Test
-    void 진행_중_종가_구간은_새로운_latest를_다시_읽는다() {
-        SectorPriceSnapshot early = snapshot("005930", DATE.atTime(15, 30), "100");
-        when(repository.findFirstBySnapshotTimeGreaterThanEqualAndSnapshotTimeLessThanOrderBySnapshotTimeDesc(
-                        WINDOW_START, WINDOW_END))
-                .thenReturn(Optional.of(early));
-        when(repository.findByMarketTypeInAndSnapshotTime(any(), eq(DATE.atTime(15, 30))))
-                .thenReturn(List.of(early));
-        assertThat(service.getFor(DATE, DATE.atTime(15, 31)).priceByStockCode())
-                .containsEntry("005930", new BigDecimal("100"));
-        stubLatest(DATE, 15, "110");
+    void 시간외_시작_전에는_새로운_latest를_계속_읽는다() {
+        stub(15, "100");
         assertThat(service.getFor(DATE, DATE.atTime(15, 36)).priceByStockCode())
+                .containsEntry("005930", new BigDecimal("100"));
+        stub(15, "110");
+        assertThat(service.getFor(DATE, DATE.atTime(15, 39)).priceByStockCode())
                 .containsEntry("005930", new BigDecimal("110"));
     }
 
     @Test
-    void 끝난_구간은_캐시하고_시간표_변경_후_현재와_과거_캐시를_갱신한다() {
-        LocalDate past = DATE.minusDays(1);
-        when(timeService.resolve(past)).thenReturn(dayTimes(past, 15));
-        stubLatest(DATE, 15, "100");
-        stubLatest(past, 15, "200");
-        service.getFor(DATE, DATE.atTime(18, 0));
-        service.getFor(past, DATE.atTime(18, 0));
-        stubLatest(DATE, 15, "110");
-        stubLatest(past, 15, "210");
+    void 시간외_시작부터_캐시하고_시간표_변경_이벤트로_비운다() {
+        stub(15, "100");
+        service.getFor(DATE, DATE.atTime(15, 40));
+        stub(15, "110");
         assertThat(service.getFor(DATE, DATE.atTime(18, 0)).priceByStockCode())
                 .containsEntry("005930", new BigDecimal("100"));
-        service.onMarketCalendarChanged(new MarketCalendarChangedEvent(Country.KR, past));
+        service.onMarketCalendarChanged(new MarketCalendarChangedEvent(Country.KR, DATE));
         assertThat(service.getFor(DATE, DATE.atTime(18, 0)).priceByStockCode())
                 .containsEntry("005930", new BigDecimal("110"));
-        assertThat(service.getFor(past, DATE.atTime(18, 0)).priceByStockCode())
-                .containsEntry("005930", new BigDecimal("210"));
     }
 
     @Test
-    void 기본_구간_캐시도_시간표가_복구되면_늦어진_구간으로_다시_계산한다() {
-        stubLatest(DATE, 15, "100");
+    void 이벤트_없이_시간표_경계가_바뀌어도_캐시를_다시_계산한다() {
+        stub(15, "100");
         service.getFor(DATE, DATE.atTime(18, 0));
-        when(timeService.resolve(DATE)).thenReturn(dayTimes(DATE, 16));
-        stubLatest(DATE, 16, "150");
+        when(timeService.resolve(DATE)).thenReturn(times(16));
+        stub(16, "150");
         assertThat(service.getFor(DATE, DATE.atTime(18, 0)).priceByStockCode())
                 .containsEntry("005930", new BigDecimal("150"));
     }
 
     @Test
-    void 빈_결과는_캐시하지_않아_나중에_저장된_종가를_읽는다() {
-        when(repository.findFirstBySnapshotTimeGreaterThanEqualAndSnapshotTimeLessThanOrderBySnapshotTimeDesc(
-                        WINDOW_START, WINDOW_END))
-                .thenReturn(Optional.empty());
-        assertThat(service.getFor(DATE, DATE.atTime(18, 0)).priceByStockCode()).isEmpty();
-        stubLatest(DATE, 15, "100");
+    void 빈_종가는_그_날짜를_유지하고_캐시하지_않는다() {
+        ClosingPrices empty = service.getFor(DATE, DATE.atTime(18, 0));
+        assertThat(empty.baseDate()).isEqualTo(DATE);
+        assertThat(empty.priceByStockCode()).isEmpty();
+        stub(15, "100");
         assertThat(service.getFor(DATE, DATE.atTime(18, 0)).priceByStockCode())
                 .containsEntry("005930", new BigDecimal("100"));
     }
 
     @Test
-    void 휴장일은_종가가_없고_DB_가격을_조회하지_않는다() {
+    void 휴장일_가격은_읽지_않는다() {
         when(timeService.resolve(DATE)).thenReturn(new CalendarDayTimes(true, null, null, null, null, null));
         assertThat(service.getFor(DATE, DATE.atTime(18, 0)).priceByStockCode()).isEmpty();
-        verify(repository, never())
-                .findFirstBySnapshotTimeGreaterThanEqualAndSnapshotTimeLessThanOrderBySnapshotTimeDesc(any(), any());
-    }
-
-    @Test
-    void 종가_끝_경계부터_안정된_값을_캐시한다() {
-        stubLatest(DATE, 15, "100");
-        service.getFor(DATE, WINDOW_END);
-        service.getFor(DATE, WINDOW_END.plusMinutes(1));
-        verify(repository, org.mockito.Mockito.times(1))
-                .findByMarketTypeInAndSnapshotTime(any(), eq(DATE.atTime(15, 35)));
+        verifyNoInteractions(repository);
     }
 }

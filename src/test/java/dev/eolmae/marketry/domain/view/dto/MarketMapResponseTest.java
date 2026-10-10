@@ -15,7 +15,7 @@ class MarketMapResponseTest {
     @Test
     void 분류_갱신_시각은_taxonomyUpdatedAt_이름으로만_내려_보낸다() {
         LocalDateTime updatedAt = LocalDateTime.of(2026, 10, 8, 15, 55, 0);
-        MarketMapResponse response = new MarketMapResponse(null, List.of(), null, updatedAt);
+        MarketMapResponse response = new MarketMapResponse(null, List.of(), null, updatedAt, null);
 
         JsonNode json = jsonMapper.readTree(jsonMapper.writeValueAsString(response));
 

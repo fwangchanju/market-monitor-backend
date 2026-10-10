@@ -1,9 +1,11 @@
 package dev.eolmae.marketry.domain.stock.service;
 
 import dev.eolmae.marketry.common.enums.Market;
+import dev.eolmae.marketry.common.util.KstClock;
 import dev.eolmae.marketry.domain.stock.entity.SectorPriceSnapshot;
 import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepository;
 import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepositoryCustom.MarketSnapshotTime;
+import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepositoryCustom.SnapshotDaySummary;
 import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepositoryCustom.TimeWindow;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -33,7 +35,8 @@ public class SectorPriceSnapshotService {
 
     /** markets 전부가 공통으로 가진 최신 스냅샷 시각 — markets가 하나뿐이면 그 마켓의 최신 시각과 같다. */
     public Optional<LocalDateTime> findLatestCommonSnapshotTime(List<Market> markets) {
-        return sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(markets);
+        return sectorPriceSnapshotRepository.findLatestCommonSnapshotTime(
+                markets, KstClock.now().toLocalDate());
     }
 
     public boolean existsSnapshot(Market market, LocalDateTime snapshotTime) {
@@ -65,21 +68,31 @@ public class SectorPriceSnapshotService {
 
     /**
      * 한 달 안에서 markets 전부가 같은 시각의 종가 스냅샷을 가진 날짜와 그 시각. 종가 스냅샷은 정리 배치와 같은
-     * 기준(종가 구간의 마지막 스냅샷)이라, 10일이 지난 날도 같은 시각이 남아 있다. 휴장일·종가 후보가 없는 날,
+     * 기준(한 시각이면 그대로, 여러 시각이면 시간외 시작 이전 latest)이다. 미확인일·휴장일·종가 후보가 없는 날,
      * 시장끼리 시각이 엇갈린 날은 뺀다(그 시각으로는 모든 시장의 지도를 그릴 수 없다).
      */
     public Map<LocalDate, LocalDateTime> findClosingSnapshotTimes(List<Market> markets, YearMonth month) {
-        List<LocalDate> dates =
-                month.atDay(1).datesUntil(month.plusMonths(1).atDay(1)).toList();
-        List<TimeWindow> closingWindows = marketCalendarTimeService.resolveAll(dates).values().stream()
-                .filter(times -> times.holiday() == false)
-                .map(times -> new TimeWindow(times.closingWindowStart(), times.closingWindowEnd()))
+        return findClosingSnapshotTimes(markets, month, KstClock.now().toLocalDate());
+    }
+
+    Map<LocalDate, LocalDateTime> findClosingSnapshotTimes(List<Market> markets, YearMonth month, LocalDate today) {
+        List<LocalDate> dates = month.atDay(1)
+                .datesUntil(month.plusMonths(1).atDay(1))
+                .filter(date -> date.isAfter(today) == false)
+                .toList();
+        if (dates.isEmpty()) {
+            return Map.of();
+        }
+        List<TimeWindow> closingWindows = marketCalendarTimeService.resolveTradingDays(dates).entrySet().stream()
+                .map(entry -> new TimeWindow(
+                        entry.getKey().atStartOfDay(), entry.getValue().closingWindowEnd()))
                 .toList();
         if (closingWindows.isEmpty()) {
             return Map.of();
         }
         Map<LocalDate, List<MarketSnapshotTime>> closingByDate =
-                sectorPriceSnapshotRepository.findLatestMarketSnapshotTimesPerDay(closingWindows).stream()
+                sectorPriceSnapshotRepository.findSnapshotDaySummaries(closingWindows).stream()
+                        .flatMap(summary -> summary.closingSnapshot().stream())
                         .collect(Collectors.groupingBy(
                                 closing -> closing.snapshotTime().toLocalDate()));
         Map<LocalDate, LocalDateTime> closingTimes = new TreeMap<>();
@@ -95,18 +108,49 @@ public class SectorPriceSnapshotService {
         return closingTimes;
     }
 
+    /** 가격이 있는 모든 거래일로 최근 보존 일수를 센다. 정리 실패 날짜도 다음 실행에서 다시 포함된다. */
+    public List<LocalDate> findCleanupDates(LocalDate today, int retainedTradingDays) {
+        List<LocalDate> olderDates = sectorPriceSnapshotRepository.findTradingSnapshotDates(today).stream()
+                .skip(retainedTradingDays)
+                .toList();
+        if (olderDates.isEmpty()) {
+            return List.of();
+        }
+        return sectorPriceSnapshotRepository.findMultipleSnapshotDates(olderDates.getFirst());
+    }
+
+    public List<MarketSnapshotTime> findClosingMarketSnapshotTimes(LocalDate date) {
+        return findClosingMarketSnapshotTimes(date, marketCalendarTimeService.resolve(date));
+    }
+
+    List<MarketSnapshotTime> findClosingMarketSnapshotTimes(LocalDate date, CalendarDayTimes times) {
+        if (times.holiday()) {
+            return List.of();
+        }
+        return sectorPriceSnapshotRepository
+                .findSnapshotDaySummaries(List.of(new TimeWindow(date.atStartOfDay(), times.closingWindowEnd())))
+                .stream()
+                .flatMap(summary -> summary.closingSnapshot().stream())
+                .toList();
+    }
+
     /** 지정 날짜 하루만 정리한다. 휴장과 종가 후보 없는 시장은 보존하며, 실패 날짜 재실행에도 같은 로직을 쓴다. */
     @Transactional
     public void cleanupSnapshotsForDate(LocalDate date) {
-        CalendarDayTimes times = marketCalendarTimeService.resolve(date);
-        if (times.holiday()) {
-            log.info("[섹터가격스냅샷정리] 휴장일 생략 | context : {}", date);
+        CalendarDayTimes times =
+                marketCalendarTimeService.resolveTradingDays(List.of(date)).get(date);
+        if (times == null) {
+            log.debug("[섹터가격스냅샷정리] 확인된 거래일이 아니어서 생략 | context : {}", date);
             return;
         }
-        List<MarketSnapshotTime> retained = sectorPriceSnapshotRepository.findLatestMarketSnapshotTimesBetween(
-                times.closingWindowStart(), times.closingWindowEnd());
+        List<SnapshotDaySummary> summaries = sectorPriceSnapshotRepository.findSnapshotDaySummaries(
+                List.of(new TimeWindow(date.atStartOfDay(), times.closingWindowEnd())));
+        List<MarketSnapshotTime> retained = summaries.stream()
+                .filter(summary -> summary.distinctTimeCount() > 1)
+                .flatMap(summary -> summary.closingSnapshot().stream())
+                .toList();
         if (retained.isEmpty()) {
-            log.warn("[섹터가격스냅샷정리] 종가 후보가 없어 삭제 보류 | context : {}", date);
+            log.debug("[섹터가격스냅샷정리] 이미 정리됐거나 종가 후보가 없어 생략 | context : {}", date);
             return;
         }
         long deletedCount = sectorPriceSnapshotRepository.deleteSnapshotsForDate(date, retained);

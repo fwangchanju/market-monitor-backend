@@ -98,7 +98,7 @@ public class MarketCalendarTimeService {
         LocalDateTime defaultClosingStart = date.atTime(marketHoursProperties.closeWindowStart());
         LocalDateTime defaultClosingEnd = date.atTime(marketHoursProperties.afterHoursStart());
         if (calendar == null || calendar.getStatus() == MarketCalendarStatus.FAILED) {
-            log.warn(
+            log.debug(
                     "[거래일시간표] 시간표 없음 또는 실패로 기본 시간 사용 | context : {}|{}",
                     date,
                     calendar == null ? "없음" : calendar.getStatus());

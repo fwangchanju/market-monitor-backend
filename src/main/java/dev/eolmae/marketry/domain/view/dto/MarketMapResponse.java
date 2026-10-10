@@ -14,8 +14,9 @@ public record MarketMapResponse(
         LocalDateTime snapshotTime,
         List<MarketMapSectorNode> items,
         MarketOverviewItem marketOverview,
-        LocalDateTime taxonomyUpdatedAt) {
+        LocalDateTime taxonomyUpdatedAt,
+        LocalDateTime afterHoursStart) {
     public static MarketMapResponse empty() {
-        return new MarketMapResponse(null, List.of(), null, null);
+        return new MarketMapResponse(null, List.of(), null, null, null);
     }
 }

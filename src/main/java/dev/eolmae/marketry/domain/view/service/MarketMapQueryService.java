@@ -161,7 +161,10 @@ public class MarketMapQueryService {
                 latestSnapshotTime,
                 nodes,
                 findSingleMarketOverview(markets, latestSnapshotTime),
-                findExchangeClassificationUpdatedAt());
+                findExchangeClassificationUpdatedAt(),
+                marketCalendarTimeService
+                        .resolve(latestSnapshotTime.toLocalDate())
+                        .closingWindowEnd());
     }
 
     /** 커스텀 마켓맵: 사용자가 구성한 섹터 트리에 배정된 종목만 반환한다.
@@ -578,7 +581,10 @@ public class MarketMapQueryService {
                 latestSnapshotTime,
                 tree,
                 findSingleMarketOverview(markets, latestSnapshotTime),
-                findCustomClassificationUpdatedAt(userId));
+                findCustomClassificationUpdatedAt(userId),
+                marketCalendarTimeService
+                        .resolve(latestSnapshotTime.toLocalDate())
+                        .closingWindowEnd());
     }
 
     /** 조회 마켓·NXT 필터와 무관하게 거래소 분류 전체의 종목 정보 동기화 시각을 보여준다. */

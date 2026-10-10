@@ -1,11 +1,18 @@
 package dev.eolmae.marketry.domain.stock.repository;
 
+import static dev.eolmae.marketry.domain.stock.entity.QMarketCalendar.marketCalendar;
 import static dev.eolmae.marketry.domain.stock.entity.QSectorPriceSnapshot.sectorPriceSnapshot;
 
 import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.types.dsl.BooleanExpression;
+import com.querydsl.core.types.dsl.CaseBuilder;
+import com.querydsl.core.types.dsl.Expressions;
+import com.querydsl.jpa.JPAExpressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
+import dev.eolmae.marketry.common.enums.Country;
 import dev.eolmae.marketry.common.enums.Market;
+import dev.eolmae.marketry.domain.stock.entity.SectorPriceSnapshot;
+import dev.eolmae.marketry.domain.stock.enums.MarketCalendarStatus;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -18,11 +25,20 @@ public class SectorPriceSnapshotRepositoryImpl implements SectorPriceSnapshotRep
     private final JPAQueryFactory queryFactory;
 
     @Override
-    public Optional<LocalDateTime> findLatestCommonSnapshotTime(List<Market> markets) {
+    public Optional<LocalDateTime> findLatestCommonSnapshotTime(List<Market> markets, LocalDate today) {
         LocalDateTime latest = queryFactory
                 .select(sectorPriceSnapshot.snapshotTime)
                 .from(sectorPriceSnapshot)
-                .where(sectorPriceSnapshot.marketType.in(markets))
+                .where(
+                        sectorPriceSnapshot.marketType.in(markets),
+                        sectorPriceSnapshot.snapshotTime.lt(today.plusDays(1).atStartOfDay()),
+                        JPAExpressions.selectOne()
+                                .from(marketCalendar)
+                                .where(
+                                        marketCalendar.country.eq(Country.KR),
+                                        marketCalendar.status.eq(MarketCalendarStatus.TRADING_DAY),
+                                        matchesCalendarDate())
+                                .exists())
                 .groupBy(sectorPriceSnapshot.snapshotTime)
                 .having(sectorPriceSnapshot.marketType.countDistinct().eq((long) markets.size()))
                 .orderBy(sectorPriceSnapshot.snapshotTime.desc())
@@ -32,34 +48,97 @@ public class SectorPriceSnapshotRepositoryImpl implements SectorPriceSnapshotRep
     }
 
     @Override
-    public List<MarketSnapshotTime> findLatestMarketSnapshotTimesBetween(
-            LocalDateTime from, LocalDateTime toExclusive) {
-        var latestTime = sectorPriceSnapshot.snapshotTime.max();
+    public List<LocalDate> findTradingSnapshotDates(LocalDate today) {
+        var latest = sectorPriceSnapshot.snapshotTime.max();
         return queryFactory
-                .select(sectorPriceSnapshot.marketType, latestTime)
+                .select(latest)
                 .from(sectorPriceSnapshot)
-                .where(sectorPriceSnapshot.snapshotTime.goe(from).and(sectorPriceSnapshot.snapshotTime.lt(toExclusive)))
-                .groupBy(sectorPriceSnapshot.marketType)
+                .where(
+                        sectorPriceSnapshot.snapshotTime.lt(today.plusDays(1).atStartOfDay()),
+                        JPAExpressions.selectOne()
+                                .from(marketCalendar)
+                                .where(
+                                        marketCalendar.country.eq(Country.KR),
+                                        marketCalendar.status.eq(MarketCalendarStatus.TRADING_DAY),
+                                        matchesCalendarDate())
+                                .exists())
+                .groupBy(
+                        sectorPriceSnapshot.snapshotTime.year(),
+                        sectorPriceSnapshot.snapshotTime.month(),
+                        sectorPriceSnapshot.snapshotTime.dayOfMonth())
+                .orderBy(latest.desc())
                 .fetch()
                 .stream()
-                .map(tuple -> new MarketSnapshotTime(tuple.get(sectorPriceSnapshot.marketType), tuple.get(latestTime)))
+                .map(LocalDateTime::toLocalDate)
+                .toList();
+    }
+
+    private BooleanExpression matchesCalendarDate() {
+        return marketCalendar
+                .date
+                .year()
+                .eq(sectorPriceSnapshot.snapshotTime.year())
+                .and(marketCalendar.date.month().eq(sectorPriceSnapshot.snapshotTime.month()))
+                .and(marketCalendar.date.dayOfMonth().eq(sectorPriceSnapshot.snapshotTime.dayOfMonth()));
+    }
+
+    @Override
+    public List<LocalDate> findMultipleSnapshotDates(LocalDate throughDate) {
+        var latest = sectorPriceSnapshot.snapshotTime.max();
+        return queryFactory
+                .select(latest)
+                .from(sectorPriceSnapshot)
+                .where(
+                        sectorPriceSnapshot.snapshotTime.lt(
+                                throughDate.plusDays(1).atStartOfDay()),
+                        JPAExpressions.selectOne()
+                                .from(marketCalendar)
+                                .where(
+                                        marketCalendar.country.eq(Country.KR),
+                                        marketCalendar.status.eq(MarketCalendarStatus.TRADING_DAY),
+                                        matchesCalendarDate())
+                                .exists())
+                .groupBy(
+                        sectorPriceSnapshot.snapshotTime.year(),
+                        sectorPriceSnapshot.snapshotTime.month(),
+                        sectorPriceSnapshot.snapshotTime.dayOfMonth(),
+                        sectorPriceSnapshot.marketType)
+                .having(sectorPriceSnapshot.snapshotTime.countDistinct().gt(1L))
+                .orderBy(latest.asc())
+                .fetch()
+                .stream()
+                .map(LocalDateTime::toLocalDate)
+                .distinct()
                 .toList();
     }
 
     @Override
-    public List<MarketSnapshotTime> findLatestMarketSnapshotTimesPerDay(List<TimeWindow> windows) {
-        BooleanBuilder inWindows = new BooleanBuilder();
-        for (TimeWindow window : windows) {
-            inWindows.or(sectorPriceSnapshot
-                    .snapshotTime
-                    .goe(window.from())
-                    .and(sectorPriceSnapshot.snapshotTime.lt(window.toExclusive())));
+    public List<SnapshotDaySummary> findSnapshotDaySummaries(List<TimeWindow> windows) {
+        if (windows.isEmpty()) {
+            return List.of();
         }
-        var latestTime = sectorPriceSnapshot.snapshotTime.max();
+        BooleanBuilder dates = new BooleanBuilder();
+        BooleanBuilder beforeAfterHours = new BooleanBuilder();
+        for (TimeWindow window : windows) {
+            LocalDateTime start = window.from().toLocalDate().atStartOfDay();
+            BooleanExpression inDay = sectorPriceSnapshot
+                    .snapshotTime
+                    .goe(start)
+                    .and(sectorPriceSnapshot.snapshotTime.lt(start.plusDays(1)));
+            dates.or(inDay);
+            beforeAfterHours.or(inDay.and(sectorPriceSnapshot.snapshotTime.lt(window.toExclusive())));
+        }
+        var latest = sectorPriceSnapshot.snapshotTime.max();
+        var count = sectorPriceSnapshot.snapshotTime.countDistinct();
+        var before = new CaseBuilder()
+                .when(beforeAfterHours)
+                .then(sectorPriceSnapshot.snapshotTime)
+                .otherwise(Expressions.nullExpression(LocalDateTime.class))
+                .max();
         return queryFactory
-                .select(sectorPriceSnapshot.marketType, latestTime)
+                .select(sectorPriceSnapshot.marketType, latest, count, before)
                 .from(sectorPriceSnapshot)
-                .where(inWindows)
+                .where(dates)
                 .groupBy(
                         sectorPriceSnapshot.marketType,
                         sectorPriceSnapshot.snapshotTime.year(),
@@ -67,8 +146,27 @@ public class SectorPriceSnapshotRepositoryImpl implements SectorPriceSnapshotRep
                         sectorPriceSnapshot.snapshotTime.dayOfMonth())
                 .fetch()
                 .stream()
-                .map(tuple -> new MarketSnapshotTime(tuple.get(sectorPriceSnapshot.marketType), tuple.get(latestTime)))
+                .map(tuple -> new SnapshotDaySummary(
+                        tuple.get(sectorPriceSnapshot.marketType),
+                        tuple.get(latest),
+                        tuple.get(count),
+                        tuple.get(before)))
                 .toList();
+    }
+
+    @Override
+    public List<SectorPriceSnapshot> findByMarketSnapshotTimes(List<MarketSnapshotTime> times) {
+        if (times.isEmpty()) {
+            return List.of();
+        }
+        BooleanBuilder selected = new BooleanBuilder();
+        for (MarketSnapshotTime time : times) {
+            selected.or(sectorPriceSnapshot
+                    .marketType
+                    .eq(time.market())
+                    .and(sectorPriceSnapshot.snapshotTime.eq(time.snapshotTime())));
+        }
+        return queryFactory.selectFrom(sectorPriceSnapshot).where(selected).fetch();
     }
 
     @Override

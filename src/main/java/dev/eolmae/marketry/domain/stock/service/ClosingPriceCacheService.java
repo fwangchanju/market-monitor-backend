@@ -4,7 +4,6 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import dev.eolmae.marketry.common.cache.CacheService;
 import dev.eolmae.marketry.common.enums.Country;
-import dev.eolmae.marketry.common.enums.Market;
 import dev.eolmae.marketry.common.event.MarketCalendarChangedEvent;
 import dev.eolmae.marketry.common.util.KstClock;
 import dev.eolmae.marketry.domain.stock.entity.SectorPriceSnapshot;
@@ -12,9 +11,7 @@ import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepository
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,7 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
-/** 날짜별 시간표의 종가 구간 latest를 캐시한다. 진행 중 구간과 빈 기준가는 다시 조회한다. */
+/** 조회·정리와 같은 날짜별 종가 선택 기준을 캐시한다. 시간외 시작 전과 빈 기준가는 다시 조회한다. */
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -31,6 +28,7 @@ public class ClosingPriceCacheService implements CacheService<ClosingPrices> {
 
     private final SectorPriceSnapshotRepository sectorPriceSnapshotRepository;
     private final MarketCalendarTimeService marketCalendarTimeService;
+    private final SectorPriceSnapshotService sectorPriceSnapshotService;
     private final Cache<LocalDate, CachedClosingPrices> closingPricesByDate =
             Caffeine.newBuilder().maximumSize(4).build();
 
@@ -83,21 +81,14 @@ public class ClosingPriceCacheService implements CacheService<ClosingPrices> {
         if (times.holiday()) {
             return new ClosingPrices(baseDate, Map.of());
         }
-        Optional<SectorPriceSnapshot> latest =
-                sectorPriceSnapshotRepository
-                        .findFirstBySnapshotTimeGreaterThanEqualAndSnapshotTimeLessThanOrderBySnapshotTimeDesc(
-                                times.closingWindowStart(), times.closingWindowEnd());
-        if (latest.isEmpty()) {
-            log.warn("[종가기준가없음] | context : {}|{}|{}", baseDate, times.closingWindowStart(), times.closingWindowEnd());
+        var selected = sectorPriceSnapshotService.findClosingMarketSnapshotTimes(baseDate, times);
+        if (selected.isEmpty()) {
+            log.debug("[종가기준가없음] | context : {}|{}", baseDate, times.closingWindowEnd());
             return new ClosingPrices(baseDate, Map.of());
         }
-        LocalDateTime snapshotTime = latest.get().getSnapshotTime();
-        Map<String, BigDecimal> prices =
-                sectorPriceSnapshotRepository
-                        .findByMarketTypeInAndSnapshotTime(List.of(Market.values()), snapshotTime)
-                        .stream()
-                        .collect(Collectors.toUnmodifiableMap(
-                                SectorPriceSnapshot::getStockCode, SectorPriceSnapshot::getCurrentPrice));
+        Map<String, BigDecimal> prices = sectorPriceSnapshotRepository.findByMarketSnapshotTimes(selected).stream()
+                .collect(Collectors.toUnmodifiableMap(
+                        SectorPriceSnapshot::getStockCode, SectorPriceSnapshot::getCurrentPrice));
         return new ClosingPrices(baseDate, prices);
     }
 

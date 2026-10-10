@@ -1,33 +1,29 @@
 package dev.eolmae.marketry.domain.stock.scheduler;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+import dev.eolmae.marketry.domain.notification.listener.EscalationPublisher;
+import dev.eolmae.marketry.domain.stock.service.SectorPriceSnapshotService;
 import java.time.LocalDate;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class SnapshotRetentionSchedulerTest {
-
     @Test
-    void 정리_대상은_오늘_기준_11일_전_하루다() {
-        LocalDate today = LocalDate.of(2026, 9, 9);
-
-        LocalDate targetDate = SnapshotRetentionScheduler.calculateTargetDate(today);
-
-        assertThat(targetDate).isEqualTo(LocalDate.of(2026, 8, 29));
-    }
-
-    @Test
-    void 월_경계를_넘어도_11일_전_날짜를_선택한다() {
-        LocalDate today = LocalDate.of(2026, 3, 1);
-
-        LocalDate targetDate = SnapshotRetentionScheduler.calculateTargetDate(today);
-
-        assertThat(targetDate).isEqualTo(LocalDate.of(2026, 2, 18));
-    }
-
-    @Test
-    void 연도_경계를_넘어도_11일_전_날짜를_선택한다() {
-        assertThat(SnapshotRetentionScheduler.calculateTargetDate(LocalDate.of(2026, 1, 5)))
-                .isEqualTo(LocalDate.of(2025, 12, 25));
+    void 한_날짜가_실패해도_다른_오래된_날짜는_계속_정리한다() {
+        var service = mock(SectorPriceSnapshotService.class);
+        var publisher = mock(EscalationPublisher.class);
+        LocalDate today = LocalDate.of(2026, 10, 10);
+        LocalDate first = LocalDate.of(2026, 10, 1);
+        LocalDate second = LocalDate.of(2026, 10, 2);
+        when(service.findCleanupDates(today, 3)).thenReturn(List.of(first, second));
+        doThrow(new RuntimeException("failure")).when(service).cleanupSnapshotsForDate(first);
+        new SnapshotRetentionScheduler(service, publisher).cleanupSnapshots(today);
+        verify(service).cleanupSnapshotsForDate(first);
+        verify(service).cleanupSnapshotsForDate(second);
+        verify(publisher).report(org.mockito.ArgumentMatchers.any());
     }
 }

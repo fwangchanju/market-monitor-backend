@@ -1,6 +1,7 @@
 package dev.eolmae.marketry.domain.stock.repository;
 
 import dev.eolmae.marketry.common.enums.Market;
+import dev.eolmae.marketry.domain.stock.entity.SectorPriceSnapshot;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -10,13 +11,26 @@ public interface SectorPriceSnapshotRepositoryCustom {
 
     /** 여러 마켓을 동시에 보여줄 때(All Stocks 등) 필요한, markets 전부가 공통으로 가진 최신 스냅샷 시각.
      * 한쪽 마켓에만 있고 다른 쪽엔 없는 시각은 제외. */
-    Optional<LocalDateTime> findLatestCommonSnapshotTime(List<Market> markets);
+    Optional<LocalDateTime> findLatestCommonSnapshotTime(List<Market> markets, LocalDate today);
 
-    /** 시장별 max 집계는 Spring Data 파생 메서드로 표현할 수 없어 QueryDSL로 조회한다. 종목 행은 적재하지 않는다. */
-    List<MarketSnapshotTime> findLatestMarketSnapshotTimesBetween(LocalDateTime from, LocalDateTime toExclusive);
+    /** 오늘 이하의 확인된 거래일 중 가격 데이터가 있는 날짜. 최신 날짜부터 반환한다. */
+    List<LocalDate> findTradingSnapshotDates(LocalDate today);
 
-    /** 여러 날의 종가 구간을 한 번에 조회해 시장·날짜별로 구간 안 가장 늦은 스냅샷 시각을 돌려준다. 구간 하나는 하루를 넘지 않아야 한다. */
-    List<MarketSnapshotTime> findLatestMarketSnapshotTimesPerDay(List<TimeWindow> windows);
+    /** 이미 한 시각으로 정리된 시장은 제외하고, 여러 시각이 남은 오래된 거래일만 찾는다. */
+    List<LocalDate> findMultipleSnapshotDates(LocalDate throughDate);
+
+    /** 하루 전체의 서로 다른 시각 수와 시간외 시작 이전 latest를 시장별로 함께 집계한다. */
+    List<SnapshotDaySummary> findSnapshotDaySummaries(List<TimeWindow> windows);
+
+    List<SectorPriceSnapshot> findByMarketSnapshotTimes(List<MarketSnapshotTime> times);
+
+    record SnapshotDaySummary(
+            Market market, LocalDateTime latestTime, long distinctTimeCount, LocalDateTime latestBeforeAfterHours) {
+        public Optional<MarketSnapshotTime> closingSnapshot() {
+            LocalDateTime selected = distinctTimeCount == 1 ? latestTime : latestBeforeAfterHours;
+            return Optional.ofNullable(selected).map(time -> new MarketSnapshotTime(market, time));
+        }
+    }
 
     /** 지정 날짜에서 보존 시각이 있는 시장만 삭제한다. 보존 시각의 모든 종목 행과 후보 없는 시장은 남긴다. */
     long deleteSnapshotsForDate(LocalDate date, List<MarketSnapshotTime> retainedSnapshotTimes);

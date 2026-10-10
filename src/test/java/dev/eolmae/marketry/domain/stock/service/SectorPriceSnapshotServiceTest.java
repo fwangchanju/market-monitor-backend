@@ -2,7 +2,6 @@ package dev.eolmae.marketry.domain.stock.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -10,8 +9,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import com.querydsl.jpa.JPQLTemplates;
-import com.querydsl.jpa.impl.JPAQueryFactory;
 import dev.eolmae.marketry.common.enums.Country;
 import dev.eolmae.marketry.common.enums.Market;
 import dev.eolmae.marketry.domain.stock.entity.IntegratedSessions;
@@ -21,27 +18,19 @@ import dev.eolmae.marketry.domain.stock.enums.MarketCalendarStatus;
 import dev.eolmae.marketry.domain.stock.properties.MarketHoursProperties;
 import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepository;
 import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepositoryCustom.MarketSnapshotTime;
+import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepositoryCustom.SnapshotDaySummary;
 import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepositoryCustom.TimeWindow;
-import dev.eolmae.marketry.domain.stock.repository.SectorPriceSnapshotRepositoryImpl;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.Query;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.YearMonth;
 import java.time.ZoneOffset;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-import org.junit.jupiter.params.provider.NullSource;
 import org.mockito.ArgumentCaptor;
-import org.springframework.test.util.ReflectionTestUtils;
 
 class SectorPriceSnapshotServiceTest {
     private static final LocalDate DATE = LocalDate.of(2025, 11, 13);
@@ -51,216 +40,119 @@ class SectorPriceSnapshotServiceTest {
             calendarService, new MarketHoursProperties(LocalTime.of(15, 30), LocalTime.of(15, 40)));
     private final SectorPriceSnapshotService service = new SectorPriceSnapshotService(repository, timeService);
 
-    @BeforeEach
-    void 기본_수집시간() {
-        ReflectionTestUtils.setField(timeService, "startHour", 8);
-        ReflectionTestUtils.setField(timeService, "endHour", 20);
-    }
-
-    private static MarketSnapshotTime retained(Market market, int hour, int minute) {
-        return new MarketSnapshotTime(market, DATE.atTime(hour, minute));
-    }
-
-    private void trading(int closingHour) {
-        ZoneOffset offset = ZoneOffset.ofHours(9);
-        IntegratedSessions integrated = new IntegratedSessions(
+    private void calendar(int hour) {
+        var offset = ZoneOffset.ofHours(9);
+        var integrated = new IntegratedSessions(
                 null,
                 new TradingSession(
                         DATE.atTime(10, 0).atOffset(offset),
                         null,
                         null,
-                        DATE.atTime(closingHour, 30).atOffset(offset)),
+                        DATE.atTime(hour, 30).atOffset(offset)),
                 new TradingSession(
-                        DATE.atTime(closingHour, 30).atOffset(offset),
+                        DATE.atTime(hour, 30).atOffset(offset),
                         null,
-                        DATE.atTime(closingHour, 40).atOffset(offset),
+                        DATE.atTime(hour, 40).atOffset(offset),
                         DATE.atTime(20, 0).atOffset(offset)));
-        when(calendarService.findByCountryAndDate(Country.KR, DATE))
-                .thenReturn(Optional.of(
-                        MarketCalendar.create(Country.KR, DATE, MarketCalendarStatus.TRADING_DAY, integrated)));
+        when(calendarService.findByCountryAndDateIn(eq(Country.KR), any()))
+                .thenReturn(Map.of(
+                        DATE, MarketCalendar.create(Country.KR, DATE, MarketCalendarStatus.TRADING_DAY, integrated)));
     }
 
     @Test
-    void 평소_종가구간의_시장별_보존시각으로_지정_날짜만_정리한다() {
-        trading(15);
-        List<MarketSnapshotTime> retained = List.of(retained(Market.KOSPI, 15, 35), retained(Market.KOSDAQ, 15, 30));
-        when(repository.findLatestMarketSnapshotTimesBetween(DATE.atTime(15, 30), DATE.atTime(15, 40)))
-                .thenReturn(retained);
-
+    void 한_시각만_있으면_새_시간표_경계_밖이라도_기존_값을_쓴다() {
+        calendar(16);
+        when(repository.findSnapshotDaySummaries(any()))
+                .thenReturn(List.of(new SnapshotDaySummary(Market.KOSPI, DATE.atTime(17, 0), 1, null)));
+        assertThat(service.findClosingSnapshotTimes(List.of(Market.KOSPI), YearMonth.from(DATE), DATE))
+                .containsEntry(DATE, DATE.atTime(17, 0));
         service.cleanupSnapshotsForDate(DATE);
-
-        verify(repository).deleteSnapshotsForDate(DATE, retained);
-    }
-
-    @Test
-    void 수능날은_16시30분부터_16시40분_미만의_latest를_보존한다() {
-        trading(16);
-        List<MarketSnapshotTime> retained = List.of(retained(Market.KOSPI, 16, 35), retained(Market.KOSDAQ, 16, 35));
-        when(repository.findLatestMarketSnapshotTimesBetween(DATE.atTime(16, 30), DATE.atTime(16, 40)))
-                .thenReturn(retained);
-
-        service.cleanupSnapshotsForDate(DATE);
-
-        verify(repository).deleteSnapshotsForDate(DATE, retained);
-    }
-
-    @ParameterizedTest
-    @NullSource
-    @EnumSource(value = MarketCalendarStatus.class, names = "FAILED")
-    void 실패나_시간표_없음은_기본_종가구간으로_삭제한다(MarketCalendarStatus status) {
-        when(calendarService.findByCountryAndDate(Country.KR, DATE))
-                .thenReturn(
-                        status == null
-                                ? Optional.empty()
-                                : Optional.of(MarketCalendar.create(Country.KR, DATE, status, null)));
-        List<MarketSnapshotTime> retained = List.of(retained(Market.KOSPI, 15, 35));
-        when(repository.findLatestMarketSnapshotTimesBetween(DATE.atTime(15, 30), DATE.atTime(15, 40)))
-                .thenReturn(retained);
-
-        service.cleanupSnapshotsForDate(DATE);
-
-        verify(repository).deleteSnapshotsForDate(DATE, retained);
-    }
-
-    @Test
-    void 휴장일은_종가조회와_삭제_전에_생략한다() {
-        when(calendarService.findByCountryAndDate(Country.KR, DATE))
-                .thenReturn(Optional.of(MarketCalendar.create(Country.KR, DATE, MarketCalendarStatus.HOLIDAY, null)));
-
-        service.cleanupSnapshotsForDate(DATE);
-
-        verifyNoInteractions(repository);
-    }
-
-    @Test
-    void 종가_후보가_없는_날짜는_삭제하지_않는다() {
-        trading(15);
-        when(repository.findLatestMarketSnapshotTimesBetween(DATE.atTime(15, 30), DATE.atTime(15, 40)))
-                .thenReturn(List.of());
-
-        service.cleanupSnapshotsForDate(DATE);
-
         verify(repository, never()).deleteSnapshotsForDate(any(), any());
     }
 
     @Test
-    void 종가가_있는_시장만_삭제대상으로_전달한다() {
-        trading(15);
-        List<MarketSnapshotTime> retained = List.of(retained(Market.KOSPI, 15, 35));
-        when(repository.findLatestMarketSnapshotTimesBetween(DATE.atTime(15, 30), DATE.atTime(15, 40)))
-                .thenReturn(retained);
-
+    void 여러_시각이면_하한_없이_시간외_이전_latest를_조회하고_정리에_같이_쓴다() {
+        calendar(16);
+        when(repository.findSnapshotDaySummaries(any()))
+                .thenReturn(List.of(new SnapshotDaySummary(Market.KOSPI, DATE.atTime(20, 0), 3, DATE.atTime(15, 35))));
+        assertThat(service.findClosingSnapshotTimes(List.of(Market.KOSPI), YearMonth.from(DATE), DATE))
+                .containsEntry(DATE, DATE.atTime(15, 35));
+        ArgumentCaptor<List<TimeWindow>> windows = ArgumentCaptor.captor();
+        verify(repository).findSnapshotDaySummaries(windows.capture());
+        assertThat(windows.getValue()).containsExactly(new TimeWindow(DATE.atStartOfDay(), DATE.atTime(16, 40)));
         service.cleanupSnapshotsForDate(DATE);
-
-        verify(repository).deleteSnapshotsForDate(DATE, retained);
+        verify(repository)
+                .deleteSnapshotsForDate(DATE, List.of(new MarketSnapshotTime(Market.KOSPI, DATE.atTime(15, 35))));
     }
 
     @Test
-    void 시간표_DB조회가_실패하면_기본_종가구간으로_정리한다() {
-        when(calendarService.findByCountryAndDate(Country.KR, DATE)).thenThrow(new RuntimeException("DB failure"));
-        List<MarketSnapshotTime> retained = List.of(retained(Market.KOSPI, 15, 35));
-        when(repository.findLatestMarketSnapshotTimesBetween(DATE.atTime(15, 30), DATE.atTime(15, 40)))
-                .thenReturn(retained);
-
-        service.cleanupSnapshotsForDate(DATE);
-
-        verify(repository).deleteSnapshotsForDate(DATE, retained);
-    }
-
-    @Test
-    void 삭제쿼리는_대상_하루로_범위를_제한하고_보존시각의_모든_종목을_제외한다() {
-        EntityManager entityManager = mock(EntityManager.class);
-        Query query = mock(Query.class);
-        when(entityManager.createQuery(anyString())).thenReturn(query);
-        when(query.executeUpdate()).thenReturn(12);
-        var retentionRepository =
-                new SectorPriceSnapshotRepositoryImpl(new JPAQueryFactory(JPQLTemplates.DEFAULT, entityManager));
-
-        long deleted = retentionRepository.deleteSnapshotsForDate(DATE, List.of(retained(Market.KOSPI, 15, 35)));
-
-        assertThat(deleted).isEqualTo(12);
-        ArgumentCaptor<String> queryCaptor = ArgumentCaptor.forClass(String.class);
-        verify(entityManager).createQuery(queryCaptor.capture());
-        assertThat(queryCaptor.getValue())
-                .contains("snapshotTime >=", "snapshotTime <", "marketType =", "snapshotTime <>");
-        assertThat(queryCaptor.getValue()).doesNotContain("stockCode", "exchangeType");
-        verify(query).setParameter(1, DATE.atStartOfDay());
-        verify(query).setParameter(2, DATE.plusDays(1).atStartOfDay());
-        verify(query).setParameter(3, Market.KOSPI);
-        verify(query).setParameter(4, DATE.atTime(15, 35));
-    }
-
-    @Test
-    void 보존시각이_없으면_삭제쿼리를_실행하지_않는다() {
-        EntityManager entityManager = mock(EntityManager.class);
-        var retentionRepository =
-                new SectorPriceSnapshotRepositoryImpl(new JPAQueryFactory(JPQLTemplates.DEFAULT, entityManager));
-
-        assertThat(retentionRepository.deleteSnapshotsForDate(DATE, List.of())).isZero();
-        verifyNoInteractions(entityManager);
-    }
-
-    private void 십일월_종가후보를_준비한다() {
-        when(calendarService.findByCountryAndDateIn(eq(Country.KR), any())).thenReturn(Map.of());
-        when(repository.findLatestMarketSnapshotTimesPerDay(any()))
-                .thenReturn(List.of(
-                        new MarketSnapshotTime(Market.KOSPI, LocalDateTime.of(2025, 11, 13, 15, 35)),
-                        new MarketSnapshotTime(Market.KOSDAQ, LocalDateTime.of(2025, 11, 13, 15, 35)),
-                        new MarketSnapshotTime(Market.KOSPI, LocalDateTime.of(2025, 11, 14, 15, 35)),
-                        new MarketSnapshotTime(Market.KOSDAQ, LocalDateTime.of(2025, 11, 14, 15, 30)),
-                        new MarketSnapshotTime(Market.KOSPI, LocalDateTime.of(2025, 11, 17, 15, 30))));
-    }
-
-    @Test
-    void 두_시장의_종가시각이_같은_날만_달력_날짜로_돌려준다() {
-        십일월_종가후보를_준비한다();
-
-        Map<LocalDate, LocalDateTime> closingTimes =
-                service.findClosingSnapshotTimes(List.of(Market.KOSPI, Market.KOSDAQ), YearMonth.of(2025, 11));
-
-        assertThat(closingTimes).containsOnlyKeys(LocalDate.of(2025, 11, 13));
-        assertThat(closingTimes.get(LocalDate.of(2025, 11, 13))).isEqualTo(LocalDateTime.of(2025, 11, 13, 15, 35));
-    }
-
-    @Test
-    void 시장_하나만_조회하면_그_시장의_종가가_있는_날을_모두_돌려준다() {
-        십일월_종가후보를_준비한다();
-
-        Map<LocalDate, LocalDateTime> closingTimes =
-                service.findClosingSnapshotTimes(List.of(Market.KOSPI), YearMonth.of(2025, 11));
-
-        assertThat(closingTimes)
-                .containsOnlyKeys(LocalDate.of(2025, 11, 13), LocalDate.of(2025, 11, 14), LocalDate.of(2025, 11, 17));
-    }
-
-    @Test
-    void 시간표가_없는_주말은_종가구간_조회에서_뺀다() {
-        십일월_종가후보를_준비한다();
-
-        service.findClosingSnapshotTimes(List.of(Market.KOSPI), YearMonth.of(2025, 11));
-
-        ArgumentCaptor<List<TimeWindow>> windowCaptor = ArgumentCaptor.captor();
-        verify(repository).findLatestMarketSnapshotTimesPerDay(windowCaptor.capture());
-        // 2025년 11월은 30일 중 주말이 10일이다.
-        assertThat(windowCaptor.getValue()).hasSize(20);
-        assertThat(windowCaptor.getValue())
-                .contains(
-                        new TimeWindow(LocalDateTime.of(2025, 11, 13, 15, 30), LocalDateTime.of(2025, 11, 13, 15, 40)));
-    }
-
-    @Test
-    void 모든_날이_휴장이면_조회하지_않고_빈_결과를_돌려준다() {
-        // 주말뿐인 달은 없으므로 모든 날을 휴장으로 적은 시간표를 직접 만든다.
-        Map<LocalDate, MarketCalendar> holidays = YearMonth.of(2025, 11)
-                .atDay(1)
-                .datesUntil(LocalDate.of(2025, 12, 1))
-                .collect(Collectors.toMap(
-                        Function.identity(),
-                        date -> MarketCalendar.create(Country.KR, date, MarketCalendarStatus.HOLIDAY, null)));
-        when(calendarService.findByCountryAndDateIn(eq(Country.KR), any())).thenReturn(holidays);
-
-        assertThat(service.findClosingSnapshotTimes(List.of(Market.KOSPI), YearMonth.of(2025, 11)))
+    void 후보가_없는_날은_전날로_대체하지_않고_삭제도_보류한다() {
+        calendar(15);
+        when(repository.findSnapshotDaySummaries(any()))
+                .thenReturn(List.of(new SnapshotDaySummary(Market.KOSPI, DATE.atTime(20, 0), 2, null)));
+        assertThat(service.findClosingSnapshotTimes(List.of(Market.KOSPI), YearMonth.from(DATE), DATE))
                 .isEmpty();
-        verify(repository, never()).findLatestMarketSnapshotTimesPerDay(any());
+        service.cleanupSnapshotsForDate(DATE);
+        verify(repository, never()).deleteSnapshotsForDate(any(), any());
+    }
+
+    @Test
+    void 통합_달력은_두_시장에_공통_시각이_있는_날만_활성화한다() {
+        calendar(15);
+        when(repository.findSnapshotDaySummaries(any()))
+                .thenReturn(List.of(
+                        new SnapshotDaySummary(Market.KOSPI, DATE.atTime(15, 35), 1, null),
+                        new SnapshotDaySummary(Market.KOSDAQ, DATE.atTime(15, 30), 1, null)));
+        assertThat(service.findClosingSnapshotTimes(List.of(Market.KOSPI, Market.KOSDAQ), YearMonth.from(DATE), DATE))
+                .isEmpty();
+        assertThat(service.findClosingSnapshotTimes(List.of(Market.KOSPI), YearMonth.from(DATE), DATE))
+                .containsEntry(DATE, DATE.atTime(15, 35));
+    }
+
+    @ParameterizedTest
+    @EnumSource(
+            value = MarketCalendarStatus.class,
+            names = {"FAILED", "HOLIDAY"})
+    void 실패와_휴장은_달력과_정리에서_제외한다(MarketCalendarStatus status) {
+        when(calendarService.findByCountryAndDateIn(eq(Country.KR), any()))
+                .thenReturn(Map.of(DATE, MarketCalendar.create(Country.KR, DATE, status, null)));
+        assertThat(service.findClosingSnapshotTimes(List.of(Market.KOSPI), YearMonth.from(DATE), DATE))
+                .isEmpty();
+        service.cleanupSnapshotsForDate(DATE);
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void 시간표_없는_날도_달력과_정리에서_제외한다() {
+        assertThat(service.findClosingSnapshotTimes(List.of(Market.KOSPI), YearMonth.from(DATE), DATE))
+                .isEmpty();
+        service.cleanupSnapshotsForDate(DATE);
+        verifyNoInteractions(repository);
+    }
+
+    @Test
+    void 토스가_미리_준_미래_날짜는_달력에서_제외한다() {
+        assertThat(service.findClosingSnapshotTimes(List.of(Market.KOSPI), YearMonth.from(DATE), DATE.minusDays(1)))
+                .isEmpty();
+        ArgumentCaptor<Collection<LocalDate>> dates = ArgumentCaptor.captor();
+        verify(calendarService).findByCountryAndDateIn(eq(Country.KR), dates.capture());
+        assertThat(dates.getValue()).doesNotContain(DATE);
+        assertThat(dates.getValue()).allMatch(date -> date.isBefore(DATE));
+    }
+
+    @Test
+    void 최근_세_거래일은_시각_개수와_관계없이_센_뒤_이전의_미정리_날짜만_선택한다() {
+        List<LocalDate> dates =
+                List.of(DATE, DATE.minusDays(1), DATE.minusDays(2), DATE.minusDays(3), DATE.minusDays(6));
+        when(repository.findTradingSnapshotDates(DATE)).thenReturn(dates);
+        when(repository.findMultipleSnapshotDates(dates.get(3))).thenReturn(List.of(dates.get(4), dates.get(3)));
+        assertThat(service.findCleanupDates(DATE, 3)).containsExactly(dates.get(4), dates.get(3));
+    }
+
+    @Test
+    void 가격_있는_거래일이_세개_이하면_정리하지_않는다() {
+        when(repository.findTradingSnapshotDates(DATE)).thenReturn(List.of(DATE, DATE.minusDays(1)));
+        assertThat(service.findCleanupDates(DATE, 3)).isEmpty();
+        verify(repository, never()).findMultipleSnapshotDates(any());
     }
 }

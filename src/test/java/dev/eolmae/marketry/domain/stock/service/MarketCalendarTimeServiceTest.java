@@ -118,7 +118,7 @@ class MarketCalendarTimeServiceTest {
     }
 
     @Test
-    void 정규장이_없으면_정규종료와_종가만_기본값이다() {
+    void 정규장이_없어도_토스의_시간외_시작_경계는_사용한다() {
         CalendarDayTimes times = service.resolve(
                 DATE,
                 trading(new IntegratedSessions(
@@ -126,7 +126,7 @@ class MarketCalendarTimeServiceTest {
 
         assertThat(times.collectionStart()).isEqualTo(DATE.atTime(8, 0));
         assertThat(times.regularMarketEnd()).isEqualTo(DATE.atTime(15, 30));
-        assertThat(times.closingWindowEnd()).isEqualTo(DATE.atTime(15, 40));
+        assertThat(times.closingWindowEnd()).isEqualTo(DATE.atTime(16, 40));
     }
 
     @Test
@@ -258,7 +258,17 @@ class MarketCalendarTimeServiceTest {
         LocalDate holiday = LocalDate.of(2026, 9, 24);
         when(calendarService.findByCountryAndDateIn(Mockito.eq(Country.KR), Mockito.any()))
                 .thenReturn(Map.of(
-                        holiday, MarketCalendar.create(Country.KR, holiday, MarketCalendarStatus.HOLIDAY, null)));
+                        holiday,
+                        MarketCalendar.create(Country.KR, holiday, MarketCalendarStatus.HOLIDAY, null),
+                        holiday.minusDays(2),
+                        MarketCalendar.create(Country.KR, holiday.minusDays(2), MarketCalendarStatus.TRADING_DAY, null),
+                        holiday.minusDays(1),
+                        MarketCalendar.create(Country.KR, holiday.minusDays(1), MarketCalendarStatus.TRADING_DAY, null),
+                        holiday.plusDays(1),
+                        MarketCalendar.create(Country.KR, holiday.plusDays(1), MarketCalendarStatus.TRADING_DAY, null),
+                        holiday.plusDays(4),
+                        MarketCalendar.create(
+                                Country.KR, holiday.plusDays(4), MarketCalendarStatus.TRADING_DAY, null)));
 
         long tradingDays = service.countTradingDays(LocalDate.of(2026, 9, 21), LocalDate.of(2026, 9, 28));
 
